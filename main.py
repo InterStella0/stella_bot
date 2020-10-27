@@ -4,6 +4,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from os.path import join, dirname
+from utils.useful import try_call
 from os import environ
 import asyncpg
 import json
@@ -34,14 +35,12 @@ class StellaBot(commands.Bot):
     def stella(self):
         return self.get_user(self.owner_id)
 
-    def loading_cog(self):
+    async def loading_cog(self):
         cogs = ("find_bot", "useful", "helpful", "myself", "jishaku")
         for cog in cogs:
             ext = "cogs." if cog != "jishaku" else ""
-            try:
-                self.load_extension(f"{ext}{cog}")
-            except Exception as e:
-                print(e)
+            if error := await try_call(self.load_extension, Exception, ret=True, args=f"{ext}{cog}"):
+                print(error)
             else:
                 print(f"cog {cog} is loaded")
 
