@@ -29,17 +29,20 @@ class StellaBot(commands.Bot):
         self.confirmed_bots = set()
         self.token = token
         self.existing_prefix = self.fill_prefix()
-        self.loading_cog()
+        self.loop.run_until_complete(self.async_start())
+
+    async def async_start(self):
+        await self.loading_cog()
 
     @property
     def stella(self):
         return self.get_user(self.owner_id)
 
     async def loading_cog(self):
-        cogs = ("find_bot", "useful", "helpful", "myself", "jishaku")
+        cogs = ("find_bot", "useful", "helpful", "myself", "error_handler", "jishaku")
         for cog in cogs:
             ext = "cogs." if cog != "jishaku" else ""
-            if error := await try_call(self.load_extension, Exception, ret=True, args=f"{ext}{cog}"):
+            if error := await try_call(self.load_extension, Exception, ret=True, args=(f"{ext}{cog}",)):
                 print(error)
             else:
                 print(f"cog {cog} is loaded")

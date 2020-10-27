@@ -7,6 +7,7 @@ from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
 from utils.useful import try_call
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy
+import itertools
 
 
 class BotAdded:
@@ -208,12 +209,16 @@ class FindBot(commands.Cog):
     @is_discordpy()
     @commands.cooldown(1, 5, BucketType.user)
     async def whatadd(self, ctx, author: discord.Member = None):
+
         if not author:
             author = ctx.author
         if author.bot:
             return await ctx.send("That's a bot lol")
+        print(author)
         query = "SELECT * FROM {}_bots WHERE author_id=$1"
         total_list = [await self.bot.pg_con.fetch(query.format(x), author.id) for x in ("pending", "confirmed")]
+        total_list = list(itertools.chain.from_iterable(total_list)) #remove lists of list
+        print(total_list)
         list_bots = [ctx.guild.get_member(x["bot_id"]) or x["bot_id"] for x in total_list]
         embed = discord.Embed(title=f"{author}'s Bots", color=self.bot.color)
         embed.set_thumbnail(url=author.avatar_url)

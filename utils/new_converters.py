@@ -37,7 +37,9 @@ class ValidCog(CleanListGreedy):
                      "helpful": ["help", "h"],
                      "myself": ["stella", "my", "self", "m"],
                      "find_bot": ["find", "f", "bot"],
+                     "error_handler": ["error", "e", "err", "error_handlers"],
                      "all": ["al", "a", "*"]}
+
         for key in valid_cog:
             if key == argument or argument in valid_cog[key]:
                 if key == "all":
