@@ -106,7 +106,6 @@ class FindBot(commands.Cog):
             return
         if result := await self.is_valid_addbot(message, check=True):
             confirm = False
-            print("result ", result)
 
             def terms_acceptance(msg):
                 nonlocal confirm
@@ -122,16 +121,12 @@ class FindBot(commands.Cog):
                 return False
 
             try:
-                print("waiting for response ")
                 await self.bot.wait_for("message", check=terms_acceptance, timeout=60)
             except asyncio.TimeoutError:
-                print("Time out")
                 return
 
             if not confirm:
-                print("nop")
                 return
-            print("confirmed")
             await self.update_pending(result)
 
     async def check_author(self, bot_id, author_id, mode):
@@ -217,9 +212,8 @@ class FindBot(commands.Cog):
             author = ctx.author
         if author.bot:
             return await ctx.send("That's a bot lol")
-        pen_records = await self.bot.pg_con.fetch("SELECT * FROM pending_bots WHERE author_id=$1", author.id)
-        con_records = await self.bot.pg_con.fetch("SELECT * FROM confirmed_bots WHERE author_id=$1", author.id)
-        total_list = pen_records + con_records
+        query = "SELECT * FROM {}_bots WHERE author_id=$1"
+        total_list = [await self.bot.pg_con.fetch(query.format(x), author.id) for x in ("pending", "confirmed")]
         list_bots = [ctx.guild.get_member(x["bot_id"]) or x["bot_id"] for x in total_list]
         embed = discord.Embed(title=f"{author}'s Bots", color=self.bot.color)
         embed.set_thumbnail(url=author.avatar_url)
@@ -238,15 +232,17 @@ class FindBot(commands.Cog):
         request = data.requested_at.strftime("%d %b %Y %I:%M %p %Z") if data.requested_at else "Unknown"
         join = data.joined_at.strftime("%d %b %Y %I:%M %p %Z") if data.joined_at else "Unknown"
         embed.set_thumbnail(url=data.bot.avatar_url)
-        embed.add_field(name="Reason", value=data.reason or "Unknown", inline=False)
+        fields = (("Reason", data.reason or "Unknown"),
+                  ("Requested", request),
+                  ("Joined", join),
+                  ("Message Request", f"[jump]({data.jump_url})"))
+
         if author:
             embed.set_author(name=author, icon_url=author.avatar_url)
-        if data.requested_at:
-            embed.add_field(name="Requested", value=request, inline=False)
-        if data.joined_at:
-            embed.add_field(name="Joined", value=join, inline=False)
-        if data.jump_url:
-            embed.add_field(name="Message Request", value=f"[jump]({data.jump_url})", inline=False)
+        for name, value in fields:
+            if value:
+                embed.add_field(name=name, value=value, inline=False)
+
         await ctx.send(embed=embed)
 
     @commands.group(invoke_without_command=True, hidden=True)
