@@ -1,6 +1,4 @@
-venv/Lib/site-packages/aiohttp-3.6.3.dist-info/METADATA
 *.pyc
-venv/Lib/site-packages/aiohttp-3.6.3.dist-info/INSTALLER
 *.json
 *.env
 venv

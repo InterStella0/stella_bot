@@ -1,6 +1,7 @@
 from discord.ext import commands
 from utils.errors import NotValidCog, ThisEmpty
-
+from discord.utils import _unique
+from itertools import chain
 
 class FetchUser(commands.Converter):
     async def convert(self, ctx, argument):
@@ -9,21 +10,13 @@ class FetchUser(commands.Converter):
 
 class CleanListGreedy:
     @classmethod
-    async def after_greedy(cls, ctx, argument):
+    async def after_greedy(cls, ctx, greedy_list):
         """
         This method will be called after greedy was processed. This will remove any duplicates of a list, putting list
         within a list into the current list. Set was not used to keep the original order.
         """
-        final = []
-        # unable to use set, to preserve order
-        for value in argument:
-            if isinstance(value, list):
-                for subvalue in value:
-                    if subvalue not in final:
-                        final.append(subvalue)
-                continue
-            if value not in final:
-                final.append(value)
+        unclean = list(chain.from_iterable(greedy_list))
+        final = _unique(unclean)
         if not final:
             raise ThisEmpty(cls.__name__)
         final.reverse()

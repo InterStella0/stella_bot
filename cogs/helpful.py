@@ -1,3 +1,6 @@
+import inspect
+import os
+
 import discord
 from discord.ext import commands, menus
 from utils.useful import BaseEmbed
@@ -149,6 +152,29 @@ class Helpful(commands.Cog):
         await ctx.send(embed=BaseEmbed.default(ctx,
                                                title="Uptime",
                                                description=f"Current uptime: `{humanize.precisedelta(c_uptime)}`"))
+
+    @commands.command(help="shows the source code")
+    async def source(self, ctx, *, command: str = None):
+        source_url = 'https://github.com/InterStella0/stella_bot'
+        if command is None:
+            return await ctx.send(source_url)
+        if command == 'help':
+            src = type(self.bot.help_command)
+            module = src.__module__
+        else:
+            obj = self.bot.get_command(command.replace('.', ' '))
+            if obj is None:
+                return await ctx.send('Could not find command.')
+
+            src = obj.callback.__code__
+            module = obj.callback.__module__
+
+        lines, firstlineno = inspect.getsourcelines(src)
+        location = module.replace('.', '/') + '.py'
+        branch = 'master'
+
+        final_url = f'<{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
+        await ctx.send(final_url)
 
     def cog_unload(self):
         self.bot.help_command = self._default_help_command
