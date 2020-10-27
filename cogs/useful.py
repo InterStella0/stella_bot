@@ -3,7 +3,8 @@ from discord.ext import commands
 import base64
 import datetime
 from collections import namedtuple
-from utils.useful import try_call, FetchUser
+from utils.useful import try_call
+from utils.new_converters import FetchUser
 from typing import Union
 import random
 

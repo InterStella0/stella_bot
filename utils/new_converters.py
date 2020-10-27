@@ -36,11 +36,12 @@ class ValidCog(CleanListGreedy):
         valid_cog = {"useful": ["use", "u"],
                      "helpful": ["help", "h"],
                      "myself": ["stella", "my", "self", "m"],
-                     "find_bot": ["find", "f", "bot"]}
-
-        valid_cog.update({"all": valid_cog.keys()})
+                     "find_bot": ["find", "f", "bot"],
+                     "all": ["al", "a", "*"]}
         for key in valid_cog:
             if key == argument or argument in valid_cog[key]:
+                if key == "all":
+                    return [x for x in valid_cog if key != x]
                 return key
         raise NotValidCog(argument)
 

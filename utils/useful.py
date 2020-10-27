@@ -3,7 +3,7 @@ from discord.utils import maybe_coroutine
 from discord.ext import commands
 
 
-async def try_call(code, exception, ret=False, args=None, kwargs=None):
+async def try_call(code, exception, ret=False, args=(), kwargs={}):
     try:
         return await maybe_coroutine(code, *args, **kwargs) if args or kwargs else await code
     except exception as e:
