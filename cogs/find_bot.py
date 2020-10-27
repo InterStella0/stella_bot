@@ -8,6 +8,7 @@ from utils.useful import try_call
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy
 
+
 class BotAdded:
     def __init__(self, *, author=None, bot=None, reason=None, requested_at=None, jump_url=None, joined_at=None):
         self.author = author
@@ -16,6 +17,18 @@ class BotAdded:
         self.requested_at = requested_at
         self.jump_url = jump_url
         self.joined_at = joined_at
+
+    @classmethod
+    def to_add(cls, member, data=None):
+        author = data["author_id"]
+        reason = data['reason']
+        jump_url = data['jump_url']
+        requested_at = data['requested_at']
+
+        bot = member
+        author = member.guild.get_member(author)
+        return cls(author=author, bot=bot, reason=reason, requested_at=requested_at, jump_url=jump_url,
+                   joined_at=bot.joined_at)
 
     @classmethod
     def from_json(cls, data, bot=None):
@@ -59,20 +72,6 @@ class BotAdded:
                ' joined_at = {0.joined_at}>'.format(self)
 
 
-class AddBot(BotAdded):
-    @classmethod
-    def from_json(cls, member, data=None):
-        bot_id, data = data.popitem()
-        author = data["author_id"]
-        reason = data['reason']
-        jump_url = data['jump_url']
-        requested_at = data['requested_at']
-
-        bot = member
-        author = member.guild.get_member(author)
-        return cls(author=author, bot=bot, reason=reason, requested_at=requested_at, jump_url=jump_url, joined_at=bot.joined_at)
-
-
 class FindBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -89,18 +88,15 @@ class FindBot(commands.Cog):
         if member.guild.id == self.DPY_ID and member.bot:
             if member.id in self.bot.pending_bots:
                 data = await self.bot.pg_con.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)
-                result = {member.id: data}
-                await self.update_confirm(AddBot.from_json(member, result))
+                await self.update_confirm(BotAdded.from_json(member, data))
                 await self.bot.pg_con.execute("DELETE FROM pending_bots WHERE bot_id = $1", member.id)
             else:
-                await self.update_confirm(AddBot.from_json(member, {member.id:
-                                                                        {"author_id": None,
-                                                                         "reason": None,
-                                                                         "requested_at": None,
-                                                                         "jump_url": None,
-                                                                         "joined_at": member.joined_at.isoformat()
-                                                                         }
-                                                                    }))
+                await self.update_confirm(BotAdded.from_json(member, {"author_id": None,
+                                                                      "reason": None,
+                                                                      "requested_at": None,
+                                                                      "jump_url": None,
+                                                                      "joined_at": member.joined_at
+                                                                      }))
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -156,11 +152,11 @@ class FindBot(commands.Cog):
                         if str(member.id) not in self.bot.pending_bots and str(
                                 member.id) not in self.bot.confirmed_bots:
                             await self.update_pending(
-                                                AddBot(author=message.author,
-                                                       bot=member,
-                                                       reason=reason,
-                                                       requested_at=message.created_at,
-                                                       jump_url=message.jump_url))
+                                                BotAdded(author=message.author,
+                                                         bot=member,
+                                                         reason=reason,
+                                                         requested_at=message.created_at,
+                                                         jump_url=message.jump_url))
                         return
 
             else:
@@ -168,12 +164,12 @@ class FindBot(commands.Cog):
                     print("This bot", int(result["id"]), "is already in the guild.")
                     if int(result["id"]) not in self.bot.confirmed_bots and \
                             await self.check_author(member.id, message.author.id, "confirmed_bots"):
-                        newAddBot = AddBot(author=message.author,
-                                           bot=member,
-                                           reason=reason,
-                                           requested_at=message.created_at,
-                                           jump_url=message.jump_url,
-                                           joined_at=member.joined_at)
+                        newAddBot = BotAdded(author=message.author,
+                                             bot=member,
+                                             reason=reason,
+                                             requested_at=message.created_at,
+                                             jump_url=message.jump_url,
+                                             joined_at=member.joined_at)
                         await self.update_confirm(newAddBot)
                     return
                 member = await try_call(self.bot.fetch_user(int(result["id"])), discord.NotFound)
@@ -183,12 +179,12 @@ class FindBot(commands.Cog):
                     join = member.joined_at
                     if join < message.created_at:
                         return
-                return AddBot(author=message.author,
-                              bot=member,
-                              reason=reason,
-                              requested_at=message.created_at,
-                              jump_url=message.jump_url,
-                              joined_at=join)
+                return BotAdded(author=message.author,
+                                bot=member,
+                                reason=reason,
+                                requested_at=message.created_at,
+                                jump_url=message.jump_url,
+                                joined_at=join)
 
     async def update_pending(self, result):
         query = """INSERT INTO pending_bots VALUES($1, $2, $3, $4, $5) 
