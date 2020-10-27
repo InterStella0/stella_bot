@@ -1,6 +1,6 @@
 import discord
-from discord.ext import commands
 from discord.utils import maybe_coroutine
+from discord.ext import commands
 
 
 async def try_call(code, exception, ret=False, args=None, kwargs=None):
@@ -8,11 +8,6 @@ async def try_call(code, exception, ret=False, args=None, kwargs=None):
         return await maybe_coroutine(code, *args, **kwargs) if args or kwargs else await code
     except exception as e:
         return e if ret else None
-
-
-class FetchUser(commands.Converter):
-    async def convert(self, ctx, argument):
-        return await ctx.bot.fetch_user(int(argument))
 
 
 class BaseEmbed(discord.Embed):
@@ -29,3 +24,10 @@ class BaseEmbed(discord.Embed):
     def to_error(cls, color=discord.Color.red(), **kwargs):
         return cls(color=color, **kwargs)
 
+
+class AfterGreedy(commands.Command):
+    async def _transform_greedy_pos(self, ctx, param, required, converter):
+        result = await super()._transform_greedy_pos(ctx, param, required, converter)
+        if hasattr(converter, 'after_greedy'):
+            return await converter.after_greedy(ctx, result)
+        return result

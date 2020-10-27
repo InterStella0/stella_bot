@@ -1,7 +1,8 @@
 import discord
 from discord.ext import commands
-from discord.ext.commands import NotOwner
-from utils.useful import try_call, BaseEmbed
+from discord.ext.commands import NotOwner, Greedy
+from utils.useful import try_call, BaseEmbed, AfterGreedy
+from utils.new_converters import ValidCog
 
 
 class Myself(commands.Cog, command_attrs=dict(hidden=True)):
@@ -21,16 +22,16 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         if await self.bot.is_owner(before.author):
             await self.bot.process_commands(after)
 
-    @commands.command(name="load", aliases=["cload", "loads", "lod"])
-    async def _cog_load(self, ctx, extension):
+    @commands.command(name="load", aliases=["cload", "loads", "lod"], cls=AfterGreedy)
+    async def _cog_load(self, ctx, extension: Greedy[ValidCog]):
         await self.cogs_handler(ctx, "load", extension)
 
-    @commands.command(name="reload", aliases=["creload", "reloads", "relod"])
-    async def _cog_reload(self, ctx, extension):
+    @commands.command(name="reload", aliases=["creload", "reloads", "relod"], cls=AfterGreedy)
+    async def _cog_reload(self, ctx, extension: Greedy[ValidCog]):
         await self.cogs_handler(ctx, "reload", extension)
 
-    @commands.command(name="unload", aliases=["cunload", "unloads", "unlod"])
-    async def _cog_unload(self, ctx, extension):
+    @commands.command(name="unload", aliases=["cunload", "unloads", "unlod"], cls=AfterGreedy)
+    async def _cog_unload(self, ctx, extension: Greedy[ValidCog]):
         await self.cogs_handler(ctx, "unload", extension)
 
     @commands.command()
@@ -38,13 +39,14 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         self.bot.dispatch('message', message)
         await ctx.message.add_reaction("<:checkmark:753619798021373974>")
 
-    async def cogs_handler(self, ctx, method, extension):
-        async def do_cog(method):
+    async def cogs_handler(self, ctx, method, extensions):
+        def do_cog(method, exts):
             method = getattr(self.bot, f"{method}_extension")
-            return method(f"cogs.{extension}")
+            return method(f"cogs.{exts}")
 
-        output = await try_call(do_cog(method), Exception, ret=True) or f"cogs.{extension} is {method}ed"
-        await ctx.send(embed=BaseEmbed.default(ctx, description=str(output)))
+        outputs = [await try_call(do_cog, Exception, args=(method, ext), ret=True) or f"cogs.{ext} is {method}ed"
+                   for ext in extensions]
+        await ctx.send(embed=BaseEmbed.default(ctx, description="\n".join(str(x) for x in outputs)))
 
 
 def setup(bot):
