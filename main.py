@@ -68,7 +68,7 @@ class StellaBot(commands.Bot):
             return "+="
         return self.existing_prefix[str(message.guild.id)]
 
-    async def get_message(self, message_id):
+    def get_message(self, message_id):
         return self._connection._get_message(message_id)
 
     def starter(self):
