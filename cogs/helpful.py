@@ -1,13 +1,12 @@
 import inspect
 import os
-
 import discord
+import humanize
+import datetime
 from discord.ext import commands, menus
 from utils.useful import BaseEmbed
 from collections import namedtuple
 from discord.ext.menus import First, Last, Button, MenuPages
-import humanize
-import datetime
 
 class CommandHelp:
     def __init__(self, command, brief):

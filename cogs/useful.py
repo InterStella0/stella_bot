@@ -1,12 +1,12 @@
 import discord
-from discord.ext import commands
 import base64
 import datetime
+import random
+from discord.ext import commands
 from collections import namedtuple
 from utils.useful import try_call
 from utils.new_converters import FetchUser
 from typing import Union
-import random
 
 
 class Useful(commands.Cog):

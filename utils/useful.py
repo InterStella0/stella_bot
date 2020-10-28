@@ -1,4 +1,5 @@
 import discord
+import datetime
 from discord.utils import maybe_coroutine
 from discord.ext import commands
 
@@ -13,8 +14,8 @@ async def try_call(code, exception, ret=False, args: tuple = (), kwargs: dict = 
 
 
 class BaseEmbed(discord.Embed):
-    def __init__(self, color=0xffcccb, **kwargs):
-        super(BaseEmbed, self).__init__(color=color, **kwargs)
+    def __init__(self, color=0xffcccb, timestamp=datetime.datetime.utcnow(), **kwargs):
+        super(BaseEmbed, self).__init__(color=color, timestamp=timestamp, **kwargs)
 
     @classmethod
     def default(cls, ctx, **kwargs):

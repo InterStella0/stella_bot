@@ -3,6 +3,7 @@ from utils.errors import NotValidCog, ThisEmpty
 from discord.utils import _unique
 from itertools import chain
 
+
 class FetchUser(commands.Converter):
     async def convert(self, ctx, argument):
         return await ctx.bot.fetch_user(int(argument))

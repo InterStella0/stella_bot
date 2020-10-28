@@ -2,12 +2,12 @@ import discord
 import datetime
 import re
 import asyncio
+import itertools
 from discord.ext import commands
 from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
 from utils.useful import try_call
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy
-import itertools
 
 
 class BotAdded:
