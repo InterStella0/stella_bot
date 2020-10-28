@@ -40,8 +40,10 @@ class BotAdded:
         join = None
         if bot and isinstance(bot, discord.Member):
             join = bot.joined_at
+            author = bot.guild.get_member(author)
         elif 'joined_at' in data:
             join = data['joined_at']
+
         return cls(author=author, bot=bot, reason=reason, requested_at=requested_at, jump_url=jump_url, joined_at=join)
 
     @classmethod
@@ -89,15 +91,16 @@ class FindBot(commands.Cog):
         if member.guild.id == self.DPY_ID and member.bot:
             if member.id in self.bot.pending_bots:
                 data = await self.bot.pg_con.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)
-                await self.update_confirm(BotAdded.from_json(member, data))
+                await self.update_confirm(BotAdded.from_json(data, member))
                 await self.bot.pg_con.execute("DELETE FROM pending_bots WHERE bot_id = $1", member.id)
             else:
-                await self.update_confirm(BotAdded.from_json(member, {"author_id": None,
-                                                                      "reason": None,
-                                                                      "requested_at": None,
-                                                                      "jump_url": None,
-                                                                      "joined_at": member.joined_at
-                                                                      }))
+                data = {"author_id": None,
+                        "reason": None,
+                        "requested_at": None,
+                        "jump_url": None,
+                        "joined_at": member.joined_at
+                        }
+                await self.update_confirm(BotAdded.from_json(data, member))
 
     @commands.Cog.listener()
     async def on_message(self, message):
