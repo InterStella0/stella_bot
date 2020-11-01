@@ -39,7 +39,7 @@ class StellaBot(commands.Bot):
         return self.get_user(self.owner_id)
 
     async def loading_cog(self):
-        cogs = ("find_bot", "useful", "helpful", "myself", "error_handler", "jishaku")
+        cogs = ("error_handler", "find_bot", "useful", "helpful", "myself" , "jishaku")
         for cog in cogs:
             ext = "cogs." if cog != "jishaku" else ""
             if error := await try_call(self.load_extension, Exception, ret=True, args=(f"{ext}{cog}",)):

@@ -3,6 +3,7 @@ import traceback
 import sys
 from discord.ext import commands
 from utils import errors, useful
+from utils.useful import BaseEmbed
 
 
 class ErrorHandler(commands.Cog):
@@ -44,7 +45,7 @@ class ErrorHandler(commands.Cog):
 
         elif isinstance(error, (errors.NotValidCog, errors.ThisEmpty, errors.NotInDatabase, errors.NotInDpy, errors.BotNotFound)):
             await ctx.send(embed=useful.BaseEmbed.to_error(title="Error",
-                                                     description=str(error)))
+                                                           description=str(error)))
 
         elif isinstance(error, commands.NoPrivateMessage):
             try:
@@ -56,6 +57,10 @@ class ErrorHandler(commands.Cog):
         elif isinstance(error, commands.BadArgument):
             await ctx.send('I could not find that member. Please try again.')
 
+        elif isinstance(error, commands.CommandOnCooldown):
+            await ctx.send(embed=BaseEmbed.to_error(
+                title="Cooldown Error",
+                description=f"You're on cooldown. Retry after `{error.retry_after}` seconds"))
         else:
             # All other Errors not returned come here. And we can just print the default TraceBack.
             print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
