@@ -116,8 +116,8 @@ class FindBot(commands.Cog):
 
                 def search(content):
                     return any(re.search(f"{x}", content.lower()) for x in possible_text)
-                content = search(message.content)
-                embeds = any(search(x[key]) for x in message.embeds for key in x.to_dict())
+                content = search(m.content)
+                embeds = any(search(x[key]) for x in m.embeds for key in x.to_dict())
 
                 print(content, embeds)
                 return content or embeds
@@ -294,7 +294,7 @@ class FindBot(commands.Cog):
     async def add(self, ctx, data: BotAdded):
         await ctx.invoke(self.whoadd, data)
 
-    @commands.command(aliases=["wp"])
+    @commands.command(aliases=["wp"], help="Shows the prefix of a bot")
     async def whatprefix(self, ctx, member: BotPrefix):
         embed = BaseEmbed.default(ctx,
                                   title="Bot Prefix",
