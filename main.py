@@ -25,6 +25,7 @@ class StellaBot(commands.Bot):
         self.color = color
         self.pg_con = None
         self.uptime = None
+        self.all_bot_prefixes = {}
         self.pending_bots = set()
         self.confirmed_bots = set()
         self.token = token
@@ -33,6 +34,11 @@ class StellaBot(commands.Bot):
 
     async def async_start(self):
         await self.loading_cog()
+        await self.loading_all_prefixes()
+
+    async def loading_all_prefixes(self):
+        datas = await self.pg_con.fetch("SELECT * FROM bot_prefix")
+        self.all_bot_prefixes = {data["bot_id"]: data["prefix"] for data in datas}
 
     @property
     def stella(self):

@@ -85,6 +85,7 @@ class FindBot(commands.Cog):
         re_bot = "[\s|\n]+(?P<id>[0-9]{17,19})[\s|\n]"
         re_reason = "+(?P<reason>.[\s\S\r]+)"
         self.re_addbot = re_command + re_bot + re_reason
+        self.lookup = tuple(self.bot.all_bot_prefixes.values())
 
     DPY_ID = 336642139381301249
 
@@ -104,35 +105,72 @@ class FindBot(commands.Cog):
                         }
                 await self.update_confirm(BotAdded.from_json(data, member))
 
-    @commands.Cog.listener(name="on_message")
-    async def find_bot_prefix(self, message):
-        if match := re.match("(?P<prefix>^.{0,30}?(?=help))", message.content):
-
+    async def update_prefix_bot(self, message, func, prefix):
+        def setup(func):
             def check(m):
                 if not (m.author.bot and m.channel == message.channel):
                     return False
+                return func(m)
+            return check
 
-                possible_text = ("command", "help", "category", "categories")
+        bots = []
+        while message.created_at + datetime.timedelta(seconds=2) > datetime.datetime.utcnow():
+            waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
+                               kwargs={"check": setup(func), "timeout": 1})
+            if m := await waiting:
+                bots.append(m.author.id)
+        if not bots:
+            return
+        query = "INSERT INTO bot_prefix VALUES($1, $2) ON CONFLICT (bot_id) DO UPDATE SET prefix=$2"
+        values = [(x, prefix) for x in bots]
 
-                def search(content):
-                    return any(re.search(f"{x}", content.lower()) for x in possible_text)
+        await self.bot.pg_con.executemany(query, values)
+        self.lookup = tuple(self.bot.all_bot_prefixes.values())
+
+    @commands.Cog.listener(name="on_message")
+    async def find_bot_prefix(self, message):
+        if message.author.bot:
+            return
+        if match := re.match("(?P<prefix>^.{1,30}?(?=jsk$))", message.content):
+            def check(m):
+                possible_text = ("Jishaku", "discord.py", "Python ", "Module ", "guild(s)", "user(s).")
+                return all(f"{x}" in m.content.lower() for x in possible_text)
+            await self.update_prefix_bot(message, check, match["prefix"])
+            return
+
+        if match := re.match("(?P<prefix>^.{1,30}?(?=help$))", message.content):
+            def check(m):
+                def search(search_text):
+                    possible_text = ("command", "help", "category", "categories")
+                    return any(f"{x}" in search_text.lower() for x in possible_text)
                 content = search(m.content)
-                embeds = any(search(x[key]) for x in m.embeds for key in x.to_dict())
-
-                print(content, embeds)
+                embeds = any(search(str(x.to_dict())) for x in m.embeds)
                 return content or embeds
 
-            bots = []
-            while message.created_at + datetime.timedelta(seconds=2) > datetime.datetime.utcnow():
-                waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",), kwargs={"check": check, "timeout": 1})
-                if m := await waiting:
-                    bots.append(m.author.id)
-            if not bots:
-                return
-            query = "INSERT INTO bot_prefix VALUES($1, $2) ON CONFLICT (bot_id) DO UPDATE SET prefix=$2"
-            values = [(x, match["prefix"]) for x in bots]
+            await self.update_prefix_bot(message, check, match["prefix"])
 
-            await self.bot.pg_con.executemany(query, values)
+    @commands.Cog.listener("on_message")
+    async def command_count(self, message):
+        if not message.content.startswith(self.lookup):
+            return
+        value = "" # TODO: ADD A PREFIX DETECTION AND CHECK WHICH PREFIX IT IS
+        bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", value)
+        match_bot = {bot["bot_id"] for bot in bots}
+
+        def check(m):
+            return m.author.bot and m.channel == message.channel and m.author.id in match_bot
+
+        while message.created_at + datetime.timedelta(seconds=2) > datetime.datetime.utcnow():
+            waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
+                               kwargs={"check": check, "timeout": 1})
+            if m := await waiting:
+                bots.append(m.author.id)
+        query = "INSERT INTO bot_usage_count VALUES($1, $2) ON CONFLICT (bot_id) DO UPDATE SET count=count + 1"
+        values = [(x, 0) for x in bots]
+
+        await self.bot.pg_con.executemany(query, values)
+
+
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -301,6 +339,13 @@ class FindBot(commands.Cog):
                                   description=f"`{member.prefix}`")
 
         await ctx.send(embed=embed)
+
+    @commands.command(aliases=["pc", "shares", "pconflict"],
+                      help="Shows the number of conflict(shares) a prefix have between bots.")
+    async def prefixconflict(self, ctx, prefix):
+        data = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
+        conflict = (0, len(data))[len(data) > 1]
+        await ctx.send(f"There are `{conflict}` conflict(s) with `{prefix}` prefix")
 
 
 def setup(bot):
