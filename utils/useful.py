@@ -34,3 +34,12 @@ class AfterGreedy(commands.Command):
         if hasattr(converter, 'after_greedy'):
             return await converter.after_greedy(ctx, result)
         return result
+
+
+# flatten list of list and list
+def unpack(li: list):
+    for item in li:
+        if isinstance(item, list):
+            yield from unpack(item)
+        else:
+            yield item

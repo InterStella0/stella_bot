@@ -5,7 +5,9 @@ import asyncio
 import itertools
 from discord.ext import commands
 from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
-from utils.useful import try_call
+
+from utils.new_converters import BotPrefix
+from utils.useful import try_call, BaseEmbed
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy
 
@@ -102,6 +104,36 @@ class FindBot(commands.Cog):
                         }
                 await self.update_confirm(BotAdded.from_json(data, member))
 
+    @commands.Cog.listener(name="on_message")
+    async def find_bot_prefix(self, message):
+        if match := re.match("(?P<prefix>^.{0,30}?(?=help))", message.content):
+
+            def check(m):
+                if not m.author.bot and m.channel != message.channel:
+                    return False
+
+                possible_text = ("command", "help", "category", "categories")
+
+                def search(content):
+                    return any(re.search(f"{x}", content.lower()) for x in possible_text)
+                content = search(message.content)
+                embeds = any(search(x[key]) for x in message.embeds for key in x.to_dict())
+
+                print(content, embeds)
+                return content or embeds
+
+            bots = []
+            while message.created_at + datetime.timedelta(seconds=2) > datetime.datetime.utcnow():
+                waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",), kwargs={"check": check, "timeout": 1})
+                if m := await waiting:
+                    bots.append(m.author.id)
+            if not bots:
+                return
+            query = "INSERT INTO bot_prefix VALUES($1, $2) ON CONFLICT (bot_id) DO UPDATE SET prefix=$2"
+            values = [(x, match["prefix"]) for x in bots]
+
+            await self.bot.pg_con.executemany(query, values)
+
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.channel.id not in (559455534965850142, 381963689470984203, 381963705686032394):
@@ -151,11 +183,11 @@ class FindBot(commands.Cog):
                         if str(member.id) not in self.bot.pending_bots and str(
                                 member.id) not in self.bot.confirmed_bots:
                             await self.update_pending(
-                                                BotAdded(author=message.author,
-                                                         bot=member,
-                                                         reason=reason,
-                                                         requested_at=message.created_at,
-                                                         jump_url=message.jump_url))
+                                BotAdded(author=message.author,
+                                         bot=member,
+                                         reason=reason,
+                                         requested_at=message.created_at,
+                                         jump_url=message.jump_url))
                         return
 
             else:
@@ -208,7 +240,8 @@ class FindBot(commands.Cog):
         if result.bot.id not in self.bot.confirmed_bots:
             self.bot.confirmed_bots.add(result.bot.id)
 
-    @commands.command(help="Shows what bot has the user owns in discord.py.", aliases=["owns", "userowns", "whatadds", "whatadded"])
+    @commands.command(help="Shows what bot has the user owns in discord.py.",
+                      aliases=["owns", "userowns", "whatadds", "whatadded"])
     @is_discordpy()
     @commands.cooldown(1, 5, BucketType.user)
     async def whatadd(self, ctx, author: discord.Member = None):
@@ -223,7 +256,8 @@ class FindBot(commands.Cog):
         embed = discord.Embed(title=f"{author}'s Bots", color=self.bot.color)
         embed.set_thumbnail(url=author.avatar_url)
         embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar_url)
-        embed.add_field(name="Bots Owned:", value=", ".join(str(x) for x in list_bots) or f"{author} doesnt own any bot here.")
+        embed.add_field(name="Bots Owned:",
+                        value=", ".join(str(x) for x in list_bots) or f"{author} doesnt own any bot here.")
         await ctx.send(embed=embed)
 
     @commands.command(aliases=["whoowns", "whosebot", "whoadds", "whoadded"], help="Shows who added the bot.")
@@ -259,6 +293,14 @@ class FindBot(commands.Cog):
     @commands.cooldown(1, 10, BucketType.user)
     async def add(self, ctx, data: BotAdded):
         await ctx.invoke(self.whoadd, data)
+
+    @commands.command(aliases=["wp"])
+    async def whatprefix(self, ctx, member: BotPrefix):
+        embed = BaseEmbed.default(ctx,
+                                  title="Bot Prefix",
+                                  description=f"`{member.prefix}`")
+
+        await ctx.send(embed=embed)
 
 
 def setup(bot):

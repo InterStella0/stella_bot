@@ -16,6 +16,11 @@ class BotNotFound(commands.UserInputError):
         super().__init__(f"{_id} not found.")
 
 
+class NotBot(commands.UserInputError):
+    def __init__(self, _id):
+        super().__init__(f"{_id} is not a bot")
+
+
 class NotInDpy(commands.UserInputError):
     def __init__(self):
         super().__init__(f"This command is only allowed in discord.py")
