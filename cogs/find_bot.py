@@ -109,7 +109,7 @@ class FindBot(commands.Cog):
         if match := re.match("(?P<prefix>^.{0,30}?(?=help))", message.content):
 
             def check(m):
-                if not m.author.bot and m.channel != message.channel:
+                if not (m.author.bot and m.channel == message.channel):
                     return False
 
                 possible_text = ("command", "help", "category", "categories")
