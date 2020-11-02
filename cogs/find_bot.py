@@ -345,16 +345,19 @@ class FindBot(commands.Cog):
     @commands.command(aliases=["pc", "shares", "pconflict"],
                       help="Shows the number of conflict(shares) a prefix have between bots.")
     async def prefixconflict(self, ctx, prefix):
-        data = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
-        conflict = (0, len(data))[len(data) > 1]
+        instance_bot = await self.get_all_prefix(ctx, prefix)
+        conflict = (0, len(instance_bot))[len(instance_bot) > 1]
         await ctx.send(embed=BaseEmbed.default(ctx, description=f"There are `{conflict}` conflict(s) with `{prefix}` prefix"))
+
+    async def get_all_prefix(self, guild, prefix):
+        data = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
+        mem = lambda x: guild.get_member(x)
+        return [mem(x['bot_id']) for x in data if mem(x['bot_id'])]
 
     @commands.command(aliases=["pb", "prefixbots", "pbots"],
                       help="Shows which bot(s) have a given prefix.")
     async def prefixbot(self, ctx, prefix):
-        data = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
-        mem = lambda x: ctx.guild.get_member(x)
-        instance_bot = [mem(x['bot_id']) for x in data if mem(x['bot_id'])]
+        instance_bot = await self.get_all_prefix(ctx, prefix)
         list_bot = "\n".join(f"{no + 1}. {x}" for no, x in enumerate(instance_bot)) or "No bot have it."
         await ctx.send(embed=BaseEmbed.default(ctx,
                                                description=f"Bot{('s', '')[len(list_bot) < 2]} with `{prefix}` as prefix\n"
