@@ -85,7 +85,7 @@ class FindBot(commands.Cog):
         re_bot = "[\s|\n]+(?P<id>[0-9]{17,19})[\s|\n]"
         re_reason = "+(?P<reason>.[\s\S\r]+)"
         self.re_addbot = re_command + re_bot + re_reason
-        self.lookup = tuple(self.bot.all_bot_prefixes.values())
+        # self.lookup = tuple(self.bot.all_bot_prefixes.values())
 
     DPY_ID = 336642139381301249
 
@@ -118,7 +118,8 @@ class FindBot(commands.Cog):
             waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
                                kwargs={"check": setup(func), "timeout": 1})
             if m := await waiting:
-                bots.append(m.author.id)
+                #if not (m.author.id in self.bot.all_bot_prefixes and self.bot.all_bot_prefixes[m.author.id] == prefix):
+                    bots.append(m.author.id)
         if not bots:
             return
         query = "INSERT INTO bot_prefix VALUES($1, $2) ON CONFLICT (bot_id) DO UPDATE SET prefix=$2"
@@ -151,6 +152,7 @@ class FindBot(commands.Cog):
 
     @commands.Cog.listener("on_message")
     async def command_count(self, message):
+        return # Disabled
         if not message.content.startswith(self.lookup):
             return
         value = "" # TODO: ADD A PREFIX DETECTION AND CHECK WHICH PREFIX IT IS
@@ -345,7 +347,18 @@ class FindBot(commands.Cog):
     async def prefixconflict(self, ctx, prefix):
         data = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
         conflict = (0, len(data))[len(data) > 1]
-        await ctx.send(f"There are `{conflict}` conflict(s) with `{prefix}` prefix")
+        await ctx.send(embed=BaseEmbed.default(ctx, description=f"There are `{conflict}` conflict(s) with `{prefix}` prefix"))
+
+    @commands.command(aliases=["pb", "prefixbots", "pbots"],
+                      help="Shows which bot(s) have a given prefix.")
+    async def prefixbot(self, ctx, prefix):
+        data = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
+        mem = lambda x: ctx.guild.get_member(x)
+        instance_bot = [mem(x['bot_id']) for x in data if mem(x['bot_id'])]
+        list_bot = "\n".join(f"{no + 1}. {x}" for no, x in enumerate(instance_bot)) or "No bot have it."
+        await ctx.send(embed=BaseEmbed.default(ctx,
+                                               description=f"Bot{('s', '')[len(list_bot) < 2]} with `{prefix}` as prefix\n"
+                                                           f"{list_bot}"))
 
 
 def setup(bot):
