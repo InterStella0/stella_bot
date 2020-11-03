@@ -48,6 +48,9 @@ class BotPrefix:
         self.bot = member
         self.prefix = prefix
 
+    def __str__(self):
+        return str(self.bot)
+
     @classmethod
     async def convert(cls, ctx, argument):
         member = await commands.MemberConverter().convert(ctx, argument)

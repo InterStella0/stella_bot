@@ -167,8 +167,10 @@ class FindBot(commands.Cog):
 
             await self.update_prefix_bot(message, check, match["prefix"])
 
-    @commands.Cog.listener("on_message")
+    @commands.Cog.listener()#Disabled, SEGMENTATION FAULT IN LINUX
     async def command_count(self, message):
+        if not (self.compiled_pref or self.pref_size):
+            return
         limit = len(message.content) if len(message.content) < 31 else 31
         content_compiled = ctypes.create_string_buffer(message.content[:limit].encode("utf-8"))
         result = search_prefix(self.compiled_pref, content_compiled, self.pref_size)
@@ -358,7 +360,7 @@ class FindBot(commands.Cog):
     @commands.command(aliases=["wp"], help="Shows the prefix of a bot")
     async def whatprefix(self, ctx, member: BotPrefix):
         embed = BaseEmbed.default(ctx,
-                                  title="Bot Prefix",
+                                  title=f"{member}'s Prefix",
                                   description=f"`{member.prefix}`")
 
         await ctx.send(embed=embed)

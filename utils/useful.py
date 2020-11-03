@@ -1,6 +1,7 @@
 import discord
 import datetime
 import ctypes
+import platform
 from discord.utils import maybe_coroutine
 from discord.ext import commands
 
@@ -57,7 +58,6 @@ def compile_prefix(prefixes):
     pre = [x.encode('utf-8') for x in prefixes]
     array_string = ArrString(*pre)
     return array_string
-
 
 def search_prefix(array_string, content_buffer, _size):
     find_prefix.argtypes = [ctypes.c_char_p * _size, ctypes.c_char_p, ctypes.c_int]
