@@ -1,5 +1,6 @@
 import discord
 import datetime
+import ctypes
 from discord.utils import maybe_coroutine
 from discord.ext import commands
 
@@ -43,3 +44,23 @@ def unpack(li: list):
             yield from unpack(item)
         else:
             yield item
+
+
+lib = ctypes.CDLL("c_codes/binary_prefix.so")
+find_prefix = lib.find_prefix
+
+
+def compile(prefixes, content):
+    find_prefix.argtypes = [ctypes.c_char_p * len(prefixes), ctypes.c_char_p, ctypes.c_int]
+    find_prefix.restypes = [ctypes.c_char_p]
+    ArrString = ctypes.c_char_p * len(prefixes)
+
+    pre = [x.encode('ascii') for x in prefixes]
+    array_string = ArrString(*pre)
+    return array_string, ctypes.create_string_buffer(content.encode("ascii")), len(prefixes)
+
+
+def search_prefix(array_string, content_buffer, size):
+    result = find_prefix(array_string, content_buffer, size)
+    c_obj = ctypes.c_char_p(result)
+    return c_obj.value
