@@ -2,10 +2,10 @@
 #include <stdio.h>
 int search(char* x[], char[], int);
 char* find_prefix(char* x[], char[], int);
-char* find_prefix(char* prefixes[], char content[], int high){
-    int start = strlen(content) - 1;
+char* find_prefix(char* prefixes[], char content[], int n){
+    int start = strlen(content);
     while(start > 0){
-        int result = search(prefixes, content, high);
+        int result = search(prefixes, content, n);
         if (result == -1){
             start--;
             content[start] = '\0';
@@ -17,13 +17,11 @@ char* find_prefix(char* prefixes[], char content[], int high){
 
 }
 
-int search(char* arr[], char target[], int high){
+int search(char* arr[], char target[], int n){
     int low = 0;
-    int max = high;
+    int high = n - 1;
     while (high >= low) {
-        int mid = (high + low) / 2;
-        if(max <= mid)
-            return -1;
+        int mid = low + (high - low) / 2;
         int result = strcmp(arr[mid], target);
         if(result == 0)
             return mid;

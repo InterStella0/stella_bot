@@ -29,10 +29,13 @@ class Useful(commands.Cog):
         token_part = token.split(".")
         if len(token_part) != 3:
             return await ctx.send("Invalid token")
-        user_bytes = token_part[0].encode()
-        user_id_decoded = base64.b64decode(user_bytes)
-        str_id = user_id_decoded.decode("ascii")
-        if not str_id.isdigit():
+
+        def decode_user(user):
+            user_bytes = user.encode()
+            user_id_decoded = base64.b64decode(user_bytes)
+            return user_id_decoded.decode("ascii")
+        str_id = await try_call(decode_user, Exception, args=(token_part[0],))
+        if not str_id or not str_id.isdigit():
             return await ctx.send("Invalid user")
         user_id = int(str_id)
         coro_user = try_call(self.bot.fetch_user(user_id), discord.NotFound)

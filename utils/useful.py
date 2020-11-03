@@ -48,19 +48,19 @@ def unpack(li: list):
 
 lib = ctypes.CDLL("c_codes/binary_prefix.so")
 find_prefix = lib.find_prefix
+find_prefix.restypes = [ctypes.c_char_p]
 
 
-def compile(prefixes, content):
-    find_prefix.argtypes = [ctypes.c_char_p * len(prefixes), ctypes.c_char_p, ctypes.c_int]
-    find_prefix.restypes = [ctypes.c_char_p]
+def compile_prefix(prefixes):
     ArrString = ctypes.c_char_p * len(prefixes)
 
-    pre = [x.encode('ascii') for x in prefixes]
+    pre = [x.encode('utf-8') for x in prefixes]
     array_string = ArrString(*pre)
-    return array_string, ctypes.create_string_buffer(content.encode("ascii")), len(prefixes)
+    return array_string
 
 
-def search_prefix(array_string, content_buffer, size):
-    result = find_prefix(array_string, content_buffer, size)
+def search_prefix(array_string, content_buffer, _size):
+    find_prefix.argtypes = [ctypes.c_char_p * _size, ctypes.c_char_p, ctypes.c_int]
+    result = find_prefix(array_string, content_buffer, _size)
     c_obj = ctypes.c_char_p(result)
-    return c_obj.value
+    return c_obj.value.decode('utf-8')

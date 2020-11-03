@@ -35,10 +35,6 @@ class StellaBot(commands.Bot):
     async def async_start(self):
         await self.loading_cog()
 
-    async def loading_all_prefixes(self):
-        datas = await self.pg_con.fetch("SELECT * FROM bot_prefix")
-        self.all_bot_prefixes = {data["bot_id"]: data["prefix"] for data in datas}
-
     @property
     def stella(self):
         return self.get_user(self.owner_id)
@@ -92,7 +88,6 @@ class StellaBot(commands.Bot):
             self.pg_con = loop_pg
             print(f"Connected to the database ({time.time() - start})s")
             self.loop.run_until_complete(self.fill_bots())
-            self.loop.run_until_complete(self.loading_all_prefixes())
             self.run(self.token)
 
 

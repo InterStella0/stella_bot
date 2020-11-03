@@ -1,13 +1,16 @@
+import time
+
 import discord
 import datetime
 import re
 import asyncio
 import itertools
+import ctypes
 from discord.ext import commands
 from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
 
 from utils.new_converters import BotPrefix
-from utils.useful import try_call, BaseEmbed
+from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy
 
@@ -85,7 +88,18 @@ class FindBot(commands.Cog):
         re_bot = "[\s|\n]+(?P<id>[0-9]{17,19})[\s|\n]"
         re_reason = "+(?P<reason>.[\s\S\r]+)"
         self.re_addbot = re_command + re_bot + re_reason
-        # self.lookup = tuple(self.bot.all_bot_prefixes.values())
+        self.compiled_pref = None
+        self.all_bot_prefixes = None
+        self.pref_size = None
+        bot.loop.create_task(self.loading_all_prefixes())
+
+    async def loading_all_prefixes(self):
+        await self.bot.wait_until_ready()
+        datas = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix")
+        self.all_bot_prefixes = {data["bot_id"]: data["prefix"] for data in datas}
+        self.pref_size = len(set(self.all_bot_prefixes.values()))
+        temp = list(set(self.all_bot_prefixes.values()))
+        self.compiled_pref = compile_prefix(sorted(temp))
 
     DPY_ID = 336642139381301249
 
@@ -118,7 +132,7 @@ class FindBot(commands.Cog):
             waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
                                kwargs={"check": setup(func), "timeout": 1})
             if m := await waiting:
-                #if not (m.author.id in self.bot.all_bot_prefixes and self.bot.all_bot_prefixes[m.author.id] == prefix):
+                if not (m.author.id in self.all_bot_prefixes and self.all_bot_prefixes[m.author.id] == prefix):
                     bots.append(m.author.id)
         if not bots:
             return
@@ -126,7 +140,10 @@ class FindBot(commands.Cog):
         values = [(x, prefix) for x in bots]
 
         await self.bot.pg_con.executemany(query, values)
-        self.lookup = tuple(self.bot.all_bot_prefixes.values())
+        self.all_bot_prefixes.update({x: prefix for x, prefix in values})
+        self.pref_size = len(set(self.all_bot_prefixes.values()))
+        temp = list(set(self.all_bot_prefixes.values()))
+        self.compiled_pref = compile_prefix(sorted(temp))
 
     @commands.Cog.listener(name="on_message")
     async def find_bot_prefix(self, message):
@@ -152,27 +169,32 @@ class FindBot(commands.Cog):
 
     @commands.Cog.listener("on_message")
     async def command_count(self, message):
-        return # Disabled
-        if not message.content.startswith(self.lookup):
+        limit = len(message.content) if len(message.content) < 31 else 31
+        content_compiled = ctypes.create_string_buffer(message.content[:limit].encode("utf-8"))
+        result = search_prefix(self.compiled_pref, content_compiled, self.pref_size)
+        if not result:
             return
-        value = "" # TODO: ADD A PREFIX DETECTION AND CHECK WHICH PREFIX IT IS
-        bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", value)
-        match_bot = {bot["bot_id"] for bot in bots}
 
-        def check(m):
-            return m.author.bot and m.channel == message.channel and m.author.id in match_bot
+        bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", result)
+        match_bot = {bot["bot_id"] for bot in bots if message.guild.get_member(bot["bot_id"])}
 
+        def check(msg):
+            return msg.author.bot and msg.channel == message.channel and msg.author.id in match_bot
+
+        bot_found = []
         while message.created_at + datetime.timedelta(seconds=2) > datetime.datetime.utcnow():
             waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
                                kwargs={"check": check, "timeout": 1})
             if m := await waiting:
-                bots.append(m.author.id)
-        query = "INSERT INTO bot_usage_count VALUES($1, $2) ON CONFLICT (bot_id) DO UPDATE SET count=count + 1"
-        values = [(x, 0) for x in bots]
+                bot_found.append(m.author.id)
+            if len(bot_found) == len(match_bot):
+                break
+        if not bot_found:
+            return
+        query = "INSERT INTO bot_usage_count VALUES($1, $2) ON CONFLICT (bot_id) DO UPDATE SET count=bot_usage_count.count + 1"
+        values = [(x, 1) for x in bot_found]
 
         await self.bot.pg_con.executemany(query, values)
-
-
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -220,8 +242,7 @@ class FindBot(commands.Cog):
                 if not member and message.created_at > six_days:
                     member = await try_call(self.bot.fetch_user(int(result["id"])), discord.NotFound)
                     if all((reason, member and member.bot and str(member.id) not in self.bot.pending_bots)):
-                        if str(member.id) not in self.bot.pending_bots and str(
-                                member.id) not in self.bot.confirmed_bots:
+                        if str(member.id) not in self.bot.confirmed_bots:
                             await self.update_pending(
                                 BotAdded(author=message.author,
                                          bot=member,
@@ -345,7 +366,7 @@ class FindBot(commands.Cog):
     @commands.command(aliases=["pc", "shares", "pconflict"],
                       help="Shows the number of conflict(shares) a prefix have between bots.")
     async def prefixconflict(self, ctx, prefix):
-        instance_bot = await self.get_all_prefix(ctx, prefix)
+        instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         conflict = (0, len(instance_bot))[len(instance_bot) > 1]
         await ctx.send(embed=BaseEmbed.default(ctx, description=f"There are `{conflict}` conflict(s) with `{prefix}` prefix"))
 
@@ -357,7 +378,7 @@ class FindBot(commands.Cog):
     @commands.command(aliases=["pb", "prefixbots", "pbots"],
                       help="Shows which bot(s) have a given prefix.")
     async def prefixbot(self, ctx, prefix):
-        instance_bot = await self.get_all_prefix(ctx, prefix)
+        instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         list_bot = "\n".join(f"{no + 1}. {x}" for no, x in enumerate(instance_bot)) or "No bot have it."
         await ctx.send(embed=BaseEmbed.default(ctx,
                                                description=f"Bot{('s', '')[len(list_bot) < 2]} with `{prefix}` as prefix\n"
