@@ -8,7 +8,7 @@ import ctypes
 from discord.ext import commands
 from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
 from discord.ext.menus import ListPageSource
-from utils.new_converters import BotPrefix
+from utils.new_converters import BotPrefix, BotUsage
 from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy
@@ -187,7 +187,6 @@ class FindBot(commands.Cog):
 
     @commands.Cog.listener("on_message")
     async def command_count(self, message):
-        start = time.time()
         if not (self.compiled_pref or self.pref_size):
             return
         limit = len(message.content) if len(message.content) < 31 else 31
@@ -196,21 +195,17 @@ class FindBot(commands.Cog):
         result = search_prefix(com_pref, content_compiled, ori_arr, self.pref_size)
         if not result:
             return
-        print("result", time.time() - start)
-        start = time.time()
+
         bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", result)
         match_bot = {bot["bot_id"] for bot in bots if message.guild.get_member(bot["bot_id"])}
-        print("match", time.time() - start)
 
-        start = time.time()
         def check(msg):
             return msg.author.bot and msg.channel == message.channel and msg.author.id in match_bot
 
         bot_found = []
-        while message.created_at + datetime.timedelta(seconds=2) > datetime.datetime.utcnow():
+        while message.created_at + datetime.timedelta(seconds=5) > datetime.datetime.utcnow():
             waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
                                kwargs={"check": check, "timeout": 1})
-            print("bot awaiting", time.time() - start)
             if m := await waiting:
                 bot_found.append(m.author.id)
             if len(bot_found) == len(match_bot):
@@ -355,13 +350,13 @@ class FindBot(commands.Cog):
         author = await try_call(commands.UserConverter().convert(ctx, str(data.author)), UserNotFound)
         embed = discord.Embed(title=f"{data.bot}",
                               color=self.bot.color)
-        request = data.requested_at.strftime("%d %b %Y %I:%M %p %Z") if data.requested_at else "Unknown"
-        join = data.joined_at.strftime("%d %b %Y %I:%M %p %Z") if data.joined_at else "Unknown"
+        request = data.requested_at.strftime("%d %b %Y %I:%M %p %Z") if data.requested_at else None
+        join = data.joined_at.strftime("%d %b %Y %I:%M %p %Z") if data.joined_at else None
         embed.set_thumbnail(url=data.bot.avatar_url)
-        fields = (("Reason", data.reason or "Unknown"),
+        fields = (("Reason", data.reason),
                   ("Requested", request),
                   ("Joined", join),
-                  ("Message Request", f"[jump]({data.jump_url})"))
+                  ("Message Request", f"[jump]({data.jump_url})" if data.jump_url else None))
 
         if author:
             embed.set_author(name=author, icon_url=author.avatar_url)
@@ -408,7 +403,7 @@ class FindBot(commands.Cog):
     @commands.guild_only()
     async def prefixbot(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
-        list_bot = "\n".join(f"{no + 1}. {x}" for no, x in enumerate(instance_bot)) or "No bot have it."
+        list_bot = "\n".join(f"{no + 1}. {x}" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
         await ctx.send(embed=BaseEmbed.default(ctx,
                                                description=f"Bot{('s', '')[len(list_bot) < 2]} with `{prefix}` as prefix\n"
                                                            f"{list_bot}"))
@@ -422,6 +417,15 @@ class FindBot(commands.Cog):
         members = [(mem(bot["bot_id"]), bot["prefix"]) for bot in bots if mem(bot["bot_id"])]
         menu = MenuBase(source=AllPrefixes(members), delete_message_after=True)
         await menu.start(ctx)
+
+    @commands.command(aliases=["bot_use", "bu", "botusage", "botuses"],
+                      help="Show's how many command calls for the bot.")
+    async def botuse(self, ctx, bot: BotUsage):
+        embed = BaseEmbed.default(ctx,
+                                  title=f"{bot}'s Usage",
+                                  description=f"The bot has been used for `{bot.count}` times.")
+
+        await ctx.send(embed=embed)
 
 
 def setup(bot):

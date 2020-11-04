@@ -43,10 +43,12 @@ class ValidCog(CleanListGreedy):
         raise NotValidCog(argument)
 
 
-class BotPrefix:
-    def __init__(self, member, prefix):
+class BotData:
+    name = "NONE"
+    use = "NONE"
+
+    def __init__(self, member):
         self.bot = member
-        self.prefix = prefix
 
     def __str__(self):
         return str(self.bot)
@@ -57,7 +59,34 @@ class BotPrefix:
         if not member.bot:
             raise NotBot(member)
 
-        if data := await ctx.bot.pg_con.fetchrow("SELECT * FROM bot_prefix WHERE bot_id=$1", member.id):
-            return cls(member, data["prefix"])
-
+        if data := await ctx.bot.pg_con.fetchrow(f"SELECT * FROM {cls.name} WHERE bot_id=$1", member.id):
+            return member, data
         raise NotInDatabase(member)
+
+
+class BotPrefix(BotData):
+    name = "bot_prefix"
+    use = "prefix"
+
+    def __init__(self, member, prefix):
+        super().__init__(member)
+        self.prefix = prefix
+
+    @classmethod
+    async def convert(cls, ctx, argument):
+        member, data = await super().convert(ctx, argument)
+        return cls(member, data[cls.use])
+
+
+class BotUsage(BotData):
+    name = "bot_usage_count"
+    use = "count"
+
+    def __init__(self, member, count):
+        super().__init__(member)
+        self.count = count
+
+    @classmethod
+    async def convert(cls, ctx, argument):
+        member, data = await super().convert(ctx, argument)
+        return cls(member, data[cls.use])

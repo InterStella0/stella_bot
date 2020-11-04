@@ -43,28 +43,16 @@ class ErrorHandler(commands.Cog):
         if isinstance(error, commands.DisabledCommand):
             await ctx.send(f'{ctx.command} has been disabled.')
 
-        elif isinstance(error, (errors.NotValidCog, errors.ThisEmpty, errors.NotInDatabase, errors.NotInDpy, errors.BotNotFound)):
-            await ctx.send(embed=useful.BaseEmbed.to_error(title="Error",
-                                                           description=str(error)))
-
-        elif isinstance(error, commands.NoPrivateMessage):
-            try:
-                await ctx.author.send(f'{ctx.command} can not be used in Private Messages.')
-            except discord.HTTPException:
-                pass
-
-        # For this error example we check to see where it came from...
-        elif isinstance(error, commands.BadArgument):
-            await ctx.send('I could not find that member. Please try again.')
-
         elif isinstance(error, commands.CommandOnCooldown):
             await ctx.send(embed=BaseEmbed.to_error(
                 title="Cooldown Error",
                 description=f"You're on cooldown. Retry after `{error.retry_after}` seconds"))
         else:
             # All other Errors not returned come here. And we can just print the default TraceBack.
-            print('Ignoring exception in command {}:'.format(ctx.command), file=sys.stderr)
-            traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+            await ctx.send(embed=BaseEmbed.to_error(
+                title="Error",
+                description=f"{error}"
+            ))
 
 
 def setup(bot):
