@@ -185,7 +185,7 @@ class FindBot(commands.Cog):
 
             await self.update_prefix_bot(message, check, match["prefix"])
 
-    @commands.Cog.listener("on_message")  # Disabled, SEGMENTATION FAULT IN LINUX
+    @commands.Cog.listener("on_message")
     async def command_count(self, message):
         start = time.time()
         if not (self.compiled_pref or self.pref_size):

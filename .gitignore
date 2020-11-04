@@ -1,6 +1,7 @@
 *.pyc
 *.json
 *.env
+*.so
 venv
 .idea
 nppBackup
