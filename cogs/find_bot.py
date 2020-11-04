@@ -1,5 +1,4 @@
 import time
-
 import discord
 import datetime
 import re
@@ -8,9 +7,9 @@ import itertools
 import ctypes
 from discord.ext import commands
 from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
-
+from discord.ext.menus import ListPageSource
 from utils.new_converters import BotPrefix
-from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix
+from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy
 
@@ -80,6 +79,21 @@ class BotAdded:
                ' joined_at = {0.joined_at}>'.format(self)
 
 
+class AllPrefixes(ListPageSource):
+    def __init__(self, data):
+        super().__init__(data, per_page=6)
+
+    async def format_page(self, menu, entries):
+        key = "(\u200b|\u200b)"
+        offset = menu.current_page * self.per_page
+        contents = [f'`{i+1}. {k} {key} {p}`' for i, (k, p) in enumerate(entries, start=offset)]
+        high = max(cont.index(key) for cont in contents)
+        reform = [high - cont.index(key) for cont in contents]
+        true_form = [x.replace(key, f'{" " * off} |')for x, off in zip(contents, reform)]
+        embed = BaseEmbed(description="\n".join(true_form))
+        return embed
+
+
 class FindBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -122,8 +136,10 @@ class FindBot(commands.Cog):
     async def update_prefix_bot(self, message, func, prefix):
         def setup(func):
             def check(m):
-                if not (m.author.bot and m.channel == message.channel):
+                if m.channel != message.channel:
                     return False
+                if not m.author.bot:
+                    return True
                 return func(m)
             return check
 
@@ -132,6 +148,8 @@ class FindBot(commands.Cog):
             waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
                                kwargs={"check": setup(func), "timeout": 1})
             if m := await waiting:
+                if not m.author.bot:
+                    break
                 if not (m.author.id in self.all_bot_prefixes and self.all_bot_prefixes[m.author.id] == prefix):
                     bots.append(m.author.id)
         if not bots:
@@ -167,7 +185,7 @@ class FindBot(commands.Cog):
 
             await self.update_prefix_bot(message, check, match["prefix"])
 
-    @commands.Cog.listener()#Disabled, SEGMENTATION FAULT IN LINUX
+    @commands.Cog.listener()  # Disabled, SEGMENTATION FAULT IN LINUX
     async def command_count(self, message):
         if not (self.compiled_pref or self.pref_size):
             return
@@ -358,6 +376,7 @@ class FindBot(commands.Cog):
         await ctx.invoke(self.whoadd, data)
 
     @commands.command(aliases=["wp"], help="Shows the prefix of a bot")
+    @commands.guild_only()
     async def whatprefix(self, ctx, member: BotPrefix):
         embed = BaseEmbed.default(ctx,
                                   title=f"{member}'s Prefix",
@@ -367,6 +386,7 @@ class FindBot(commands.Cog):
 
     @commands.command(aliases=["pc", "shares", "pconflict"],
                       help="Shows the number of conflict(shares) a prefix have between bots.")
+    @commands.guild_only()
     async def prefixconflict(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         conflict = (0, len(instance_bot))[len(instance_bot) > 1]
@@ -379,12 +399,23 @@ class FindBot(commands.Cog):
 
     @commands.command(aliases=["pb", "prefixbots", "pbots"],
                       help="Shows which bot(s) have a given prefix.")
+    @commands.guild_only()
     async def prefixbot(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         list_bot = "\n".join(f"{no + 1}. {x}" for no, x in enumerate(instance_bot)) or "No bot have it."
         await ctx.send(embed=BaseEmbed.default(ctx,
                                                description=f"Bot{('s', '')[len(list_bot) < 2]} with `{prefix}` as prefix\n"
                                                            f"{list_bot}"))
+
+    @commands.command(aliases=["ap", "aprefix", "allprefixes"],
+                      help="Shows every bot's prefix in the server.")
+    @commands.guild_only()
+    async def allprefix(self, ctx):
+        bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix")
+        mem = lambda x: ctx.guild.get_member(x)
+        members = [(mem(bot["bot_id"]), bot["prefix"]) for bot in bots if mem(bot["bot_id"])]
+        menu = MenuBase(source=AllPrefixes(members), delete_message_after=True)
+        await menu.start(ctx)
 
 
 def setup(bot):

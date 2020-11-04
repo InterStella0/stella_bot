@@ -17,28 +17,31 @@ class CommandHelp:
 class HelpMenuBase(MenuPages):
     """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
        with a custom emoji, and keep the functionality."""
+
     def __init__(self, source, **kwargs):
         super().__init__(source, **kwargs)
         self.info = False
 
         EmojiB = namedtuple("EmojiB", "emoji position explain")
         self.dict_emoji = {'\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
-                           EmojiB("<:before_fast_check:754948796139569224>", First(0), "Goes to the first page."),
+                               EmojiB("<:before_fast_check:754948796139569224>", First(0),
+                                      "Goes to the first page."),
 
                            '\N{BLACK LEFT-POINTING TRIANGLE}\ufe0f':
-                           EmojiB("<:before_check:754948796487565332>", First(1), "Goes to the previous page."),
+                               EmojiB("<:before_check:754948796487565332>", First(1), "Goes to the previous page."),
 
                            '\N{BLACK RIGHT-POINTING TRIANGLE}\ufe0f':
-                           EmojiB("<:next_check:754948796361736213>", Last(1), "Goes to the next page."),
+                               EmojiB("<:next_check:754948796361736213>", Last(1), "Goes to the next page."),
 
                            '\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
-                           EmojiB("<:next_fast_check:754948796391227442>", Last(2), "Goes to the last page."),
+                               EmojiB("<:next_fast_check:754948796391227442>", Last(2), "Goes to the last page."),
 
                            '\N{BLACK SQUARE FOR STOP}\ufe0f':
-                           EmojiB("<:stop_check:754948796365930517>", Last(0), "Remove this message."),
+                               EmojiB("<:stop_check:754948796365930517>", Last(0), "Remove this message."),
 
                            '<:information_pp:754948796454010900>':
-                           EmojiB("<:information_pp:754948796454010900>", Last(4), "Shows this infomation message.")}
+                               EmojiB("<:information_pp:754948796454010900>", Last(4),
+                                      "Shows this infomation message.")}
 
         for emoji in super().buttons:
             callback = super().buttons[emoji].action  # gets the function that would be called for that button
