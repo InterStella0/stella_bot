@@ -185,19 +185,24 @@ class FindBot(commands.Cog):
 
             await self.update_prefix_bot(message, check, match["prefix"])
 
-    @commands.Cog.listener()  # Disabled, SEGMENTATION FAULT IN LINUX
+    @commands.Cog.listener("on_message")  # Disabled, SEGMENTATION FAULT IN LINUX
     async def command_count(self, message):
+        start = time.time()
         if not (self.compiled_pref or self.pref_size):
             return
         limit = len(message.content) if len(message.content) < 31 else 31
         content_compiled = ctypes.create_string_buffer(message.content[:limit].encode("utf-8"))
-        result = search_prefix(self.compiled_pref, content_compiled, self.pref_size)
+        com_pref, ori_arr = self.compiled_pref
+        result = search_prefix(com_pref, content_compiled, ori_arr, self.pref_size)
         if not result:
             return
-
+        print("result", time.time() - start)
+        start = time.time()
         bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", result)
         match_bot = {bot["bot_id"] for bot in bots if message.guild.get_member(bot["bot_id"])}
+        print("match", time.time() - start)
 
+        start = time.time()
         def check(msg):
             return msg.author.bot and msg.channel == message.channel and msg.author.id in match_bot
 
@@ -205,6 +210,7 @@ class FindBot(commands.Cog):
         while message.created_at + datetime.timedelta(seconds=2) > datetime.datetime.utcnow():
             waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
                                kwargs={"check": check, "timeout": 1})
+            print("bot awaiting", time.time() - start)
             if m := await waiting:
                 bot_found.append(m.author.id)
             if len(bot_found) == len(match_bot):

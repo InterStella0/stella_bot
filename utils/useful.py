@@ -88,7 +88,7 @@ class MenuBase(menus.MenuPages):
 
 lib = ctypes.CDLL("c_codes/binary_prefix.so")
 find_prefix = lib.find_prefix
-find_prefix.restypes = [ctypes.c_char_p]
+find_prefix.restypes = [ctypes.c_int]
 
 
 def compile_prefix(prefixes):
@@ -96,11 +96,10 @@ def compile_prefix(prefixes):
 
     pre = [x.encode('utf-8') for x in prefixes]
     array_string = ArrString(*pre)
-    return array_string
+    return array_string, prefixes
 
 
-def search_prefix(array_string, content_buffer, _size):
+def search_prefix(array_string, content_buffer, ori, _size):
     find_prefix.argtypes = [ctypes.c_char_p * _size, ctypes.c_char_p, ctypes.c_int]
     result = find_prefix(array_string, content_buffer, _size)
-    c_obj = ctypes.c_char_p(result)
-    return c_obj.value.decode('utf-8')
+    return ori[result] if result != -1 else None

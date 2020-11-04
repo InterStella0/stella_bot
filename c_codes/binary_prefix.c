@@ -1,8 +1,8 @@
 #include <string.h>
 #include <stdio.h>
 int search(char* x[], char[], int);
-char* find_prefix(char** x, char[], int);
-char* find_prefix(char** prefixes, char content[], int n){
+int find_prefix(char** prefixes, char content[], int n);
+int find_prefix(char** prefixes, char content[], int n){
     int start = strlen(content);
     while(start > 0){
         int result = search(prefixes, content, n);
@@ -10,10 +10,10 @@ char* find_prefix(char** prefixes, char content[], int n){
             start--;
             content[start] = '\0';
         }else{
-            return prefixes[result];
+            return result;
         }
     }
-    return "";
+    return -1;
 
 }
 
