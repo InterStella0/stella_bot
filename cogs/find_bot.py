@@ -1,14 +1,15 @@
-import time
 import discord
 import datetime
 import re
 import asyncio
 import itertools
 import ctypes
+
+import humanize
 from discord.ext import commands
 from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
 from discord.ext.menus import ListPageSource, MenuPages
-from utils.new_converters import BotPrefix, BotUsage
+from utils.new_converters import BotPrefix, BotUsage, IsBot
 from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy
@@ -53,21 +54,23 @@ class BotAdded:
     @classmethod
     async def convert(cls, ctx, argument):
         instance = commands.MemberConverter()
+
+        async def create_botdata(user, table):
+            data = await ctx.bot.pg_con.fetchrow(f"SELECT * FROM {table} WHERE bot_id = $1", user.id)
+            return cls.from_json(data, user)
+
         if member := await try_call(instance.convert(ctx, argument), MemberNotFound):
             if member.id not in ctx.bot.confirmed_bots and member.id not in ctx.bot.pending_bots:
                 raise NotInDatabase(member.id)
 
             if member.id in ctx.bot.confirmed_bots:
-                data = await ctx.bot.pg_con.fetchrow("SELECT * FROM confirmed_bots WHERE bot_id = $1", member.id)
-                return cls.from_json(data, member)
+                return await create_botdata(member, "confirmed_bots")
         else:
             if user := await try_call(ctx.bot.fetch_user(int(argument)), discord.NotFound):
                 if user.id in ctx.bot.confirmed_bots:
-                    data = await ctx.bot.pg_con.fetchrow("SELECT * FROM confirmed_bots WHERE bot_id = $1", user.id)
-                    return cls.from_json(data, user)
+                    return await create_botdata(member, "confirmed_bots")
                 if user.id in ctx.bot.pending_bots:
-                    data = await ctx.bot.pg_con.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", user.id)
-                    return cls.from_json(data, user)
+                    return await create_botdata(member, "pending_bots")
         raise BotNotFound(argument)
 
     def __repr__(self):
@@ -86,7 +89,17 @@ class AllPrefixes(ListPageSource):
     async def format_page(self, menu: MenuPages, entries):
         key = "(\u200b|\u200b)"
         offset = menu.current_page * self.per_page
-        contents = [f'`{i + 1}. {k} {key} {p}`' for i, (k, p) in enumerate(entries, start=offset)]
+
+        async def pprefix(prefix):
+            if re.search("<@(!?)([0-9]*)>", prefix):
+                try:
+                    user = await commands.UserConverter().convert(menu.ctx, re.sub(" ", "", prefix))
+                    return f"@{user.display_name}"
+                except:
+                    pass
+            return prefix
+
+        contents = [f'`{i + 1}. {k} {key} {await pprefix(p)}`' for i, (k, p) in enumerate(entries, start=offset)]
         high = max(cont.index(key) for cont in contents)
         reform = [high - cont.index(key) for cont in contents]
         true_form = [x.replace(key, f'{" " * off} |') for x, off in zip(contents, reform)]
@@ -431,6 +444,33 @@ class FindBot(commands.Cog):
                                   title=f"{bot}'s Usage",
                                   description=f"The bot has been used for `{bot.count}` times.")
 
+        await ctx.send(embed=embed)
+
+    @commands.command(aliases=["bot_info", "bi", "botinfos"])
+    async def botinfo(self, ctx, bot: IsBot):
+        # TODO: this is pretty terrible, optimise this
+        titles = (("Bot Prefix", "{0.prefix}", BotPrefix),
+                  ("Command Usage", "{0.count}", BotUsage),
+                  (("Bot Invited by", "{0.author}"),
+                   (("Reason", "reason"),
+                    ("Requested at", 'requested_at')),
+                   BotAdded))
+        embed = BaseEmbed.default(ctx, title=str(bot))
+        embed.set_thumbnail(url=bot.avatar_url)
+        embed.add_field(name="ID", value=f"`{bot.id}`")
+        for title, attrib, converter in reversed(titles):
+            if obj := await try_call(converter.convert, Exception, args=(ctx, str(bot.id))):
+                if isinstance(attrib, tuple):
+                    for t, a in attrib:
+                        if dat := getattr(obj, a):
+                            dat = dat if not isinstance(dat, datetime.datetime) else dat.strftime("%d %b %Y %I:%M %p %Z")
+                            embed.add_field(name=t, value=f"`{dat}`", inline=False)
+
+                    title, attrib = title
+                embed.add_field(name=title, value=f"`{attrib.format(obj)}`", inline=False)
+
+        embed.add_field(name="Created at", value=f"`{bot.created_at.strftime('%d %b %Y %I:%M %p %Z')}`")
+        embed.add_field(name="Joined at", value=f"`{bot.joined_at.strftime('%d %b %Y %I:%M %p %Z')}`")
         await ctx.send(embed=embed)
 
 

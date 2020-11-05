@@ -45,6 +45,14 @@ class ValidCog(CleanListGreedy):
         raise NotValidCog(argument)
 
 
+class IsBot(commands.Converter):
+    async def convert(self, ctx, argument):
+        member = await commands.MemberConverter().convert(ctx, argument)
+        if not member.bot:
+            raise NotBot(member)
+        return member
+
+
 class BotData:
     """BotData Base for Bot data that was fetch from the database. It checks if it's a member and gets it's data."""
     name = "NONE"
@@ -58,9 +66,7 @@ class BotData:
 
     @classmethod
     async def convert(cls, ctx, argument):
-        member = await commands.MemberConverter().convert(ctx, argument)
-        if not member.bot:
-            raise NotBot(member)
+        member = await IsBot().convert(ctx, argument)
 
         if data := await ctx.bot.pg_con.fetchrow(f"SELECT * FROM {cls.name} WHERE bot_id=$1", member.id):
             return member, data
