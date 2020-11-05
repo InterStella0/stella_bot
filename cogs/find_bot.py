@@ -7,7 +7,7 @@ import itertools
 import ctypes
 from discord.ext import commands
 from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
-from discord.ext.menus import ListPageSource
+from discord.ext.menus import ListPageSource, MenuPages
 from utils.new_converters import BotPrefix, BotUsage
 from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase
 from utils.errors import NotInDatabase, BotNotFound
@@ -83,13 +83,13 @@ class AllPrefixes(ListPageSource):
     def __init__(self, data):
         super().__init__(data, per_page=6)
 
-    async def format_page(self, menu, entries):
+    async def format_page(self, menu: MenuPages, entries):
         key = "(\u200b|\u200b)"
         offset = menu.current_page * self.per_page
-        contents = [f'`{i+1}. {k} {key} {p}`' for i, (k, p) in enumerate(entries, start=offset)]
+        contents = [f'`{i + 1}. {k} {key} {p}`' for i, (k, p) in enumerate(entries, start=offset)]
         high = max(cont.index(key) for cont in contents)
         reform = [high - cont.index(key) for cont in contents]
-        true_form = [x.replace(key, f'{" " * off} |')for x, off in zip(contents, reform)]
+        true_form = [x.replace(key, f'{" " * off} |') for x, off in zip(contents, reform)]
         embed = BaseEmbed(description="\n".join(true_form))
         return embed
 
@@ -104,14 +104,12 @@ class FindBot(commands.Cog):
         self.re_addbot = re_command + re_bot + re_reason
         self.compiled_pref = None
         self.all_bot_prefixes = None
-        self.pref_size = None
         bot.loop.create_task(self.loading_all_prefixes())
 
     async def loading_all_prefixes(self):
         await self.bot.wait_until_ready()
         datas = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix")
         self.all_bot_prefixes = {data["bot_id"]: data["prefix"] for data in datas}
-        self.pref_size = len(set(self.all_bot_prefixes.values()))
         temp = list(set(self.all_bot_prefixes.values()))
         self.compiled_pref = compile_prefix(sorted(temp))
 
@@ -134,19 +132,20 @@ class FindBot(commands.Cog):
                 await self.update_confirm(BotAdded.from_json(data, member))
 
     async def update_prefix_bot(self, message, func, prefix):
-        def setup(func):
-            def check(m):
-                if m.channel != message.channel:
+        def setting(inner):
+            def check(msg):
+                if msg.channel != message.channel:
                     return False
-                if not m.author.bot:
+                if not msg.author.bot:
                     return True
-                return func(m)
+                return inner(msg)
+
             return check
 
         bots = []
         while message.created_at + datetime.timedelta(seconds=2) > datetime.datetime.utcnow():
             waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
-                               kwargs={"check": setup(func), "timeout": 1})
+                               kwargs={"check": setting(func), "timeout": 1})
             if m := await waiting:
                 if not m.author.bot:
                     break
@@ -159,7 +158,6 @@ class FindBot(commands.Cog):
 
         await self.bot.pg_con.executemany(query, values)
         self.all_bot_prefixes.update({x: prefix for x, prefix in values})
-        self.pref_size = len(set(self.all_bot_prefixes.values()))
         temp = list(set(self.all_bot_prefixes.values()))
         self.compiled_pref = compile_prefix(sorted(temp))
 
@@ -171,6 +169,7 @@ class FindBot(commands.Cog):
             def check(m):
                 possible_text = ("Jishaku", "discord.py", "Python ", "Module ", "guild(s)", "user(s).")
                 return all(f"{x}" in m.content.lower() for x in possible_text)
+
             await self.update_prefix_bot(message, check, match["prefix"])
             return
 
@@ -179,6 +178,7 @@ class FindBot(commands.Cog):
                 def search(search_text):
                     possible_text = ("command", "help", "category", "categories")
                     return any(f"{x}" in search_text.lower() for x in possible_text)
+
                 content = search(m.content)
                 embeds = any(search(str(x.to_dict())) for x in m.embeds)
                 return content or embeds
@@ -187,12 +187,11 @@ class FindBot(commands.Cog):
 
     @commands.Cog.listener("on_message")
     async def command_count(self, message):
-        if not (self.compiled_pref or self.pref_size):
+        if not self.compiled_pref:
             return
         limit = len(message.content) if len(message.content) < 31 else 31
         content_compiled = ctypes.create_string_buffer(message.content[:limit].encode("utf-8"))
-        com_pref, ori_arr = self.compiled_pref
-        result = search_prefix(com_pref, content_compiled, ori_arr, self.pref_size)
+        result = search_prefix(self.compiled_pref, content_compiled)
         if not result:
             return
 
@@ -391,11 +390,15 @@ class FindBot(commands.Cog):
     async def prefixconflict(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         conflict = (0, len(instance_bot))[len(instance_bot) > 1]
-        await ctx.send(embed=BaseEmbed.default(ctx, description=f"There are `{conflict}` conflict(s) with `{prefix}` prefix"))
+        await ctx.send(
+            embed=BaseEmbed.default(ctx, description=f"There are `{conflict}` conflict(s) with `{prefix}` prefix"))
 
     async def get_all_prefix(self, guild, prefix):
         data = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
-        mem = lambda x: guild.get_member(x)
+
+        def mem(x):
+            return guild.get_member(x)
+
         return [mem(x['bot_id']) for x in data if mem(x['bot_id'])]
 
     @commands.command(aliases=["pb", "prefixbots", "pbots"],
@@ -413,7 +416,10 @@ class FindBot(commands.Cog):
     @commands.guild_only()
     async def allprefix(self, ctx):
         bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix")
-        mem = lambda x: ctx.guild.get_member(x)
+
+        def mem(x):
+            return ctx.guild.get_member(x)
+
         members = [(mem(bot["bot_id"]), bot["prefix"]) for bot in bots if mem(bot["bot_id"])]
         menu = MenuBase(source=AllPrefixes(members), delete_message_after=True)
         await menu.start(ctx)

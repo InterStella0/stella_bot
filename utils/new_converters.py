@@ -7,6 +7,7 @@ from utils.useful import unpack
 
 
 class FetchUser(commands.Converter):
+    """Glorified fetch_user"""
     async def convert(self, ctx, argument):
         return await ctx.bot.fetch_user(int(argument))
 
@@ -26,6 +27,7 @@ class CleanListGreedy:
 
 
 class ValidCog(CleanListGreedy):
+    """Tries to convert into a valid cog"""
     @classmethod
     async def convert(cls, ctx, argument):
         valid_cog = {"useful": ["use", "u"],
@@ -44,6 +46,7 @@ class ValidCog(CleanListGreedy):
 
 
 class BotData:
+    """BotData Base for Bot data that was fetch from the database. It checks if it's a member and gets it's data."""
     name = "NONE"
     use = "NONE"
 
@@ -65,6 +68,7 @@ class BotData:
 
 
 class BotPrefix(BotData):
+    """Bot data for prefix"""
     name = "bot_prefix"
     use = "prefix"
 
@@ -79,6 +83,7 @@ class BotPrefix(BotData):
 
 
 class BotUsage(BotData):
+    """Bot data for command counts"""
     name = "bot_usage_count"
     use = "count"
 
