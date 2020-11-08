@@ -10,7 +10,7 @@ from discord.ext import commands
 from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
 from discord.ext.menus import ListPageSource, MenuPages
 from utils.new_converters import BotPrefix, BotUsage, IsBot
-from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase
+from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy
 
@@ -128,8 +128,8 @@ class FindBot(commands.Cog):
 
     DPY_ID = 336642139381301249
 
-    @commands.Cog.listener()
-    async def on_member_join(self, member):
+    @commands.Cog.listener("on_member_join")
+    async def join_bot_tracker(self, member):
         if member.guild.id == self.DPY_ID and member.bot:
             if member.id in self.bot.pending_bots:
                 data = await self.bot.pg_con.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)
@@ -166,7 +166,9 @@ class FindBot(commands.Cog):
                     bots.append(m.author.id)
         if not bots:
             return
-        query = "INSERT INTO bot_prefix VALUES($1, $2) ON CONFLICT (bot_id) DO UPDATE SET prefix=$2"
+        query = "INSERT INTO bot_prefix VALUES($1, $2) " \
+                "ON CONFLICT (bot_id) DO " \
+                "UPDATE SET prefix=$2"
         values = [(x, prefix) for x in bots]
 
         await self.bot.pg_con.executemany(query, values)
@@ -174,14 +176,14 @@ class FindBot(commands.Cog):
         temp = list(set(self.all_bot_prefixes.values()))
         self.compiled_pref = compile_prefix(sorted(temp))
 
-    @commands.Cog.listener(name="on_message")
+    @commands.Cog.listener("on_message")
     async def find_bot_prefix(self, message):
         if message.author.bot:
             return
         if match := re.match("(?P<prefix>^.{1,30}?(?=jsk$))", message.content):
             def check(m):
                 possible_text = ("Jishaku", "discord.py", "Python ", "Module ", "guild(s)", "user(s).")
-                return all(f"{x}" in m.content.lower() for x in possible_text)
+                return all(x in m.content for x in possible_text)
 
             await self.update_prefix_bot(message, check, match["prefix"])
             return
@@ -224,13 +226,15 @@ class FindBot(commands.Cog):
                 break
         if not bot_found:
             return
-        query = "INSERT INTO bot_usage_count VALUES($1, $2) ON CONFLICT (bot_id) DO UPDATE SET count=bot_usage_count.count + 1"
+        query = "INSERT INTO bot_usage_count VALUES($1, $2) " \
+                "ON CONFLICT (bot_id) DO " \
+                "UPDATE SET count=bot_usage_count.count + 1"
         values = [(x, 1) for x in bot_found]
 
         await self.bot.pg_con.executemany(query, values)
 
-    @commands.Cog.listener()
-    async def on_message(self, message):
+    @commands.Cog.listener("on_message")
+    async def addbot_command_tracker(self, message):
         if message.channel.id not in (559455534965850142, 381963689470984203, 381963705686032394):
             return
         if message.author.bot:
@@ -362,8 +366,8 @@ class FindBot(commands.Cog):
         author = await try_call(commands.UserConverter().convert(ctx, str(data.author)), UserNotFound)
         embed = discord.Embed(title=f"{data.bot}",
                               color=self.bot.color)
-        request = data.requested_at.strftime("%d %b %Y %I:%M %p %Z") if data.requested_at else None
-        join = data.joined_at.strftime("%d %b %Y %I:%M %p %Z") if data.joined_at else None
+        request = default_date(data.requested_at) if data.requested_at else None
+        join = default_date(data.joined_at) if data.joined_at else None
         embed.set_thumbnail(url=data.bot.avatar_url)
         fields = (("Reason", data.reason),
                   ("Requested", request),
@@ -463,14 +467,14 @@ class FindBot(commands.Cog):
                 if isinstance(attrib, tuple):
                     for t, a in attrib:
                         if dat := getattr(obj, a):
-                            dat = dat if not isinstance(dat, datetime.datetime) else dat.strftime("%d %b %Y %I:%M %p %Z")
+                            dat = dat if not isinstance(dat, datetime.datetime) else default_date(dat)
                             embed.add_field(name=t, value=f"`{dat}`", inline=False)
 
                     title, attrib = title
                 embed.add_field(name=title, value=f"`{attrib.format(obj)}`", inline=False)
 
-        embed.add_field(name="Created at", value=f"`{bot.created_at.strftime('%d %b %Y %I:%M %p %Z')}`")
-        embed.add_field(name="Joined at", value=f"`{bot.joined_at.strftime('%d %b %Y %I:%M %p %Z')}`")
+        embed.add_field(name="Created at", value=f"`{default_date(bot.created_at)}`")
+        embed.add_field(name="Joined at", value=f"`{default_date(bot.joined_at)}`")
         await ctx.send(embed=embed)
 
 

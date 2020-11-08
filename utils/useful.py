@@ -92,6 +92,10 @@ class MenuBase(menus.MenuPages):
             super().remove_button(emoji)
 
 
+def default_date(datetime_var):
+    return datetime_var.strftime('%d %b %Y %I:%M %p %Z')
+
+
 lib = ctypes.CDLL("c_codes/binary_prefix.so")
 find_prefix = lib.find_prefix
 find_prefix.restypes = [ctypes.c_int]

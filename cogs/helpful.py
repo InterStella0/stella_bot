@@ -146,7 +146,7 @@ class Helpful(commands.Cog):
     async def pping(self, ctx):
         await ctx.send(embed=BaseEmbed.default(ctx,
                                                title="PP",
-                                               description=f"Your pp lasted `{round(self.bot.latency * 1000, 2)}ms`"))
+                                               description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`"))
 
     @commands.command()
     async def uptime(self, ctx):
@@ -156,27 +156,44 @@ class Helpful(commands.Cog):
                                                description=f"Current uptime: `{humanize.precisedelta(c_uptime)}`"))
 
     @commands.command(help="shows the source code")
-    async def source(self, ctx, *, command: str = None):
+    async def source(self, ctx, *, content=None):
         source_url = 'https://github.com/InterStella0/stella_bot'
-        if command is None:
-            return await ctx.send(source_url)
-        if command == 'help':
-            src = type(self.bot.help_command)
-            module = src.__module__
-        else:
-            obj = self.bot.get_command(command.replace('.', ' '))
-            if obj is None:
-                return await ctx.send('Could not find command.')
+        if not content:
+            return await ctx.send(f"<{source_url}>")
+        src, module = None, None
 
-            src = obj.callback.__code__
-            module = obj.callback.__module__
+        def command_check(command):
+            nonlocal src, module
+            if command == 'help':
+                src = type(self.bot.help_command)
+                module = src.__module__
+            else:
+                obj = self.bot.get_command(command.replace('.', ' '))
+                if obj:
+                    src = obj.callback.__code__
+                    module = obj.callback.__module__
 
+        def cog_check(cog):
+            nonlocal src, module
+            if "." not in cog:
+                return
+            cog, _, method = cog.partition(".")
+            cog = self.bot.get_cog(cog)
+            if method := getattr(cog, method, None):
+                src = method.__code__
+                module = method.__module__
+
+        functions = (command_check, cog_check)
+        for func in functions:
+            if not src:
+                func(content)
+        if module is None:
+            return await ctx.send(f"Method {content} not found.")
         lines, firstlineno = inspect.getsourcelines(src)
         location = module.replace('.', '/') + '.py'
-        branch = 'master'
 
-        final_url = f'<{source_url}/blob/{branch}/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
-        await ctx.send(final_url)
+        url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
+        await ctx.send(url)
 
     def cog_unload(self):
         self.bot.help_command = self._default_help_command
