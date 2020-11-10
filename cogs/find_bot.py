@@ -100,11 +100,13 @@ class AllPrefixes(ListPageSource):
                     pass
             return prefix
 
-        contents = [f'`{i + 1}. {k} {key} {await pprefix(p)}`' for i, (k, p) in enumerate(entries, start=offset)]
+        contents = [f'`{i + 1}. {b} {key} {await pprefix(b.prefix)}`' for i, b in enumerate(entries, start=offset)]
         high = max(cont.index(key) for cont in contents)
         reform = [high - cont.index(key) for cont in contents]
         true_form = [x.replace(key, f'{" " * off} |') for x, off in zip(contents, reform)]
-        embed = BaseEmbed(description="\n".join(true_form))
+        embed = BaseEmbed(title="All Prefixes",
+                          description="\n".join(true_form))
+        embed.set_author(name=f"Page {menu.current_page + 1}/{self._max_pages}")
         return embed
 
 
@@ -437,8 +439,8 @@ class FindBot(commands.Cog):
 
         def mem(x):
             return ctx.guild.get_member(x)
-
-        members = [(mem(bot["bot_id"]), bot["prefix"]) for bot in bots if mem(bot["bot_id"])]
+        members = [BotPrefix(mem(bot["bot_id"]), bot["prefix"]) for bot in bots if mem(bot["bot_id"])]
+        members.sort(key=lambda x: x.prefix)
         menu = MenuBase(source=AllPrefixes(members), delete_message_after=True)
         await menu.start(ctx)
 

@@ -55,6 +55,7 @@ class IsBot(commands.Converter):
 
 class BotData:
     """BotData Base for Bot data that was fetch from the database. It checks if it's a member and gets it's data."""
+    __slots__ = ("bot",)
     name = "NONE"
     use = "NONE"
 
@@ -77,6 +78,7 @@ class BotPrefix(BotData):
     """Bot data for prefix"""
     name = "bot_prefix"
     use = "prefix"
+    __slots__ = ("prefix",)
 
     def __init__(self, member, prefix):
         super().__init__(member)
@@ -90,6 +92,7 @@ class BotPrefix(BotData):
 
 class BotUsage(BotData):
     """Bot data for command counts"""
+    __slots__ = ("count",)
     name = "bot_usage_count"
     use = "count"
 
