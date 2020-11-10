@@ -111,7 +111,7 @@ def compile_prefix(prefixes):
 
 
 def search_prefix(array_result, content_buffer):
-    """Calls a function called find_prefix from C, which allows for a 60 microsecond lookup."""
+    """Calls a function called find_prefix from C."""
     array_string, ori = array_result
     size = len(ori)
     find_prefix.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]

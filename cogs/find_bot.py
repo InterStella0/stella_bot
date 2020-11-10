@@ -451,7 +451,9 @@ class FindBot(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @commands.command(aliases=["bot_info", "bi", "botinfos"])
+    @commands.command(aliases=["bot_info", "bi", "botinfos"],
+                      help="Bot information such as bot owner, prefixes and reasons it was added into the discord.py server.")
+    @is_discordpy()
     async def botinfo(self, ctx, bot: IsBot):
         # TODO: this is pretty terrible, optimise this
         titles = (("Bot Prefix", "{0.prefix}", BotPrefix),
