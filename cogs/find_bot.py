@@ -66,11 +66,12 @@ class BotAdded:
             if member.id in ctx.bot.confirmed_bots:
                 return await create_botdata(member, "confirmed_bots")
         else:
-            if user := await try_call(ctx.bot.fetch_user(int(argument)), discord.NotFound):
-                if user.id in ctx.bot.confirmed_bots:
-                    return await create_botdata(member, "confirmed_bots")
-                if user.id in ctx.bot.pending_bots:
-                    return await create_botdata(member, "pending_bots")
+            if argument.isdigit():
+                if user := await try_call(ctx.bot.fetch_user(int(argument)), discord.NotFound):
+                    if user.id in ctx.bot.confirmed_bots:
+                        return await create_botdata(member, "confirmed_bots")
+                    if user.id in ctx.bot.pending_bots:
+                        return await create_botdata(member, "pending_bots")
         raise BotNotFound(argument)
 
     def __repr__(self):
