@@ -107,13 +107,13 @@ def compile_prefix(prefixes):
 
     pre = [x.encode('utf-8') for x in prefixes]
     array_string = ArrString(*pre)
-    return array_string, prefixes
+    size = len(prefixes)
+    return array_string, prefixes, size
 
 
 def search_prefix(array_result, content_buffer):
     """Calls a function called find_prefix from C."""
-    array_string, ori = array_result
-    size = len(ori)
+    array_string, ori, size = array_result
     find_prefix.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
     result = find_prefix(array_string, content_buffer, size)
     return ori[result] if result != -1 else None

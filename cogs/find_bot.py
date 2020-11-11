@@ -16,6 +16,8 @@ from utils.decorators import is_discordpy
 
 
 class BotAdded:
+    __slots__ = ("author", "bot", "reason", "requested_at", "jump_url", "joined_at")
+
     def __init__(self, *, author=None, bot=None, reason=None, requested_at=None, jump_url=None, joined_at=None):
         self.author = author
         self.bot = bot
@@ -82,6 +84,9 @@ class BotAdded:
                ' jump_url = "{0.jump_url}",' \
                ' joined_at = {0.joined_at}>'.format(self)
 
+    def __str__(self):
+        return str(self.bot or "")
+
 
 class AllPrefixes(ListPageSource):
     def __init__(self, data):
@@ -110,7 +115,25 @@ class AllPrefixes(ListPageSource):
         return embed
 
 
-class FindBot(commands.Cog):
+class BotAddedList(ListPageSource):
+    def __init__(self, data):
+        super().__init__(data, per_page=6)
+
+    async def format_page(self, menu: MenuPages, entries):
+        offset = menu.current_page * self.per_page
+        contents = ((f"{b.author}", f'**{b}** `{humanize.precisedelta(b.joined_at)}`')
+                    for i, b in enumerate(entries, start=offset))
+
+        embed = BaseEmbed(title="Bots added today")
+        for n, v in contents:
+            embed.add_field(name=n, value=v, inline=False)
+        if not contents:
+            embed.description = "Looks like no bots was added in the span of 24 hours."
+        embed.set_author(name=f"Page {menu.current_page + 1}/{self._max_pages}")
+        return embed
+
+
+class FindBot(commands.Cog, name="Bots"):
     def __init__(self, bot):
         self.bot = bot
         valid_prefix = ("!", "?", "？", "<@(!?)80528701850124288> ")
@@ -482,6 +505,17 @@ class FindBot(commands.Cog):
         embed.add_field(name="Joined at", value=f"`{default_date(bot.joined_at)}`")
         await ctx.send(embed=embed)
 
+    @commands.command(aliases=["rba", "recentbot", "recentadd"],
+                      help="Shows bots that was added in a day.")
+    async def recentbotadd(self, ctx):
+        def predicate(m):
+            return m.bot and m.joined_at > ctx.message.created_at - datetime.timedelta(days=1)
+        members = {m.id: m for m in filter(predicate, ctx.guild.members)}
+        db_data = await self.bot.pg_con.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
+        member_data = [BotAdded.from_json(data, members[data["bot_id"]]) for data in db_data]
+        member_data.sort(key=lambda x: x.joined_at)
+        menu = MenuBase(source=BotAddedList(member_data), delete_message_after=True)
+        await menu.start(ctx)
 
 def setup(bot):
     bot.add_cog(FindBot(bot))
