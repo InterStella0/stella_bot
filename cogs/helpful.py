@@ -148,7 +148,7 @@ class Helpful(commands.Cog):
                                                title="PP",
                                                description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`"))
 
-    @commands.command()
+    @commands.command(aliases=["up"], help="Shows the bot uptime")
     async def uptime(self, ctx):
         c_uptime = datetime.datetime.utcnow() - self.bot.uptime
         await ctx.send(embed=BaseEmbed.default(ctx,

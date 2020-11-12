@@ -9,9 +9,9 @@ import humanize
 from discord.ext import commands
 from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
 from discord.ext.menus import ListPageSource, MenuPages
-from utils.new_converters import BotPrefix, BotUsage, IsBot
-from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date
-from utils.errors import NotInDatabase, BotNotFound
+from utils.new_converters import BotPrefix, BotUsage, IsBot, FetchUser
+from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, call
+from utils.errors import NotInDatabase, BotNotFound, NotBot
 from utils.decorators import is_discordpy
 
 
@@ -55,25 +55,16 @@ class BotAdded:
 
     @classmethod
     async def convert(cls, ctx, argument):
-        instance = commands.MemberConverter()
-
-        async def create_botdata(user, table):
-            data = await ctx.bot.pg_con.fetchrow(f"SELECT * FROM {table} WHERE bot_id = $1", user.id)
-            return cls.from_json(data, user)
-
-        if member := await try_call(instance.convert(ctx, argument), MemberNotFound):
-            if member.id not in ctx.bot.confirmed_bots and member.id not in ctx.bot.pending_bots:
-                raise NotInDatabase(member.id)
-
-            if member.id in ctx.bot.confirmed_bots:
-                return await create_botdata(member, "confirmed_bots")
-        else:
-            if argument.isdigit():
-                if user := await try_call(ctx.bot.fetch_user(int(argument)), discord.NotFound):
-                    if user.id in ctx.bot.confirmed_bots:
-                        return await create_botdata(member, "confirmed_bots")
-                    if user.id in ctx.bot.pending_bots:
-                        return await create_botdata(member, "pending_bots")
+        for inst in commands.MemberConverter(), FetchUser():
+            if user := await try_call(inst.convert(ctx, argument), Exception):
+                if not user.bot:
+                    raise NotBot(user)
+                for attribute in ("pending", "confirmed")[isinstance(inst, commands.MemberConverter):]:
+                    attribute += "_bots"
+                    if user.id in getattr(ctx.bot, attribute):
+                        data = await ctx.bot.pg_con.fetchrow(f"SELECT * FROM {attribute} WHERE bot_id = $1", user.id)
+                        return cls.from_json(data, user)
+                raise NotInDatabase(user)
         raise BotNotFound(argument)
 
     def __repr__(self):
