@@ -9,7 +9,9 @@ from utils.useful import unpack
 class FetchUser(commands.Converter):
     """Glorified fetch_user"""
     async def convert(self, ctx, argument):
-        return await ctx.bot.fetch_user(int(argument))
+        if argument.isdigit():
+            return await ctx.bot.fetch_user(int(argument))
+        return await commands.UserConverter().convert(ctx, argument)
 
 
 class CleanListGreedy:

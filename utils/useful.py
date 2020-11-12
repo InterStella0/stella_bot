@@ -19,7 +19,18 @@ async def try_call(code, exception, ret=False, args: tuple = (), kwargs: dict = 
     try:
         return await maybe_coroutine(code, *args, **kwargs) if args or kwargs else await code
     except exception as e:
-        return e if ret else None
+        return (None, e)[ret]
+
+
+def call(func, *args, exception=Exception, **kwargs):
+    """one liner method that handles all errors in a single line which returns None, or Error instance depending on ret
+       value.
+    """
+    ret = kwargs.get("ret", None)
+    try:
+        return func(*args, **kwargs)
+    except exception as e:
+        return (None, e)[ret]
 
 
 class BaseEmbed(discord.Embed):
