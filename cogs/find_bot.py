@@ -127,8 +127,6 @@ class BotAddedList(ListPageSource):
         embed = BaseEmbed(title="Bots added today")
         for n, v in contents:
             embed.add_field(name=n, value=v, inline=False)
-        if not contents:
-            embed.description = "Looks like no bots was added in the span of 24 hours."
         embed.set_author(name=f"Page {menu.current_page + 1}/{self._max_pages}")
         return embed
 
@@ -472,7 +470,7 @@ class FindBot(commands.Cog, name="Bots"):
     async def botuse(self, ctx, bot: BotUsage):
         embed = BaseEmbed.default(ctx,
                                   title=f"{bot}'s Usage",
-                                  description=f"The bot has been used for `{bot.count}` times.")
+                                  description=f"`{bot.count}` commands has been called for **{bot}**.")
 
         await ctx.send(embed=embed)
 
@@ -511,6 +509,12 @@ class FindBot(commands.Cog, name="Bots"):
         def predicate(m):
             return m.bot and m.joined_at > ctx.message.created_at - datetime.timedelta(days=1)
         members = {m.id: m for m in filter(predicate, ctx.guild.members)}
+        if not members:
+            await ctx.send(embed=
+                           BaseEmbed.default(ctx,
+                                             title="Bots added today",
+                                             description="Looks like there are no bots added in the span of 24 hours."))
+            return
         db_data = await self.bot.pg_con.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
         member_data = [BotAdded.from_json(data, members[data["bot_id"]]) for data in db_data]
         member_data.sort(key=lambda x: x.joined_at)
