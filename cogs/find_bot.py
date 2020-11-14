@@ -3,8 +3,9 @@ import datetime
 import re
 import asyncio
 import itertools
+import functools
 import ctypes
-
+import contextlib
 import humanize
 from discord.ext import commands
 from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
@@ -56,15 +57,16 @@ class BotAdded:
     @classmethod
     async def convert(cls, ctx, argument):
         for inst in commands.MemberConverter(), FetchUser():
-            if user := await try_call(inst.convert(ctx, argument), Exception):
-                if not user.bot:
-                    raise NotBot(user)
-                for attribute in ("pending", "confirmed")[isinstance(inst, commands.MemberConverter):]:
-                    attribute += "_bots"
-                    if user.id in getattr(ctx.bot, attribute):
-                        data = await ctx.bot.pg_con.fetchrow(f"SELECT * FROM {attribute} WHERE bot_id = $1", user.id)
-                        return cls.from_json(data, user)
-                raise NotInDatabase(user)
+            with contextlib.suppress(Exception):
+                if user := await inst.convert(ctx, argument):
+                    if not user.bot:
+                        raise NotBot(user)
+                    for attribute in ("pending", "confirmed")[isinstance(inst, commands.MemberConverter):]:
+                        attribute += "_bots"
+                        if user.id in getattr(ctx.bot, attribute):
+                            data = await ctx.bot.pg_con.fetchrow(f"SELECT * FROM {attribute} WHERE bot_id = $1", user.id)
+                            return cls.from_json(data, user)
+                    raise NotInDatabase(user)
         raise BotNotFound(argument)
 
     def __repr__(self):
@@ -122,6 +124,21 @@ class BotAddedList(ListPageSource):
         return embed
 
 
+def is_user(m):
+    return not m.author.bot
+
+
+def event_check(method):
+    def check(func):
+        @functools.wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            if method(*args, **kwargs):
+                await func(self, *args, **kwargs)
+
+        return wrapper
+    return check
+
+
 class FindBot(commands.Cog, name="Bots"):
     def __init__(self, bot):
         self.bot = bot
@@ -141,23 +158,21 @@ class FindBot(commands.Cog, name="Bots"):
         temp = list(set(self.all_bot_prefixes.values()))
         self.compiled_pref = compile_prefix(sorted(temp))
 
-    DPY_ID = 336642139381301249
-
     @commands.Cog.listener("on_member_join")
+    @event_check(lambda m: is_user(m) and m.guild.id == 336642139381301249)
     async def join_bot_tracker(self, member):
-        if member.guild.id == self.DPY_ID and member.bot:
-            if member.id in self.bot.pending_bots:
-                data = await self.bot.pg_con.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)
-                await self.update_confirm(BotAdded.from_json(data, member))
-                await self.bot.pg_con.execute("DELETE FROM pending_bots WHERE bot_id = $1", member.id)
-            else:
-                data = {"author_id": None,
-                        "reason": None,
-                        "requested_at": None,
-                        "jump_url": None,
-                        "joined_at": member.joined_at
-                        }
-                await self.update_confirm(BotAdded.from_json(data, member))
+        if member.id in self.bot.pending_bots:
+            data = await self.bot.pg_con.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)
+            await self.update_confirm(BotAdded.from_json(data, member))
+            await self.bot.pg_con.execute("DELETE FROM pending_bots WHERE bot_id = $1", member.id)
+        else:
+            data = {"author_id": None,
+                    "reason": None,
+                    "requested_at": None,
+                    "jump_url": None,
+                    "joined_at": member.joined_at
+                    }
+            await self.update_confirm(BotAdded.from_json(data, member))
 
     async def update_prefix_bot(self, message, func, prefix):
         def setting(inner):
@@ -172,13 +187,12 @@ class FindBot(commands.Cog, name="Bots"):
 
         bots = []
         while message.created_at + datetime.timedelta(seconds=2) > datetime.datetime.utcnow():
-            waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
-                               kwargs={"check": setting(func), "timeout": 1})
-            if m := await waiting:
-                if not m.author.bot:
-                    break
-                if not (m.author.id in self.all_bot_prefixes and self.all_bot_prefixes[m.author.id] == prefix):
-                    bots.append(m.author.id)
+            with contextlib.suppress(asyncio.TimeoutError):
+                if m := await self.bot.wait_for("message", check=setting(func), timeout=1):
+                    if not m.author.bot:  # TODO: Find out the cause of race condition here
+                        break
+                    if m.author.bot and not (m.author.id in self.all_bot_prefixes and self.all_bot_prefixes[m.author.id] == prefix):
+                        bots.append(m.author.id)
         if not bots:
             return
         query = "INSERT INTO bot_prefix VALUES($1, $2) " \
@@ -192,30 +206,27 @@ class FindBot(commands.Cog, name="Bots"):
         self.compiled_pref = compile_prefix(sorted(temp))
 
     @commands.Cog.listener("on_message")
+    @event_check(is_user)
     async def find_bot_prefix(self, message):
-        if message.author.bot:
-            return
-        if match := re.match("(?P<prefix>^.{1,30}?(?=jsk$))", message.content):
-            def check(m):
-                possible_text = ("Jishaku", "discord.py", "Python ", "Module ", "guild(s)", "user(s).")
-                return all(x in m.content for x in possible_text)
+        def check_jsk(m):
+            possible_text = ("Jishaku", "discord.py", "Python ", "Module ", "guild(s)", "user(s).")
+            return all(text in m.content for text in possible_text)
 
-            await self.update_prefix_bot(message, check, match["prefix"])
-            return
+        def check_help(m):
+            def search(search_text):
+                possible_text = ("command", "help", "category", "categories")
+                return any(f"{x}" in search_text.lower() for x in possible_text)
+            content = search(m.content)
+            embeds = any(search(str(x.to_dict())) for x in m.embeds)
+            return content or embeds
 
-        if match := re.match("(?P<prefix>^.{1,30}?(?=help$))", message.content):
-            def check(m):
-                def search(search_text):
-                    possible_text = ("command", "help", "category", "categories")
-                    return any(f"{x}" in search_text.lower() for x in possible_text)
-
-                content = search(m.content)
-                embeds = any(search(str(x.to_dict())) for x in m.embeds)
-                return content or embeds
-
-            await self.update_prefix_bot(message, check, match["prefix"])
+        for x, check in (("jsk", check_jsk), ("help", check_help)):
+            if match := re.match("(?P<prefix>^.{{1,30}}?(?={}$))".format(x), message.content):
+                await self.update_prefix_bot(message, check, match["prefix"])
+                return
 
     @commands.Cog.listener("on_message")
+    @event_check(is_user)
     async def command_count(self, message):
         if not self.compiled_pref:
             return
@@ -233,12 +244,11 @@ class FindBot(commands.Cog, name="Bots"):
 
         bot_found = []
         while message.created_at + datetime.timedelta(seconds=5) > datetime.datetime.utcnow():
-            waiting = try_call(self.bot.wait_for, asyncio.TimeoutError, args=("message",),
-                               kwargs={"check": check, "timeout": 1})
-            if m := await waiting:
-                bot_found.append(m.author.id)
-            if len(bot_found) == len(match_bot):
-                break
+            with contextlib.suppress(asyncio.TimeoutError):
+                if m := await self.bot.wait_for("message", check=check, timeout=1):
+                    bot_found.append(m.author.id)
+                if len(bot_found) == len(match_bot):
+                    break
         if not bot_found:
             return
         query = "INSERT INTO bot_usage_count VALUES($1, $2) " \
@@ -249,10 +259,9 @@ class FindBot(commands.Cog, name="Bots"):
         await self.bot.pg_con.executemany(query, values)
 
     @commands.Cog.listener("on_message")
+    @event_check(is_user)
     async def addbot_command_tracker(self, message):
         if message.channel.id not in (559455534965850142, 381963689470984203, 381963705686032394):
-            return
-        if message.author.bot:
             return
         if result := await self.is_valid_addbot(message, check=True):
             confirm = False
@@ -365,7 +374,7 @@ class FindBot(commands.Cog, name="Bots"):
         query = "SELECT * FROM {}_bots WHERE author_id=$1"
         total_list = [await self.bot.pg_con.fetch(query.format(x), author.id) for x in ("pending", "confirmed")]
         total_list = list(itertools.chain.from_iterable(total_list))
-        list_bots = [ctx.guild.get_member(x["bot_id"]) or x["bot_id"] for x in total_list]
+        list_bots = [ctx.guild.get_member(x["bot_id"]) or await self.bot.fetch_user(x["bot_id"]) for x in total_list]
         embed = discord.Embed(title=f"{author}'s Bots", color=self.bot.color)
         embed.set_thumbnail(url=author.avatar_url)
         embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar_url)
@@ -480,15 +489,16 @@ class FindBot(commands.Cog, name="Bots"):
         embed.set_thumbnail(url=bot.avatar_url)
         embed.add_field(name="ID", value=f"`{bot.id}`")
         for title, attrib, converter in reversed(titles):
-            if obj := await try_call(converter.convert, Exception, args=(ctx, str(bot.id))):
-                if isinstance(attrib, tuple):
-                    for t, a in attrib:
-                        if dat := getattr(obj, a):
-                            dat = dat if not isinstance(dat, datetime.datetime) else default_date(dat)
-                            embed.add_field(name=t, value=f"`{dat}`", inline=False)
+            with contextlib.suppress(Exception):
+                if obj := await converter.convert(ctx, str(bot.id)):
+                    if isinstance(attrib, tuple):
+                        for t, a in attrib:
+                            if dat := getattr(obj, a):
+                                dat = dat if not isinstance(dat, datetime.datetime) else default_date(dat)
+                                embed.add_field(name=t, value=f"`{dat}`", inline=False)
 
-                    title, attrib = title
-                embed.add_field(name=title, value=f"`{attrib.format(obj)}`", inline=False)
+                        title, attrib = title
+                    embed.add_field(name=title, value=f"`{attrib.format(obj)}`", inline=False)
 
         embed.add_field(name="Created at", value=f"`{default_date(bot.created_at)}`")
         embed.add_field(name="Joined at", value=f"`{default_date(bot.joined_at)}`")
@@ -511,6 +521,7 @@ class FindBot(commands.Cog, name="Bots"):
         member_data.sort(key=lambda x: x.joined_at)
         menu = MenuBase(source=BotAddedList(member_data), delete_message_after=True)
         await menu.start(ctx)
+
 
 def setup(bot):
     bot.add_cog(FindBot(bot))
