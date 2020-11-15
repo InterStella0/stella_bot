@@ -7,8 +7,9 @@ import functools
 import ctypes
 import contextlib
 import humanize
+from dataclasses import dataclass
 from discord.ext import commands
-from discord.ext.commands import BucketType, MemberNotFound, UserNotFound
+from discord.ext.commands import BucketType, UserNotFound
 from discord.ext.menus import ListPageSource, MenuPages
 from utils.new_converters import BotPrefix, BotUsage, IsBot, FetchUser
 from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, call
@@ -16,28 +17,14 @@ from utils.errors import NotInDatabase, BotNotFound, NotBot
 from utils.decorators import is_discordpy
 
 
+@dataclass
 class BotAdded:
-    __slots__ = ("author", "bot", "reason", "requested_at", "jump_url", "joined_at")
-
-    def __init__(self, *, author=None, bot=None, reason=None, requested_at=None, jump_url=None, joined_at=None):
-        self.author = author
-        self.bot = bot
-        self.reason = reason
-        self.requested_at = requested_at
-        self.jump_url = jump_url
-        self.joined_at = joined_at
-
-    @classmethod
-    def to_add(cls, member, data=None):
-        author = data["author_id"]
-        reason = data['reason']
-        jump_url = data['jump_url']
-        requested_at = data['requested_at']
-
-        bot = member
-        author = member.guild.get_member(author)
-        return cls(author=author, bot=bot, reason=reason, requested_at=requested_at, jump_url=jump_url,
-                   joined_at=bot.joined_at)
+    author: discord.Member = None
+    bot: discord.Member = None
+    reason: str = None
+    requested_at: datetime.datetime = None
+    jump_url: str = None
+    joined_at: datetime.datetime = None
 
     @classmethod
     def from_json(cls, data, bot=None):
@@ -68,14 +55,6 @@ class BotAdded:
                             return cls.from_json(data, user)
                     raise NotInDatabase(user)
         raise BotNotFound(argument)
-
-    def __repr__(self):
-        return '<author = {0.author},' \
-               ' bot = {0.bot},' \
-               ' reason = "{0.reason}",' \
-               ' requested_at = {0.requested_at},' \
-               ' jump_url = "{0.jump_url}",' \
-               ' joined_at = {0.joined_at}>'.format(self)
 
     def __str__(self):
         return str(self.bot or "")
