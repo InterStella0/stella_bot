@@ -57,7 +57,7 @@ class BotAdded:
     @classmethod
     async def convert(cls, ctx, argument):
         for inst in commands.MemberConverter(), FetchUser():
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(commands.BadArgument):
                 if user := await inst.convert(ctx, argument):
                     if not user.bot:
                         raise NotBot(user)

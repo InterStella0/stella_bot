@@ -1,4 +1,5 @@
 import inspect
+import json
 import os
 import discord
 import humanize
@@ -90,8 +91,33 @@ class HelpMenu(HelpMenuBase):
         await self.message.edit(embed=embed)
 
 
+class CogMenu(HelpMenuBase):
+    """This is a MenuPages class that is used only in record server command. All it has is custom information and
+       custom initial message."""
+    async def on_information_show(self, payload):
+        ctx = self.ctx
+        exists = [str(emoji) for emoji in super().buttons]
+        embed = BaseEmbed.default(ctx,
+                                  title="Information",
+                                  description="This shows each commands in this category. Each page is a command that shows "
+                                              "what's the command is about and a demonstration of usage.")
+        curr = self.current_page + 1 if (p := self.current_page > -1) else "cover page"
+        pa = "page" if p else "the"
+        embed.set_author(icon_url=ctx.bot.user.avatar_url,
+                         name=f"You were on {pa} {curr}")
+        nav = '\n'.join(f"{self.dict_emoji[e].emoji} {self.dict_emoji[e].explain}" for e in exists)
+        embed.add_field(name="Navigation:", value=nav)
+        await self.message.edit(embed=embed)
+
+
+class HelpCogSource(menus.ListPageSource):
+    async def format_page(self, menu: CogMenu, entry):
+        entry.set_author(name=f"Page {menu.current_page + 1}/{self._max_pages}")
+        return entry
+
+
 class HelpSource(menus.ListPageSource):
-    async def format_page(self, menu, entry):
+    async def format_page(self, menu: HelpMenu, entry):
         cog, list_commands = entry
         new_line = "\n"
         embed = discord.Embed(title=f"{cog.qualified_name} Category",
@@ -99,40 +125,78 @@ class HelpSource(menus.ListPageSource):
                                                         for command_help in list_commands),
                               color=menu.bot.color)
         author = menu.ctx.author
+        embed.set_author(name=f"Page {menu.current_page + 1}/{self._max_pages}")
         embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar_url)
 
         return embed
 
 
 class StellaBotHelp(commands.DefaultHelpCommand):
+    def __init__(self, **options):
+        super().__init__(**options)
+        with open("d_json/help.json") as r:
+            self.help_gif = json.load(r)
+
     def get_bot_mapping(self):
         """Retrieves the bot mapping passed to :meth:`send_bot_help`."""
         mapping = super().get_bot_mapping()
         filtered_mapping = {cog: self.filter_commands(mapping[cog], sort=True) for cog in mapping}
         return filtered_mapping
 
-    def get_command_signature(self, command, simplified=False):
+    def get_command_signature(self, command):
         """Method to return a commands name and signature"""
-        if not command.signature and not command.parent:  # checking if it has no args and isn't a subcommand
+        if not command.signature and not command.parent:
             return f'`{self.clean_prefix}{command.name}`'
-        if command.signature and not command.parent:  # checking if it has args and isn't a subcommand
+        if command.signature and not command.parent:
             return f'`{self.clean_prefix}{command.name}` `{command.signature}`'
-        if not command.signature and command.parent:  # checking if it has no args and is a subcommand
+        if not command.signature and command.parent:
             return f'`{self.clean_prefix}{command.parent}` `{command.name}`'
-        else:  # else assume it has args a signature and is a subcommand
+        else:
             return f'`{self.clean_prefix}{command.parent}` `{command.name}` `{command.signature}`'
+
+    def get_help(self, command, brief=True):
+        real_help = command.help or "This command have not been documented"
+        return real_help if brief else command.short_doc or real_help
+
+    def get_demo(self, command):
+        com = command.name
+        if com not in self.help_gif:
+            return ""
+        return f"{self.help_gif['src']}/{self.help_gif[com]}/{com}_help.gif"
+
+    def get_aliases(self, command):
+        return command.aliases
 
     async def send_bot_help(self, mapping):
         command_data = {}
         for cog in mapping:
             command_data[cog] = []
             for command in await mapping[cog]:
-                command_data[cog].append(CommandHelp(self.get_command_signature(command), command.help))
+                data = (getattr(self, f"get_{x}")(command) for x in ("command_signature", "help"))
+                command_data[cog].append(CommandHelp(*data))
 
         command_data = tuple((cog, command_data[cog]) for cog in mapping if command_data[cog])
         pages = HelpMenu(source=HelpSource(command_data, per_page=1), delete_message_after=True)
         await pages.start(self.context)
         await self.context.message.add_reaction("<:checkmark:753619798021373974>")
+
+    def get_command_help(self, command):
+        embed = BaseEmbed.default(self.context)
+        embed.title = self.get_command_signature(command)
+        embed.description = self.get_help(command, brief=False)
+        if demo := self.get_demo(command):
+            embed.set_image(url=demo)
+        if alias := self.get_aliases(command):
+            embed.add_field(name="Aliases", value=f'[{" | ".join(f"`{x}`" for x in alias)}]')
+        return embed
+
+    async def send_command_help(self, command):
+        await self.get_destination().send(embed=self.get_command_help(command))
+
+    async def send_cog_help(self, cog):
+        cog_commands = [self.get_command_help(c) for c in await self.filter_commands(cog.walk_commands(), sort=True)]
+        pages = CogMenu(source=HelpCogSource(cog_commands, per_page=1), delete_message_after=True)
+        await pages.start(self.context)
 
 
 class Helpful(commands.Cog):
