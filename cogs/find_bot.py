@@ -159,7 +159,7 @@ class FindBot(commands.Cog, name="Bots"):
         self.compiled_pref = compile_prefix(sorted(temp))
 
     @commands.Cog.listener("on_member_join")
-    @event_check(lambda m: is_user(m) and m.guild.id == 336642139381301249)
+    @event_check(lambda m: m.bot and m.guild.id == 336642139381301249)
     async def join_bot_tracker(self, member):
         if member.id in self.bot.pending_bots:
             data = await self.bot.pg_con.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)

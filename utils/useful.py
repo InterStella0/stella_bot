@@ -115,16 +115,16 @@ find_prefix.restypes = [ctypes.c_int]
 def compile_prefix(prefixes):
     """Converts a list of strings that are sorted into binary that will be accepted by C code."""
     ArrString = ctypes.c_char_p * len(prefixes)
-
-    pre = [x.encode('utf-8') for x in prefixes]
+    pre = (x.encode('utf-8') for x in prefixes)
     array_string = ArrString(*pre)
     size = len(prefixes)
-    return array_string, prefixes, size
+    return array_string, size
 
 
 def search_prefix(array_result, content_buffer):
     """Calls a function called find_prefix from C."""
-    array_string, ori, size = array_result
+    array_string, size = array_result
     find_prefix.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
     result = find_prefix(array_string, content_buffer, size)
-    return ori[result] if result != -1 else None
+    strresult = ctypes.c_char_p(result).value
+    return strresult.decode('utf-8')
