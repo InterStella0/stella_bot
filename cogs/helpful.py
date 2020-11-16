@@ -168,7 +168,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         com = command.name
         if com not in self.help_gif:
             return ""
-        return f"{self.help_gif['src']}/{self.help_gif[com]}/{com}_help.gif"
+        return f"{self.context.bot.help_src}/{self.help_gif[com]}/{com}_help.gif"
 
     def get_aliases(self, command):
         """This isn't even needed jesus christ"""

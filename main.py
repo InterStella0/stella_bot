@@ -1,23 +1,23 @@
 import time
 import re
 import discord
+import asyncpg
+import json
+import datetime
 from discord.ext import commands
 from dotenv import load_dotenv
 from os.path import join, dirname
 from utils.useful import try_call
 from os import environ
-import asyncpg
-import json
-import datetime
-
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
 
 
 class StellaBot(commands.Bot):
-    def __init__(self, color, token, db, user_db, pass_db, tester, **kwargs):
+    def __init__(self, help_src, color, token, db, user_db, pass_db, tester, **kwargs):
         super().__init__(self, **kwargs)
         self.tester = tester
+        self.help_src = help_src
         self.command_prefix = self.get_prefix
         self.db = db
         self.user_db = user_db
@@ -40,7 +40,7 @@ class StellaBot(commands.Bot):
         return self.get_user(self.owner_id)
 
     async def loading_cog(self):
-        cogs = ("error_handler", "find_bot", "useful", "helpful", "myself" , "jishaku")
+        cogs = ("error_handler", "find_bot", "useful", "helpful", "myself", "library_override", "jishaku")
         for cog in cogs:
             ext = "cogs." if cog != "jishaku" else ""
             if error := await try_call(self.load_extension, Exception, ret=True, args=(f"{ext}{cog}",)):
@@ -101,6 +101,7 @@ bot_data = {"token": environ.get("TOKEN"),
             "user_db": environ.get("USER"),
             "pass_db": environ.get("PASSWORD"),
             "tester": bool(environ.get("TEST")),
+            "help_src": environ.get("HELP_SRC"),
             "intents": intents,
             "owner_id": 591135329117798400}
 
