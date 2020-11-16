@@ -1,3 +1,4 @@
+import contextlib
 import inspect
 import json
 import os
@@ -185,7 +186,8 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         command_data = tuple((cog, command_data[cog]) for cog in mapping if command_data[cog])
         pages = HelpMenu(source=HelpSource(command_data, per_page=1), delete_message_after=True)
         await pages.start(self.context)
-        await self.context.message.add_reaction("<:checkmark:753619798021373974>")
+        with contextlib.suppress(discord.NotFound):
+            await self.context.message.add_reaction("<:checkmark:753619798021373974>")
 
     def get_command_help(self, command):
         """Returns an Embed version of the command object given."""
