@@ -12,13 +12,14 @@ from discord.ext import commands
 from discord.ext.commands import BucketType, UserNotFound
 from discord.ext.menus import ListPageSource, MenuPages
 from utils.new_converters import BotPrefix, BotUsage, IsBot, FetchUser
-from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, call
+from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check
 from utils.errors import NotInDatabase, BotNotFound, NotBot
 from utils.decorators import is_discordpy
 
 
 @dataclass
 class BotAdded:
+    """BotAdded information for discord.py that is used in whoadd and whatadd command."""
     author: discord.Member = None
     bot: discord.Member = None
     reason: str = None
@@ -28,6 +29,7 @@ class BotAdded:
 
     @classmethod
     def from_json(cls, data, bot=None):
+        """factory method on data from a dictionary like object into BotAdded."""
         author = data["author_id"]
         reason = data['reason']
         jump_url = data['jump_url']
@@ -43,6 +45,7 @@ class BotAdded:
 
     @classmethod
     async def convert(cls, ctx, argument):
+        """Invokes when the BotAdded is use as a typehint."""
         for inst in commands.MemberConverter(), FetchUser():
             with contextlib.suppress(commands.BadArgument):
                 if user := await inst.convert(ctx, argument):
@@ -61,6 +64,7 @@ class BotAdded:
 
 
 class AllPrefixes(ListPageSource):
+    """Menu for allprefix command."""
     def __init__(self, data):
         super().__init__(data, per_page=6)
 
@@ -88,6 +92,7 @@ class AllPrefixes(ListPageSource):
 
 
 class BotAddedList(ListPageSource):
+    """Menu for recentbotadd command."""
     def __init__(self, data):
         super().__init__(data, per_page=6)
 
@@ -103,19 +108,9 @@ class BotAddedList(ListPageSource):
         return embed
 
 
-def is_user(m):
+def is_user(self, m):
+    """Event check for returning true if it's a bot."""
     return not m.author.bot
-
-
-def event_check(method):
-    def check(func):
-        @functools.wraps(func)
-        async def wrapper(self, *args, **kwargs):
-            if method(*args, **kwargs):
-                await func(self, *args, **kwargs)
-
-        return wrapper
-    return check
 
 
 class FindBot(commands.Cog, name="Bots"):
@@ -131,6 +126,7 @@ class FindBot(commands.Cog, name="Bots"):
         bot.loop.create_task(self.loading_all_prefixes())
 
     async def loading_all_prefixes(self):
+        """Loads all unique prefix when it loads and set compiled_pref for C code."""
         await self.bot.wait_until_ready()
         datas = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix")
         self.all_bot_prefixes = {data["bot_id"]: data["prefix"] for data in datas}
@@ -138,8 +134,9 @@ class FindBot(commands.Cog, name="Bots"):
         self.compiled_pref = compile_prefix(sorted(temp))
 
     @commands.Cog.listener("on_member_join")
-    @event_check(lambda m: m.bot and m.guild.id == 336642139381301249)
+    @event_check(lambda s, m: m.bot and m.guild.id == 336642139381301249)
     async def join_bot_tracker(self, member):
+        """Tracks when a bot joins in discord.py where it logs all the BotAdded information."""
         if member.id in self.bot.pending_bots:
             data = await self.bot.pg_con.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)
             await self.update_confirm(BotAdded.from_json(data, member))
@@ -154,6 +151,7 @@ class FindBot(commands.Cog, name="Bots"):
             await self.update_confirm(BotAdded.from_json(data, member))
 
     async def update_prefix_bot(self, message, func, prefix):
+        """Updates the prefix of a bot, or multiple bot where it waits for the bot to respond. It updates in the database."""
         def setting(inner):
             def check(msg):
                 if msg.channel != message.channel:
@@ -187,6 +185,7 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.Cog.listener("on_message")
     @event_check(is_user)
     async def find_bot_prefix(self, message):
+        """Responsible for checking if a message has a prefix for a bot or not by checking if it's a jishaku or help command."""
         def check_jsk(m):
             possible_text = ("Jishaku", "discord.py", "Python ", "Module ", "guild(s)", "user(s).")
             return all(text in m.content for text in possible_text)
@@ -207,6 +206,10 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.Cog.listener("on_message")
     @event_check(is_user)
     async def command_count(self, message):
+        """
+        Checks if the message contains a valid prefix, which will wait for the bot to respond to count that message
+        as a command.
+        """
         if not self.compiled_pref:
             return
         limit = len(message.content) if len(message.content) < 31 else 31
@@ -240,6 +243,7 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.Cog.listener("on_message")
     @event_check(is_user)
     async def addbot_command_tracker(self, message):
+        """Tracks ?addbot command. This is an exact copy of R. Danny code."""
         if message.channel.id not in (559455534965850142, 381963689470984203, 381963705686032394):
             return
         if result := await self.is_valid_addbot(message, check=True):
@@ -268,11 +272,13 @@ class FindBot(commands.Cog, name="Bots"):
             await self.update_pending(result)
 
     async def check_author(self, bot_id, author_id, mode):
+        """Checks if the author of a bot is the same as what is stored in the database."""
         if data := await self.bot.pg_con.fetchrow(f"SELECT * FROM {mode} WHERE bot_id=$1", bot_id):
             old_author = data['author_id']
             return old_author == author_id
 
     async def is_valid_addbot(self, message, check=False):
+        """Check if a message is a valid ?addbot command."""
         if result := re.match(self.re_addbot, message.content):
             reason = result["reason"]
             get_member = message.guild.get_member
@@ -319,6 +325,7 @@ class FindBot(commands.Cog, name="Bots"):
                                 joined_at=join)
 
     async def update_pending(self, result):
+        """Insert a new addbot request which is yet to enter the discord.py server."""
         query = """INSERT INTO pending_bots VALUES($1, $2, $3, $4, $5) 
                    ON CONFLICT (bot_id) DO
                    UPDATE SET reason = $3, requested_at=$4, jump_url=$5"""
@@ -328,6 +335,7 @@ class FindBot(commands.Cog, name="Bots"):
             self.bot.pending_bots.add(result.bot.id)
 
     async def update_confirm(self, result):
+        """Inserts a new confirmed bot with an author where the bot is actually in the discord.py server."""
         query = """INSERT INTO confirmed_bots VALUES($1, $2, $3, $4, $5, $6) 
                    ON CONFLICT (bot_id) DO
                    UPDATE SET reason = $3, requested_at=$4, jump_url=$5, joined_at=$6"""
@@ -341,8 +349,11 @@ class FindBot(commands.Cog, name="Bots"):
         if result.bot.id not in self.bot.confirmed_bots:
             self.bot.confirmed_bots.add(result.bot.id)
 
-    @commands.command(help="Shows what bot has the user owns in discord.py.",
-                      aliases=["owns", "userowns", "whatadds", "whatadded"])
+    @commands.command(aliases=["owns", "userowns", "whatadds", "whatadded"],
+                      brief="Shows what bot the user owns in discord.py.",
+                      help="Shows the name of the bot that the user has added in discord.py. "
+                           "This is useful for flexing for no reason."
+                      )
     @is_discordpy()
     @commands.cooldown(1, 5, BucketType.user)
     async def whatadd(self, ctx, author: discord.Member = None):
@@ -361,7 +372,10 @@ class FindBot(commands.Cog, name="Bots"):
                         value=", ".join(str(x) for x in list_bots) or f"{author} doesnt own any bot here.")
         await ctx.send(embed=embed)
 
-    @commands.command(aliases=["whoowns", "whosebot", "whoadds", "whoadded"], help="Shows who added the bot.")
+    @commands.command(aliases=["whoowns", "whosebot", "whoadds", "whoadded"],
+                      brief="Shows who added the bot.",
+                      help="Shows who added the bot, when they requested it and when the bot was added including the "
+                           "jump url to the original request message in discord.py.")
     @is_discordpy()
     @commands.cooldown(1, 5, BucketType.user)
     async def whoadd(self, ctx, bot: BotAdded):
@@ -395,7 +409,10 @@ class FindBot(commands.Cog, name="Bots"):
     async def add(self, ctx, data: BotAdded):
         await ctx.invoke(self.whoadd, data)
 
-    @commands.command(aliases=["wp"], help="Shows the prefix of a bot")
+    @commands.command(aliases=["wp", "whatprefixes"],
+                      brief="Shows the bot prefix.",
+                      help="Shows what the bot's prefix. This is sometimes inaccurate. Don't rely on it too much. "
+                           "This also does not know it's aliases prefixes.")
     @commands.guild_only()
     async def whatprefix(self, ctx, member: BotPrefix):
         embed = BaseEmbed.default(ctx,
@@ -405,7 +422,10 @@ class FindBot(commands.Cog, name="Bots"):
         await ctx.send(embed=embed)
 
     @commands.command(aliases=["pc", "shares", "pconflict"],
-                      help="Shows the number of conflict(shares) a prefix have between bots.")
+                      brief="Shows the amount of bot that uses the same prefix.",
+                      help="Shows the number of conflict(shares) a prefix have between bots. If there is only one bot, "
+                           "logically there is no conflict hence resulting to 0 conflict. If there is 2 bots, there will be "
+                           "two conflicts because it's two.")
     @commands.guild_only()
     async def prefixconflict(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
@@ -414,6 +434,7 @@ class FindBot(commands.Cog, name="Bots"):
             embed=BaseEmbed.default(ctx, description=f"There are `{conflict}` conflict(s) with `{prefix}` prefix"))
 
     async def get_all_prefix(self, guild, prefix):
+        """Quick function that gets the amount of bots that has the same prefix in a server."""
         data = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
 
         def mem(x):
@@ -422,7 +443,8 @@ class FindBot(commands.Cog, name="Bots"):
         return [mem(x['bot_id']) for x in data if mem(x['bot_id'])]
 
     @commands.command(aliases=["pb", "prefixbots", "pbots"],
-                      help="Shows which bot(s) have a given prefix.")
+                      brief="Shows the name of bot(s) have a given prefix.",
+                      help="Shows a list of bot(s) name that have a given prefix.")
     @commands.guild_only()
     async def prefixbot(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
@@ -432,7 +454,8 @@ class FindBot(commands.Cog, name="Bots"):
                                                            f"{list_bot}"))
 
     @commands.command(aliases=["ap", "aprefix", "allprefixes"],
-                      help="Shows every bot's prefix in the server.")
+                      brief="Shows every bot's prefix in the server.",
+                      help="Shows a list of every single bot's prefix in a server.")
     @commands.guild_only()
     async def allprefix(self, ctx):
         bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix")
@@ -445,7 +468,10 @@ class FindBot(commands.Cog, name="Bots"):
         await menu.start(ctx)
 
     @commands.command(aliases=["bot_use", "bu", "botusage", "botuses"],
-                      help="Show's how many command calls for the bot.")
+                      brief="Show's how many command calls for a bot.",
+                      help="Show's how many command calls for a given bot. This works by counting how many times "
+                           "a message is considered a command for that bot where that bot has responded in less than "
+                           "2 seconds.")
     async def botuse(self, ctx, bot: BotUsage):
         embed = BaseEmbed.default(ctx,
                                   title=f"{bot}'s Usage",
@@ -454,7 +480,10 @@ class FindBot(commands.Cog, name="Bots"):
         await ctx.send(embed=embed)
 
     @commands.command(aliases=["bot_info", "bi", "botinfos"],
-                      help="Bot information such as bot owner, prefixes and reasons it was added into the discord.py server.")
+                      brief="Shows the bot information such as bot owner, prefixes, command usage.",
+                      help="Shows the bot information such as bot owner, it's prefixes, the amount of command it has "
+                           "been called, the reason on why it was added, the time it was requested and the time it "
+                           "joined the server.")
     @is_discordpy()
     async def botinfo(self, ctx, bot: IsBot):
         # TODO: this is pretty terrible, optimise this
@@ -484,7 +513,9 @@ class FindBot(commands.Cog, name="Bots"):
         await ctx.send(embed=embed)
 
     @commands.command(aliases=["rba", "recentbot", "recentadd"],
-                      help="Shows bots that was added in a day.")
+                      brief="Shows a list of bots that has been added in a day.",
+                      help="Shows a list of bots that has been added in a day along with the owner that requested it, "
+                           "and how long ago it was added.")
     async def recentbotadd(self, ctx):
         def predicate(m):
             return m.bot and m.joined_at > ctx.message.created_at - datetime.timedelta(days=1)

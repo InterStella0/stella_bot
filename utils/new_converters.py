@@ -48,6 +48,7 @@ class ValidCog(CleanListGreedy):
 
 
 class IsBot(commands.Converter):
+    """Raises an error if the member is not a bot"""
     async def convert(self, ctx, argument):
         member = await commands.MemberConverter().convert(ctx, argument)
         if not member.bot:

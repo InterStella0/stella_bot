@@ -1,10 +1,9 @@
 from collections import namedtuple
-
+import wrapt
 import discord
 import datetime
 import ctypes
-import platform
-
+import functools
 from discord.ext.menus import First, Last, Button
 from discord.utils import maybe_coroutine
 from discord.ext import commands, menus
@@ -104,12 +103,13 @@ class MenuBase(menus.MenuPages):
 
 
 def default_date(datetime_var):
+    """The default date format that are used across this bot."""
     return datetime_var.strftime('%d %b %Y %I:%M %p %Z')
 
 
 lib = ctypes.CDLL("c_codes/binary_prefix.so")
 find_prefix = lib.find_prefix
-find_prefix.restypes = [ctypes.c_int]
+find_prefix.restype = ctypes.c_char_p
 
 
 def compile_prefix(prefixes):
@@ -128,3 +128,15 @@ def search_prefix(array_result, content_buffer):
     result = find_prefix(array_string, content_buffer, size)
     strresult = ctypes.c_char_p(result).value
     return strresult.decode('utf-8')
+
+
+def event_check(method):
+    """Event decorator check"""
+    def check(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            if method(*args, **kwargs):
+                await func(*args, **kwargs)
+        return wrapper
+    return check
+

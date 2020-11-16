@@ -10,6 +10,7 @@ from typing import Union
 
 
 class Useful(commands.Cog):
+    """Command what I think is useful."""
     def __init__(self, bot):
         self.bot = bot
 
@@ -24,7 +25,12 @@ class Useful(commands.Cog):
             timestamp = datetime.datetime.utcfromtimestamp(decoded + token_epoch)
         return timestamp
 
-    @commands.command(aliases=["pt", "ptoken"], help="Decodes the token.")
+    @commands.command(aliases=["pt", "ptoken"],
+                      brief="Decodes the token and showing user id and the token creation date.",
+                      help="Decodes the token by splitting the token into 3 parts that was split in a period. "
+                           "First part is a user id where it was decoded from base 64 into str. The second part "
+                           "is the creation of the token, which is converted from base 64 into int. The last part "
+                           "cannot be decoded due to discord encryption.")
     async def parse_token(self, ctx, token):
         token_part = token.split(".")
         if len(token_part) != 3:
@@ -57,7 +63,12 @@ class Useful(commands.Cog):
                          icon_url=ctx.author.avatar_url)
         await ctx.send(embed=embed)
 
-    @commands.command(aliases=["gt", "gtoken"], help="Generate a new token for a given user.")
+    @commands.command(aliases=["gt", "gtoken"],
+                      brief="Generate a new token given a user.",
+                      help="Generate a new token for a given user or it defaults to the command author. "
+                           "This works by encoding the user id into base 64 str. While the current datetime in utc "
+                           "is converted into timestamp and gets converted into base64 using the standard b64 encoding. "
+                           "The final part of the token is randomly generated.")
     async def generate_token(self, ctx, member: Union[discord.Member, discord.User, FetchUser] = None):
         if not member:
             member = ctx.author

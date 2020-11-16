@@ -9,6 +9,7 @@ from utils.useful import BaseEmbed
 from collections import namedtuple
 from discord.ext.menus import First, Last, Button, MenuPages
 
+
 class CommandHelp:
     def __init__(self, command, brief):
         self.command = command
@@ -73,7 +74,7 @@ class HelpMenuBase(MenuPages):
 
 
 class HelpMenu(HelpMenuBase):
-    """This is a MenuPages class that is used only in record server command. All it has is custom information and
+    """This is a MenuPages class that is used only in help command. All it has is custom information and
        custom initial message."""
     async def on_information_show(self, payload):
         ctx = self.ctx
@@ -92,7 +93,7 @@ class HelpMenu(HelpMenuBase):
 
 
 class CogMenu(HelpMenuBase):
-    """This is a MenuPages class that is used only in record server command. All it has is custom information and
+    """This is a MenuPages class that is used only in Cog help command. All it has is custom information and
        custom initial message."""
     async def on_information_show(self, payload):
         ctx = self.ctx
@@ -111,12 +112,14 @@ class CogMenu(HelpMenuBase):
 
 
 class HelpCogSource(menus.ListPageSource):
+    """This is for help Cog ListPageSource"""
     async def format_page(self, menu: CogMenu, entry):
         entry.set_author(name=f"Page {menu.current_page + 1}/{self._max_pages}")
         return entry
 
 
 class HelpSource(menus.ListPageSource):
+    """This is for the help command ListPageSource"""
     async def format_page(self, menu: HelpMenu, entry):
         cog, list_commands = entry
         new_line = "\n"
@@ -155,19 +158,23 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             return f'`{self.clean_prefix}{command.parent}` `{command.name}` `{command.signature}`'
 
     def get_help(self, command, brief=True):
+        """Gets the command short_doc if brief is True while getting the longer help if it is false"""
         real_help = command.help or "This command have not been documented"
-        return real_help if brief else command.short_doc or real_help
+        return real_help if not brief else command.short_doc or real_help
 
     def get_demo(self, command):
+        """Gets the gif demonstrating the command."""
         com = command.name
         if com not in self.help_gif:
             return ""
         return f"{self.help_gif['src']}/{self.help_gif[com]}/{com}_help.gif"
 
     def get_aliases(self, command):
+        """This isn't even needed jesus christ"""
         return command.aliases
 
     async def send_bot_help(self, mapping):
+        """Gets called when `uwu help` is invoked"""
         command_data = {}
         for cog in mapping:
             command_data[cog] = []
@@ -181,6 +188,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         await self.context.message.add_reaction("<:checkmark:753619798021373974>")
 
     def get_command_help(self, command):
+        """Returns an Embed version of the command object given."""
         embed = BaseEmbed.default(self.context)
         embed.title = self.get_command_signature(command)
         embed.description = self.get_help(command, brief=False)
@@ -191,9 +199,11 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         return embed
 
     async def send_command_help(self, command):
+        """Gets invoke when `uwu help <command>` is invoked."""
         await self.get_destination().send(embed=self.get_command_help(command))
 
     async def send_cog_help(self, cog):
+        """Gets invoke when `uwu help <cog>` is invoked."""
         cog_commands = [self.get_command_help(c) for c in await self.filter_commands(cog.walk_commands(), sort=True)]
         pages = CogMenu(source=HelpCogSource(cog_commands, per_page=1), delete_message_after=True)
         await pages.start(self.context)
@@ -206,20 +216,27 @@ class Helpful(commands.Cog):
         bot.help_command.cog = self
         self.bot = bot
 
-    @commands.command(aliases=["ping", "p"], help="Shows the bot latency")
+    @commands.command(aliases=["ping", "p"],
+                      help="Shows the bot latency from the discord websocket.")
     async def pping(self, ctx):
         await ctx.send(embed=BaseEmbed.default(ctx,
                                                title="PP",
                                                description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`"))
 
-    @commands.command(aliases=["up"], help="Shows the bot uptime")
+    @commands.command(aliases=["up"],
+                      help="Shows the bot uptime from when it was started.")
     async def uptime(self, ctx):
         c_uptime = datetime.datetime.utcnow() - self.bot.uptime
         await ctx.send(embed=BaseEmbed.default(ctx,
                                                title="Uptime",
                                                description=f"Current uptime: `{humanize.precisedelta(c_uptime)}`"))
 
-    @commands.command(help="shows the source code")
+    @commands.command(aliases=["src", "sources"],
+                      brief="Shows the source code link in github.",
+                      help="Shows the source code in github given the cog/command name. "
+                           "Defaults to the stella_bot source code link if not given any argument. "
+                           "It accepts 2 types of content, the command name, or the Cog method name. "
+                           "Cog method must specify it's Cog name separate by a period and it's method.")
     async def source(self, ctx, *, content=None):
         source_url = 'https://github.com/InterStella0/stella_bot'
         if not content:
