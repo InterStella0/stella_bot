@@ -1,5 +1,4 @@
 from collections import namedtuple
-import wrapt
 import discord
 import datetime
 import ctypes
