@@ -256,18 +256,18 @@ class Helpful(commands.Cog):
                     src = obj.callback.__code__
                     module = obj.callback.__module__
 
-        def cog_check(cog):
+        def cog_check(content):
             nonlocal src, module
-            if "." not in cog:
+            if "." not in content:
                 return
-            cog, _, method = cog.partition(".")
+            cog, _, method = content.partition(".")
             cog = self.bot.get_cog(cog)
-            if method := getattr(cog, method, None):
-                src = method.__code__
-                module = method.__module__
+            if method_func := getattr(cog, method, None):
+                module = method_func.__module__
+                target = self.bot.decorator_store.get(f"{module}.{method}") or method_func
+                src = target.__code__
 
-        functions = (command_check, cog_check)
-        for func in functions:
+        for func in (command_check, cog_check):
             if not src:
                 func(content)
         if module is None:

@@ -4,6 +4,7 @@ import discord
 import asyncpg
 import json
 import datetime
+import utils.useful
 from discord.ext import commands
 from dotenv import load_dotenv
 from os.path import join, dirname
@@ -19,6 +20,7 @@ class StellaBot(commands.Bot):
         self.tester = tester
         self.help_src = help_src
         self.command_prefix = self.get_prefix
+        self.decorator_store = utils.useful.decorator_store
         self.db = db
         self.user_db = user_db
         self.pass_db = pass_db

@@ -200,8 +200,7 @@ class FindBot(commands.Cog, name="Bots"):
 
         for x, check in (("jsk", check_jsk), ("help", check_help)):
             if match := re.match("(?P<prefix>^.{{1,30}}?(?={}$))".format(x), message.content):
-                await self.update_prefix_bot(message, check, match["prefix"])
-                return
+                return await self.update_prefix_bot(message, check, match["prefix"])
 
     @commands.Cog.listener("on_message")
     @event_check(is_user)
@@ -516,6 +515,7 @@ class FindBot(commands.Cog, name="Bots"):
                       brief="Shows a list of bots that has been added in a day.",
                       help="Shows a list of bots that has been added in a day along with the owner that requested it, "
                            "and how long ago it was added.")
+    @is_discordpy()
     async def recentbotadd(self, ctx):
         def predicate(m):
             return m.bot and m.joined_at > ctx.message.created_at - datetime.timedelta(days=1)

@@ -3,6 +3,7 @@ import discord
 import datetime
 import ctypes
 import functools
+from dataclasses import dataclass, field
 from discord.ext.menus import First, Last, Button
 from discord.utils import maybe_coroutine
 from discord.ext import commands, menus
@@ -129,13 +130,29 @@ def search_prefix(array_result, content_buffer):
     return strresult.decode('utf-8')
 
 
-def event_check(method):
+@dataclass
+class DecoStore:
+    functions: dict = field(default_factory=dict)
+
+    def get(self, content):
+        if content in self.functions:
+            return self.functions[content]
+
+    def update(self, func):
+        self.functions.update({f"{func.__module__}.{func.__name__}": func})
+
+
+decorator_store = DecoStore()
+
+
+def event_check(func):
     """Event decorator check"""
-    def check(func):
-        @functools.wraps(func)
+    def check(method):
+        decorator_store.update(method)
+
+        @functools.wraps(method)
         async def wrapper(*args, **kwargs):
-            if method(*args, **kwargs):
-                await func(*args, **kwargs)
+            if func(*args, **kwargs):
+                await method(*args, **kwargs)
         return wrapper
     return check
-
