@@ -163,3 +163,11 @@ def event_check(func):
 def print_exception(text, error):
     print(text, file=sys.stderr)
     traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+
+
+def plural(text, size):
+    logic = size == 1
+    target = (("(s)", ("s", "")), ("(is/are)", ("are", "is")))
+    for x, y in target:
+        text = text.replace(x, y[logic])
+    return text

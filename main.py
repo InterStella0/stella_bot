@@ -25,7 +25,7 @@ class StellaBot(commands.Bot):
         self.user_db = user_db
         self.pass_db = pass_db
         self.color = color
-        self.pg_con = None
+        self.pool_pg = None
         self.uptime = None
         self.all_bot_prefixes = {}
         self.pending_bots = set()
@@ -56,15 +56,15 @@ class StellaBot(commands.Bot):
 
     async def fill_prefix(self):
         """Fills the bot actual prefix"""
-        prefixes = await self.pg_con.fetch("SELECT * FROM internal_prefix")
+        prefixes = await self.pool_pg.fetch("SELECT * FROM internal_prefix")
         self.existing_prefix = {data["snowflake_id"]: data["prefix"] for data in prefixes}
 
     async def fill_bots(self):
         """Fills the pending/confirmed bots in discord.py"""
-        record_pending = await self.pg_con.fetch("SELECT bot_id FROM pending_bots;")
+        record_pending = await self.pool_pg.fetch("SELECT bot_id FROM pending_bots;")
         self.pending_bots = set(x["bot_id"] for x in record_pending)
 
-        record_confirmed = await self.pg_con.fetch("SELECT bot_id FROM confirmed_bots;")
+        record_confirmed = await self.pool_pg.fetch("SELECT bot_id FROM confirmed_bots;")
         self.confirmed_bots = set(x["bot_id"] for x in record_confirmed)
         print("Bots list are now filled.")
 
@@ -78,7 +78,7 @@ class StellaBot(commands.Bot):
             return "+="
         if snowflake_id not in self.existing_prefix:
             self.existing_prefix.update({snowflake_id: default})
-            await self.pg_con.fetch(query, snowflake_id, default)
+            await self.pool_pg.fetch(query, snowflake_id, default)
             return default
         return self.existing_prefix.get(snowflake_id)
 
@@ -91,14 +91,14 @@ class StellaBot(commands.Bot):
         try:
             print("Connecting to database...")
             start = time.time()
-            loop_pg = self.loop.run_until_complete(asyncpg.create_pool(database=self.db,
+            pool_pg = self.loop.run_until_complete(asyncpg.create_pool(database=self.db,
                                                                        user=self.user_db,
                                                                        password=self.pass_db))
         except Exception as e:
             print_exception("Could not connect to database:", e)
         else:
             self.uptime = datetime.datetime.utcnow()
-            self.pg_con = loop_pg
+            self.pool_pg = pool_pg
             print(f"Connected to the database ({time.time() - start})s")
             self.loop.run_until_complete(self.after_db())
             self.run(self.token)

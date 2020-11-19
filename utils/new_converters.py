@@ -72,7 +72,7 @@ class BotData:
     async def convert(cls, ctx, argument):
         member = await IsBot().convert(ctx, argument)
 
-        if data := await ctx.bot.pg_con.fetchrow(f"SELECT * FROM {cls.name} WHERE bot_id=$1", member.id):
+        if data := await ctx.bot.pool_pg.fetchrow(f"SELECT * FROM {cls.name} WHERE bot_id=$1", member.id):
             return member, data
         raise NotInDatabase(member)
 

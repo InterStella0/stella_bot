@@ -11,7 +11,7 @@ from discord.ext import commands
 from discord.ext.commands import BucketType, UserNotFound
 from discord.ext.menus import ListPageSource, MenuPages
 from utils.new_converters import BotPrefix, BotUsage, IsBot, FetchUser
-from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check
+from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check, plural
 from utils.errors import NotInDatabase, BotNotFound, NotBot
 from utils.decorators import is_discordpy
 
@@ -27,10 +27,11 @@ class BotAdded:
     joined_at: datetime.datetime = None
 
     @classmethod
-    def from_json(cls, bot=None, author_id=None, joined_at=None, **data):
+    def from_json(cls, bot=None, bot_id=None, author_id=None, joined_at=None, **data):
         """factory method on data from a dictionary like object into BotAdded."""
         author = author_id
         join = joined_at
+        bot = bot or bot_id
         if bot and isinstance(bot, discord.Member):
             join = bot.joined_at
             author = bot.guild.get_member(author)
@@ -48,7 +49,7 @@ class BotAdded:
                     for attribute in ("pending", "confirmed")[isinstance(inst, commands.MemberConverter):]:
                         attribute += "_bots"
                         if user.id in getattr(ctx.bot, attribute):
-                            data = await ctx.bot.pg_con.fetchrow(f"SELECT * FROM {attribute} WHERE bot_id = $1", user.id)
+                            data = await ctx.bot.pool_pg.fetchrow(f"SELECT * FROM {attribute} WHERE bot_id = $1", user.id)
                             return cls.from_json(user, **data)
                     raise NotInDatabase(user)
         raise BotNotFound(argument)
@@ -126,7 +127,7 @@ class FindBot(commands.Cog, name="Bots"):
     async def loading_all_prefixes(self):
         """Loads all unique prefix when it loads and set compiled_pref for C code."""
         await self.bot.wait_until_ready()
-        datas = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix")
+        datas = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix")
         self.all_bot_prefixes = {data["bot_id"]: data["prefix"] for data in datas}
         temp = list(set(self.all_bot_prefixes.values()))
         self.compiled_pref = compile_prefix(sorted(temp))
@@ -136,9 +137,9 @@ class FindBot(commands.Cog, name="Bots"):
     async def join_bot_tracker(self, member):
         """Tracks when a bot joins in discord.py where it logs all the BotAdded information."""
         if member.id in self.bot.pending_bots:
-            data = await self.bot.pg_con.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)
+            data = await self.bot.pool_pg.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)
             await self.update_confirm(BotAdded.from_json(member, **data))
-            await self.bot.pg_con.execute("DELETE FROM pending_bots WHERE bot_id = $1", member.id)
+            await self.bot.pool_pg.execute("DELETE FROM pending_bots WHERE bot_id = $1", member.id)
         else:
             await self.update_confirm(BotAdded.from_json(member, joined_at=member.joined_at))
 
@@ -169,7 +170,7 @@ class FindBot(commands.Cog, name="Bots"):
                 "UPDATE SET prefix=$2"
         values = [(x, prefix) for x in bots]
 
-        await self.bot.pg_con.executemany(query, values)
+        await self.bot.pool_pg.executemany(query, values)
         self.all_bot_prefixes.update({x: prefix for x, prefix in values})
         temp = list(set(self.all_bot_prefixes.values()))
         self.compiled_pref = compile_prefix(sorted(temp))
@@ -207,7 +208,7 @@ class FindBot(commands.Cog, name="Bots"):
         if not (result := search_prefix(self.compiled_pref, content_compiled)):
             return
 
-        bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", result)
+        bots = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", result)
         match_bot = {bot["bot_id"] for bot in bots if message.guild.get_member(bot["bot_id"])}
 
         def check(msg):
@@ -227,7 +228,7 @@ class FindBot(commands.Cog, name="Bots"):
                 "UPDATE SET count=bot_usage_count.count + 1"
         values = [(x, 1) for x in bot_found]
 
-        await self.bot.pg_con.executemany(query, values)
+        await self.bot.pool_pg.executemany(query, values)
 
     @commands.Cog.listener("on_message")
     @event_check(is_user)
@@ -262,7 +263,7 @@ class FindBot(commands.Cog, name="Bots"):
 
     async def check_author(self, bot_id, author_id, mode):
         """Checks if the author of a bot is the same as what is stored in the database."""
-        if data := await self.bot.pg_con.fetchrow(f"SELECT * FROM {mode} WHERE bot_id=$1", bot_id):
+        if data := await self.bot.pool_pg.fetchrow(f"SELECT * FROM {mode} WHERE bot_id=$1", bot_id):
             old_author = data['author_id']
             return old_author == author_id
 
@@ -319,7 +320,7 @@ class FindBot(commands.Cog, name="Bots"):
                    ON CONFLICT (bot_id) DO
                    UPDATE SET reason = $3, requested_at=$4, jump_url=$5"""
         value = (result.bot.id, result.author.id, result.reason, result.requested_at, result.jump_url)
-        await self.bot.pg_con.execute(query, *value)
+        await self.bot.pool_pg.execute(query, *value)
         if result.bot.id not in self.bot.pending_bots:
             self.bot.pending_bots.add(result.bot.id)
 
@@ -332,7 +333,7 @@ class FindBot(commands.Cog, name="Bots"):
             return self.bot.pending_bots.remove(result.bot.id)
 
         value = (result.bot.id, result.author.id, result.reason, result.requested_at, result.jump_url, result.joined_at)
-        await self.bot.pg_con.execute(query, *value)
+        await self.bot.pool_pg.execute(query, *value)
         if result.bot.id in self.bot.pending_bots:
             self.bot.pending_bots.remove(result.bot.id)
         if result.bot.id not in self.bot.confirmed_bots:
@@ -351,7 +352,7 @@ class FindBot(commands.Cog, name="Bots"):
         if author.bot:
             return await ctx.send("That's a bot lol")
         query = "SELECT * FROM {}_bots WHERE author_id=$1"
-        total_list = [await self.bot.pg_con.fetch(query.format(x), author.id) for x in ("pending", "confirmed")]
+        total_list = [await self.bot.pool_pg.fetch(query.format(x), author.id) for x in ("pending", "confirmed")]
         total_list = list(itertools.chain.from_iterable(total_list))
         list_bots = [ctx.guild.get_member(x["bot_id"]) or await self.bot.fetch_user(x["bot_id"]) for x in total_list]
         embed = discord.Embed(title=f"{author}'s Bots", color=self.bot.color)
@@ -411,12 +412,12 @@ class FindBot(commands.Cog, name="Bots"):
     async def prefixuse(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         prefix = self.clean_prefix(prefix)
-        await ctx.send(
-            embed=BaseEmbed.default(ctx, description=f"There are `{len(instance_bot)}` bots that uses `{prefix}` prefix"))
+        desk = plural(f"There (is/are) `{len(instance_bot)}` bot(s) that use `{prefix}` as prefix", len(instance_bot))
+        await ctx.send(embed=BaseEmbed.default(ctx, description=desk))
 
     async def get_all_prefix(self, guild, prefix):
         """Quick function that gets the amount of bots that has the same prefix in a server."""
-        data = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
+        data = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
 
         def mem(x):
             return guild.get_member(x)
@@ -429,17 +430,18 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.guild_only()
     async def prefixbot(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
-        list_bot = "\n".join(f"{no + 1}. {x}" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
+        list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
+        prefix = self.clean_prefix(prefix)
+        desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
         await ctx.send(embed=BaseEmbed.default(ctx,
-                                               description=f"Bot{('s', '')[len(list_bot) < 2]} with `{prefix}` as prefix\n"
-                                                           f"{list_bot}"))
+                                               description=plural(desk, len(list_bot))))
 
     @commands.command(aliases=["ap", "aprefix", "allprefixes"],
                       brief="Shows every bot's prefix in the server.",
                       help="Shows a list of every single bot's prefix in a server.")
     @commands.guild_only()
     async def allprefix(self, ctx):
-        bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix")
+        bots = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix")
 
         def mem(x):
             return ctx.guild.get_member(x)
@@ -456,7 +458,7 @@ class FindBot(commands.Cog, name="Bots"):
     async def botuse(self, ctx, bot: BotUsage):
         embed = BaseEmbed.default(ctx,
                                   title=f"{bot}'s Usage",
-                                  description=f"`{bot.count}` commands has been called for **{bot}**.")
+                                  description=plural(f"`{bot.count}` command(s) has been called for **{bot}**.", bot.count))
 
         await ctx.send(embed=embed)
 
@@ -508,7 +510,7 @@ class FindBot(commands.Cog, name="Bots"):
                                              title="Bots added today",
                                              description="Looks like there are no bots added in the span of 24 hours."))
             return
-        db_data = await self.bot.pg_con.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
+        db_data = await self.bot.pool_pg.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
         member_data = [BotAdded.from_json(data, members[data["bot_id"]]) for data in db_data]
         member_data.sort(key=lambda x: x.joined_at)
         menu = MenuBase(source=BotAddedList(member_data), delete_message_after=True)
