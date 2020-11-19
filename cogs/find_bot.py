@@ -113,6 +113,10 @@ def is_user(self, m):
     return not m.author.bot
 
 
+def command_count_check(self, message):
+    return self.compiled_pref and not message.author.bot and message.guild
+
+
 class FindBot(commands.Cog, name="Bots"):
     def __init__(self, bot):
         self.bot = bot
@@ -198,23 +202,21 @@ class FindBot(commands.Cog, name="Bots"):
             embeds = any(search(str(x.to_dict())) for x in m.embeds)
             return content or embeds
 
-        for x, check in (("jsk", check_jsk), ("help", check_help)):
+        for x in "jsk", "help":
             if match := re.match("(?P<prefix>^.{{1,30}}?(?={}$))".format(x), message.content):
-                return await self.update_prefix_bot(message, check, match["prefix"])
+                if x not in match["prefix"]:
+                    return await self.update_prefix_bot(message, locals()[f"check_{x}"], match["prefix"])
 
     @commands.Cog.listener("on_message")
-    @event_check(is_user)
+    @event_check(command_count_check)
     async def command_count(self, message):
         """
         Checks if the message contains a valid prefix, which will wait for the bot to respond to count that message
         as a command.
         """
-        if not self.compiled_pref:
-            return
         limit = len(message.content) if len(message.content) < 31 else 31
         content_compiled = ctypes.create_string_buffer(message.content[:limit].encode("utf-8"))
-        result = search_prefix(self.compiled_pref, content_compiled)
-        if not result:
+        if not (result := search_prefix(self.compiled_pref, content_compiled)):
             return
 
         bots = await self.bot.pg_con.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", result)
@@ -398,25 +400,16 @@ class FindBot(commands.Cog, name="Bots"):
 
         await ctx.send(embed=embed)
 
-    @commands.group(invoke_without_command=True, hidden=True)
-    async def who(self, ctx):
-        pass
-
-    @who.command(hidden=True, aliases=["added", "adds"])
-    @is_discordpy(silent=True)
-    @commands.cooldown(1, 10, BucketType.user)
-    async def add(self, ctx, data: BotAdded):
-        await ctx.invoke(self.whoadd, data)
-
     @commands.command(aliases=["wp", "whatprefixes"],
                       brief="Shows the bot prefix.",
                       help="Shows what the bot's prefix. This is sometimes inaccurate. Don't rely on it too much. "
                            "This also does not know it's aliases prefixes.")
     @commands.guild_only()
     async def whatprefix(self, ctx, member: BotPrefix):
+        prefix = re.sub("`", "`\u200b", member.prefix)
         embed = BaseEmbed.default(ctx,
                                   title=f"{member}'s Prefix",
-                                  description=f"`{member.prefix}`")
+                                  description=f"`{prefix}`")
 
         await ctx.send(embed=embed)
 

@@ -2,6 +2,8 @@ from collections import namedtuple
 import discord
 import datetime
 import ctypes
+import traceback
+import sys
 import functools
 from dataclasses import dataclass, field
 from discord.ext.menus import First, Last, Button
@@ -21,11 +23,10 @@ async def try_call(code, exception, ret=False, args: tuple = (), kwargs: dict = 
         return (None, e)[ret]
 
 
-def call(func, *args, exception=Exception, **kwargs):
+def call(func, *args, exception=Exception, ret=False, **kwargs):
     """one liner method that handles all errors in a single line which returns None, or Error instance depending on ret
        value.
     """
-    ret = kwargs.get("ret", None)
     try:
         return func(*args, **kwargs)
     except exception as e:
@@ -132,6 +133,7 @@ def search_prefix(array_result, content_buffer):
 
 @dataclass
 class DecoStore:
+    """Class that stores event callbacks for the source command"""
     functions: dict = field(default_factory=dict)
 
     def get(self, content):
@@ -156,3 +158,8 @@ def event_check(func):
                 await method(*args, **kwargs)
         return wrapper
     return check
+
+
+def print_exception(text, error):
+    print(text, file=sys.stderr)
+    traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)

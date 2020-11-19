@@ -8,7 +8,7 @@ import utils.useful
 from discord.ext import commands
 from dotenv import load_dotenv
 from os.path import join, dirname
-from utils.useful import try_call
+from utils.useful import call, print_exception
 from os import environ
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
@@ -31,30 +31,36 @@ class StellaBot(commands.Bot):
         self.pending_bots = set()
         self.confirmed_bots = set()
         self.token = token
-        self.existing_prefix = self.fill_prefix()
-        self.loop.run_until_complete(self.async_start())
+        self.existing_prefix = None
 
-    async def async_start(self):
-        await self.loading_cog()
+    async def after_db(self):
+        """Runs after the db is connected"""
+        self.loading_cog()
+        await self.fill_prefix()
+        await self.fill_bots()
 
     @property
     def stella(self):
+        """Returns discord.User of the owner"""
         return self.get_user(self.owner_id)
 
-    async def loading_cog(self):
+    def loading_cog(self):
+        """Loads the cog"""
         cogs = ("error_handler", "find_bot", "useful", "helpful", "myself", "library_override", "jishaku")
         for cog in cogs:
             ext = "cogs." if cog != "jishaku" else ""
-            if error := await try_call(self.load_extension, Exception, ret=True, args=(f"{ext}{cog}",)):
-                print(error)
+            if error := call(self.load_extension, f"{ext}{cog}", ret=True):
+                print_exception('Ignoring exception while loading up {}:'.format(cog), error)
             else:
                 print(f"cog {cog} is loaded")
 
-    def fill_prefix(self):
-        with open("d_json/prefix.json", "r") as read:
-            return json.load(read)
+    async def fill_prefix(self):
+        """Fills the bot actual prefix"""
+        prefixes = await self.pg_con.fetch("SELECT * FROM internal_prefix")
+        self.existing_prefix = {data["snowflake_id"]: data["prefix"] for data in prefixes}
 
     async def fill_bots(self):
+        """Fills the pending/confirmed bots in discord.py"""
         record_pending = await self.pg_con.fetch("SELECT bot_id FROM pending_bots;")
         self.pending_bots = set(x["bot_id"] for x in record_pending)
 
@@ -65,16 +71,23 @@ class StellaBot(commands.Bot):
     async def get_prefix(self, message):
         """Handles custom prefixes, this function is invoked every time process_command method is invoke thus returning
         the appropriate prefixes depending on the guild."""
-        if message.guild is None or str(message.guild.id) not in self.existing_prefix:
-            return "."
+        query = "INSERT INTO internal_prefix VALUES($1, $2) ON CONFLICT(snowflake_id) DO NOTHING"
+        snowflake_id = message.guild.id if message.guild else message.author.id
+        default = "uwu "
         if self.tester:
             return "+="
-        return self.existing_prefix[str(message.guild.id)]
+        if snowflake_id not in self.existing_prefix:
+            self.existing_prefix.update({snowflake_id: default})
+            await self.pg_con.fetch(query, snowflake_id, default)
+            return default
+        return self.existing_prefix.get(snowflake_id)
 
     def get_message(self, message_id):
+        """Gets the message from the cache"""
         return self._connection._get_message(message_id)
 
     def starter(self):
+        """Starts the bot properly"""
         try:
             print("Connecting to database...")
             start = time.time()
@@ -82,21 +95,17 @@ class StellaBot(commands.Bot):
                                                                        user=self.user_db,
                                                                        password=self.pass_db))
         except Exception as e:
-            print("Could not connect to database.")
-            print(e)
-            return
+            print_exception("Could not connect to database:", e)
         else:
             self.uptime = datetime.datetime.utcnow()
             self.pg_con = loop_pg
             print(f"Connected to the database ({time.time() - start})s")
-            self.loop.run_until_complete(self.fill_bots())
+            self.loop.run_until_complete(self.after_db())
             self.run(self.token)
 
 
-intents = discord.Intents.default()
-intents.members = True
-intents.dm_typing = False
-
+intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions')}
+intents = discord.Intents(**intent_data)
 bot_data = {"token": environ.get("TOKEN"),
             "color": 0xffcccb,
             "db": environ.get("DATABASE"),
@@ -106,7 +115,6 @@ bot_data = {"token": environ.get("TOKEN"),
             "help_src": environ.get("HELP_SRC"),
             "intents": intents,
             "owner_id": 591135329117798400}
-
 
 bot = StellaBot(**bot_data)
 
