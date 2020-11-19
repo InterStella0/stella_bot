@@ -3,7 +3,6 @@ import datetime
 import re
 import asyncio
 import itertools
-import functools
 import ctypes
 import contextlib
 import humanize
@@ -28,20 +27,15 @@ class BotAdded:
     joined_at: datetime.datetime = None
 
     @classmethod
-    def from_json(cls, data, bot=None):
+    def from_json(cls, bot=None, author_id=None, joined_at=None, **data):
         """factory method on data from a dictionary like object into BotAdded."""
-        author = data["author_id"]
-        reason = data['reason']
-        jump_url = data['jump_url']
-        requested_at = data['requested_at']
-        join = None
+        author = author_id
+        join = joined_at
         if bot and isinstance(bot, discord.Member):
             join = bot.joined_at
             author = bot.guild.get_member(author)
-        elif 'joined_at' in data:
-            join = data['joined_at']
 
-        return cls(author=author, bot=bot, reason=reason, requested_at=requested_at, jump_url=jump_url, joined_at=join)
+        return cls(author=author, bot=bot, joined_at=join, **data)
 
     @classmethod
     async def convert(cls, ctx, argument):
@@ -55,7 +49,7 @@ class BotAdded:
                         attribute += "_bots"
                         if user.id in getattr(ctx.bot, attribute):
                             data = await ctx.bot.pg_con.fetchrow(f"SELECT * FROM {attribute} WHERE bot_id = $1", user.id)
-                            return cls.from_json(data, user)
+                            return cls.from_json(user, **data)
                     raise NotInDatabase(user)
         raise BotNotFound(argument)
 
@@ -143,16 +137,10 @@ class FindBot(commands.Cog, name="Bots"):
         """Tracks when a bot joins in discord.py where it logs all the BotAdded information."""
         if member.id in self.bot.pending_bots:
             data = await self.bot.pg_con.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)
-            await self.update_confirm(BotAdded.from_json(data, member))
+            await self.update_confirm(BotAdded.from_json(member, **data))
             await self.bot.pg_con.execute("DELETE FROM pending_bots WHERE bot_id = $1", member.id)
         else:
-            data = {"author_id": None,
-                    "reason": None,
-                    "requested_at": None,
-                    "jump_url": None,
-                    "joined_at": member.joined_at
-                    }
-            await self.update_confirm(BotAdded.from_json(data, member))
+            await self.update_confirm(BotAdded.from_json(member, joined_at=member.joined_at))
 
     async def update_prefix_bot(self, message, func, prefix):
         """Updates the prefix of a bot, or multiple bot where it waits for the bot to respond. It updates in the database."""
@@ -400,30 +388,31 @@ class FindBot(commands.Cog, name="Bots"):
 
         await ctx.send(embed=embed)
 
+    def clean_prefix(self, prefix):
+        return re.sub("`", "`\u200b", prefix)
+
     @commands.command(aliases=["wp", "whatprefixes"],
                       brief="Shows the bot prefix.",
                       help="Shows what the bot's prefix. This is sometimes inaccurate. Don't rely on it too much. "
                            "This also does not know it's aliases prefixes.")
     @commands.guild_only()
     async def whatprefix(self, ctx, member: BotPrefix):
-        prefix = re.sub("`", "`\u200b", member.prefix)
+        prefix = self.clean_prefix(member.prefix)
         embed = BaseEmbed.default(ctx,
                                   title=f"{member}'s Prefix",
                                   description=f"`{prefix}`")
 
         await ctx.send(embed=embed)
 
-    @commands.command(aliases=["pc", "shares", "pconflict"],
+    @commands.command(aliases=["pu", "shares", "puse"],
                       brief="Shows the amount of bot that uses the same prefix.",
-                      help="Shows the number of conflict(shares) a prefix have between bots. If there is only one bot, "
-                           "logically there is no conflict hence resulting to 0 conflict. If there is 2 bots, there will be "
-                           "two conflicts because it's two.")
+                      help="Shows the number of bot that shares a prefix between bots.")
     @commands.guild_only()
-    async def prefixconflict(self, ctx, prefix):
+    async def prefixuse(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
-        conflict = (0, len(instance_bot))[len(instance_bot) > 1]
+        prefix = self.clean_prefix(prefix)
         await ctx.send(
-            embed=BaseEmbed.default(ctx, description=f"There are `{conflict}` conflict(s) with `{prefix}` prefix"))
+            embed=BaseEmbed.default(ctx, description=f"There are `{len(instance_bot)}` bots that uses `{prefix}` prefix"))
 
     async def get_all_prefix(self, guild, prefix):
         """Quick function that gets the amount of bots that has the same prefix in a server."""
