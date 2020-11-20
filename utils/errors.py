@@ -9,22 +9,22 @@ class ArgumentBaseError(commands.UserInputError):
 
 class NotInDatabase(ArgumentBaseError):
     def __init__(self, _id, **kwargs):
-        super().__init__(message=f"It appears that `{_id}` is not in the database. Try someone else.", **kwargs)
+        super().__init__(message=f"It appears that {_id} is not in the database. Try someone else.", **kwargs)
 
 
 class NotValidCog(ArgumentBaseError):
     def __init__(self, cog, **kwargs):
-        super().__init__(message=f"`{cog}` is not a valid cog.", **kwargs)
+        super().__init__(message=f"{cog} is not a valid cog.", **kwargs)
 
 
 class BotNotFound(ArgumentBaseError):
     def __init__(self, _id, **kwargs):
-        super().__init__(message=f"`{_id}` not found.", **kwargs)
+        super().__init__(message=f"{_id} not found.", **kwargs)
 
 
 class NotBot(ArgumentBaseError):
     def __init__(self, _id, **kwargs):
-        super().__init__(message=f"`{_id}` is not a bot. Give me a bot please.", **kwargs)
+        super().__init__(message=f"{_id} is not a bot. Give me a bot please.", **kwargs)
 
 
 class NotInDpy(commands.UserInputError):
@@ -34,4 +34,4 @@ class NotInDpy(commands.UserInputError):
 
 class ThisEmpty(ArgumentBaseError):
     def __init__(self, arg, **kwargs):
-        super().__init__(message=f"No valid argument was converted. Which makes `{arg}` as empty.", **kwargs)
+        super().__init__(message=f"No valid argument was converted. Which makes {arg} as empty.", **kwargs)

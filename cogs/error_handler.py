@@ -10,6 +10,7 @@ from utils.useful import BaseEmbed, print_exception
 class ErrorHandler(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.error_cooldown = commands.CooldownMapping.from_cooldown(1, 20, commands.BucketType.user)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
@@ -45,7 +46,7 @@ class ErrorHandler(commands.Cog):
                 description=f"You're on cooldown. Retry after `{error.retry_after}` seconds"))
         else:
             if template := await self.generate_signature_error(ctx, error):
-                await ctx.send(embed=BaseEmbed.to_error(description=template))
+                await ctx.send(embed=template)
             else:
                 await ctx.send(embed=BaseEmbed.to_error(description=f"{error}"))
                 print_exception(f'Ignoring exception in command {ctx.command}:', error)
@@ -73,7 +74,7 @@ class ErrorHandler(commands.Cog):
             return
         help_com = self.bot.help_command
         help_com.context = ctx
-        real_signature = help_com.get_command_signature(command).replace("`", "")
+        real_signature = help_com.get_command_signature(command, ctx)
         pos = 0
         for word in real_signature.split(" "):  # by this logic, getting pos = 0 isn't possible
             filtered = re.sub("<|>|\[|\]|\.", "", word)
@@ -84,17 +85,25 @@ class ErrorHandler(commands.Cog):
         target = list_sig[pos]
         target_list = list(target)
         alpha_index = [i for i, a in enumerate(target) if a.isalpha()]
-        target_list[min(alpha_index)] = target_list[min(alpha_index)].capitalize()
+        minimum, maximum = min(alpha_index), max(alpha_index)
+        target_list[minimum] = target_list[minimum].capitalize()
         list_sig[pos] = "".join(target_list)
         space = " " * sum([len(x) + 1 for x in list_sig[:pos]])
-        offset = " " * int((min(alpha_index) + 1 + (max(alpha_index) - min(alpha_index))) / 2)
-
-        template = f"{error}" \
-                   f"```prolog\n" \
-                   f"{' '.join(list_sig)}\n" \
-                   f"{space}{offset}^\n" \
-                   f"```"
-        return template
+        offset = " " * int((minimum + 1 + (maximum - minimum)) / 2)
+        embed = BaseEmbed.to_error(description=f"```{error}```\n")
+        embed.description += f"**Errored at**\n" \
+                             f"```prolog\n" \
+                             f"{' '.join(list_sig)}\n" \
+                             f"{space}{offset}^\n" \
+                             f"```\n"
+        cooldown = self.error_cooldown
+        bucket = cooldown.get_bucket(ctx.message)
+        if not bucket.update_rate_limit():
+            if (demo := help_com.get_demo(command)) and isinstance(error, commands.MissingRequiredArgument):
+                embed.description += "**Command Example**"
+                embed.set_image(url=demo)
+        embed.set_footer(icon_url=ctx.guild.me.avatar_url, text="The argument that was capitalize is the error.")
+        return embed
 
 
 def setup(bot):

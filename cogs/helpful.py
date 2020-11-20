@@ -1,7 +1,7 @@
 import contextlib
 import inspect
 import json
-import os
+import re
 import discord
 import humanize
 import datetime
@@ -147,16 +147,32 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         filtered_mapping = {cog: self.filter_commands(mapping[cog], sort=True) for cog in mapping}
         return filtered_mapping
 
-    def get_command_signature(self, command):
+    def get_command_signature(self, command, ctx=None):
         """Method to return a commands name and signature"""
-        if not command.signature and not command.parent:
-            return f'`{self.clean_prefix}{command.name}`'
-        if command.signature and not command.parent:
-            return f'`{self.clean_prefix}{command.name}` `{command.signature}`'
-        if not command.signature and command.parent:
-            return f'`{self.clean_prefix}{command.parent}` `{command.name}`'
+        if not ctx:
+            if not command.signature and not command.parent:
+                return f'`{self.clean_prefix}{command.name}`'
+            if command.signature and not command.parent:
+                return f'`{self.clean_prefix}{command.name}` `{command.signature}`'
+            if not command.signature and command.parent:
+                return f'`{self.clean_prefix}{command.parent}` `{command.name}`'
+            else:
+                return f'`{self.clean_prefix}{command.parent}` `{command.name}` `{command.signature}`'
         else:
-            return f'`{self.clean_prefix}{command.parent}` `{command.name}` `{command.signature}`'
+            def get_invoke_with():
+                msg = ctx.message.content
+                escape = "\\"
+                prefixmax = re.match(f'{escape}{escape.join(ctx.prefix)}', msg).regs[0][1]
+                return msg[prefixmax:msg.rindex(ctx.invoked_with)]
+
+            if not command.signature and not command.parent:
+                return f'{ctx.prefix}{ctx.invoked_with}'
+            if command.signature and not command.parent:
+                return f'{ctx.prefix}{ctx.invoked_with} {command.signature}'
+            if not command.signature and command.parent:
+                return f'{ctx.prefix}{get_invoke_with()}{ctx.invoked_with}'
+            else:
+                return f'{ctx.prefix}{get_invoke_with()}{ctx.invoked_with} {command.signature}'
 
     def get_help(self, command, brief=True):
         """Gets the command short_doc if brief is True while getting the longer help if it is false"""
