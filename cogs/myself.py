@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord.ext.commands import NotOwner, Greedy
+from discord.ext.commands import Greedy
 from utils.useful import try_call, BaseEmbed, AfterGreedy
 from utils.new_converters import ValidCog
 
@@ -10,9 +10,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         self.bot = bot
 
     async def cog_check(self, ctx):
-        if not await ctx.bot.is_owner(ctx.author):
-            raise NotOwner('You do not own this bot.')
-        return True
+        return await commands.is_owner().predicate(ctx)
 
     @commands.Cog.listener()
     async def on_message_edit(self, before, after):
