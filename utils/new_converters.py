@@ -15,7 +15,7 @@ class FetchUser(commands.Converter):
             return await commands.UserConverter().convert(ctx, argument)
         except Exception as e:
             e.converter = self.__class__
-            raise e from None
+            raise e
 
 
 class CleanListGreedy:
