@@ -96,10 +96,10 @@ class ErrorHandler(commands.Cog):
                              f"{' '.join(list_sig)}\n" \
                              f"{space}{offset}^\n" \
                              f"```\n"
-        cooldown = self.error_cooldown
-        bucket = cooldown.get_bucket(ctx.message)
-        if not bucket.update_rate_limit():
-            if (demo := help_com.get_demo(command)) and isinstance(error, commands.MissingRequiredArgument):
+        if (demo := help_com.get_demo(command)) and isinstance(error, commands.MissingRequiredArgument):
+            cooldown = self.error_cooldown
+            bucket = cooldown.get_bucket(ctx.message)
+            if not bucket.update_rate_limit():
                 embed.description += "**Command Example**"
                 embed.set_image(url=demo)
         embed.set_footer(icon_url=ctx.guild.me.avatar_url, text="The argument that was capitalize is the error.")
