@@ -4,7 +4,7 @@ import datetime
 import random
 from discord.ext import commands
 from collections import namedtuple
-from utils.useful import try_call
+from utils.useful import try_call, call
 from utils.new_converters import FetchUser
 from typing import Union
 
@@ -14,7 +14,7 @@ class Useful(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def parse_date(self, token):
+    def parse_date(self, token):
         token_epoch = 1293840000
         bytes_int = base64.standard_b64decode(token + "==")
         decoded = int.from_bytes(bytes_int, "big")
@@ -40,15 +40,15 @@ class Useful(commands.Cog):
             user_bytes = user.encode()
             user_id_decoded = base64.b64decode(user_bytes)
             return user_id_decoded.decode("ascii")
-        str_id = await try_call(decode_user, Exception, args=(token_part[0],))
+        str_id = call(decode_user, token_part[0])
         if not str_id or not str_id.isdigit():
             return await ctx.send("Invalid user")
         user_id = int(str_id)
-        coro_user = try_call(self.bot.fetch_user(user_id), discord.NotFound)
+        coro_user = try_call(self.bot.fetch_user, user_id, exception=discord.NotFound)
         member = ctx.guild.get_member(user_id) or self.bot.get_user(user_id) or await coro_user
         if not member:
             return await ctx.send("Invalid user")
-        timestamp = await try_call(self.parse_date(token_part[1]), Exception) or "Invalid date"
+        timestamp = call(self.parse_date, token_part[1]) or "Invalid date"
 
         embed = discord.Embed(title=f"{member.display_name}'s token",
                               description=f"**User:** `{member}`\n"

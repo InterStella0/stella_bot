@@ -276,7 +276,7 @@ class FindBot(commands.Cog, name="Bots"):
                 member = get_member(int(result["id"]))
                 six_days = datetime.datetime.utcnow() - datetime.timedelta(days=6)
                 if not member and message.created_at > six_days:
-                    member = await try_call(self.bot.fetch_user(int(result["id"])), discord.NotFound)
+                    member = await try_call(self.bot.fetch_user, int(result["id"]), exception=discord.NotFound)
                     if all((reason, member and member.bot and str(member.id) not in self.bot.pending_bots)):
                         if str(member.id) not in self.bot.confirmed_bots:
                             await self.update_pending(
@@ -300,7 +300,7 @@ class FindBot(commands.Cog, name="Bots"):
                                              joined_at=member.joined_at)
                         await self.update_confirm(newAddBot)
                     return
-                member = await try_call(self.bot.fetch_user(int(result["id"])), discord.NotFound)
+                member = await try_call(self.bot.fetch_user, int(result["id"]), exception=discord.NotFound)
             if all((reason, member and member.bot)):
                 join = None
                 if isinstance(member, discord.Member):
@@ -370,7 +370,7 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.cooldown(1, 5, BucketType.user)
     async def whoadd(self, ctx, bot: BotAdded):
         data = bot
-        author = await try_call(commands.UserConverter().convert(ctx, str(data.author)), UserNotFound)
+        author = await try_call(commands.UserConverter().convert, ctx, str(data.author), exception=UserNotFound)
         embed = discord.Embed(title=f"{data.bot}",
                               color=self.bot.color)
         request = default_date(data.requested_at) if data.requested_at else None

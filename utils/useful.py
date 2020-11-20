@@ -11,14 +11,12 @@ from discord.utils import maybe_coroutine
 from discord.ext import commands, menus
 
 
-async def try_call(code, exception, ret=False, args: tuple = (), kwargs: dict = None):
+async def try_call(method, *args, exception=Exception, ret=False, **kwargs):
     """one liner method that handles all errors in a single line which returns None, or Error instance depending on ret
        value.
     """
-    if kwargs is None:
-        kwargs = {}
     try:
-        return await maybe_coroutine(code, *args, **kwargs) if args or kwargs else await code
+        return await maybe_coroutine(method, *args, **kwargs)
     except exception as e:
         return (None, e)[ret]
 
