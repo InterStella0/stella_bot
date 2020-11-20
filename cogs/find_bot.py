@@ -58,6 +58,14 @@ class BotAdded:
         return str(self.bot or "")
 
 
+async def pprefix(ctx, prefix):
+    if re.search("<@(!?)([0-9]*)>", prefix):
+        with contextlib.suppress(discord.NotFound):
+            user = await commands.UserConverter().convert(ctx, re.sub(" ", "", prefix))
+            return f"@{user.display_name}"
+    return prefix
+
+
 class AllPrefixes(ListPageSource):
     """Menu for allprefix command."""
     def __init__(self, data):
@@ -67,16 +75,7 @@ class AllPrefixes(ListPageSource):
         key = "(\u200b|\u200b)"
         offset = menu.current_page * self.per_page
 
-        async def pprefix(prefix):
-            if re.search("<@(!?)([0-9]*)>", prefix):
-                try:
-                    user = await commands.UserConverter().convert(menu.ctx, re.sub(" ", "", prefix))
-                    return f"@{user.display_name}"
-                except:
-                    pass
-            return prefix
-
-        contents = [f'`{i + 1}. {b} {key} {await pprefix(b.prefix)}`' for i, b in enumerate(entries, start=offset)]
+        contents = [f'`{i + 1}. {b} {key} {await pprefix(menu.ctx, b.prefix)}`' for i, b in enumerate(entries, start=offset)]
         high = max(cont.index(key) for cont in contents)
         reform = [high - cont.index(key) for cont in contents]
         true_form = [x.replace(key, f'{" " * off} |') for x, off in zip(contents, reform)]
@@ -368,13 +367,13 @@ class FindBot(commands.Cog, name="Bots"):
 
         async def get_member(bot_id):
             return ctx.guild.get_member(bot_id) or await self.bot.fetch_user(bot_id)
-        list_bots = [BotAdded.from_json(get_member(x["bot_id"]), **x) for x in total_list]
+        list_bots = [BotAdded.from_json(await get_member(x["bot_id"]), **x) for x in total_list]
         embed = BaseEmbed.default(ctx, title=plural(f"{author}'s bot(s) owned", len(list_bots)))
         for dbot in list_bots:
             bot_id = dbot.bot.id
             value = ""
             if bprefix := await try_call(BotPrefix.convert, ctx, str(bot_id)):
-                value += f"**Bot Prefix:** `{self.clean_prefix(bprefix.prefix)}`"
+                value += f"**Bot Prefix:** `{await self.clean_prefix(ctx, bprefix.prefix)}`"
             if buse := await try_call(BotUsage.convert, ctx, str(bot_id)):
                 value += f"**Bot Usage:** `{buse.count}`"
             if value:
@@ -411,7 +410,8 @@ class FindBot(commands.Cog, name="Bots"):
 
         await ctx.send(embed=embed)
 
-    def clean_prefix(self, prefix):
+    async def clean_prefix(self, ctx, prefix):
+        prefix = await pprefix(ctx, prefix)
         return re.sub("`", "`\u200b", prefix)
 
     @commands.command(aliases=["wp", "whatprefixes"],
@@ -420,7 +420,7 @@ class FindBot(commands.Cog, name="Bots"):
                            "This also does not know it's aliases prefixes.")
     @commands.guild_only()
     async def whatprefix(self, ctx, member: BotPrefix):
-        prefix = self.clean_prefix(member.prefix)
+        prefix = await self.clean_prefix(ctx, member.prefix)
         embed = BaseEmbed.default(ctx,
                                   title=f"{member}'s Prefix",
                                   description=f"`{prefix}`")
@@ -433,7 +433,7 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.guild_only()
     async def prefixuse(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
-        prefix = self.clean_prefix(prefix)
+        prefix = await self.clean_prefix(ctx, prefix)
         desk = plural(f"There (is/are) `{len(instance_bot)}` bot(s) that use `{prefix}` as prefix", len(instance_bot))
         await ctx.send(embed=BaseEmbed.default(ctx, description=desk))
 
@@ -453,7 +453,7 @@ class FindBot(commands.Cog, name="Bots"):
     async def prefixbot(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
-        prefix = self.clean_prefix(prefix)
+        prefix = await self.clean_prefix(ctx, prefix)
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
         await ctx.send(embed=BaseEmbed.default(ctx,
                                                description=plural(desk, len(list_bot))))
