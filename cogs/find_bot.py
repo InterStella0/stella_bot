@@ -62,7 +62,7 @@ async def pprefix(ctx, prefix):
     if re.search("<@(!?)([0-9]*)>", prefix):
         with contextlib.suppress(discord.NotFound):
             user = await commands.UserConverter().convert(ctx, re.sub(" ", "", prefix))
-            return f"@{user.display_name}"
+            return f"@{user.display_name} "
     return prefix
 
 
@@ -368,16 +368,16 @@ class FindBot(commands.Cog, name="Bots"):
         async def get_member(bot_id):
             return ctx.guild.get_member(bot_id) or await self.bot.fetch_user(bot_id)
         list_bots = [BotAdded.from_json(await get_member(x["bot_id"]), **x) for x in total_list]
-        embed = BaseEmbed.default(ctx, title=plural(f"{author}'s bot(s) owned", len(list_bots)))
+        embed = BaseEmbed.default(ctx, title=plural(f"{author}'s bot(s)", len(list_bots)))
         for dbot in list_bots:
             bot_id = dbot.bot.id
             value = ""
-            if bprefix := await try_call(BotPrefix.convert, ctx, str(bot_id)):
-                value += f"**Bot Prefix:** `{await self.clean_prefix(ctx, bprefix.prefix)}`"
             if buse := await try_call(BotUsage.convert, ctx, str(bot_id)):
-                value += f"**Bot Usage:** `{buse.count}`"
+                value += f"**Usage:** `{buse.count}`\n"
+            if bprefix := await try_call(BotPrefix.convert, ctx, str(bot_id)):
+                value += f"**Prefix:** `{await self.clean_prefix(ctx, bprefix.prefix)}`"
             if value:
-                embed.add_field(name=dbot, value=value)
+                embed.add_field(name=dbot, value=value, inline=False)
         embed.set_thumbnail(url=author.avatar_url)
         if not list_bots:
             embed.description = f"{author} doesnt own any bot here."
