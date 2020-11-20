@@ -124,16 +124,6 @@ async def on_ready():
     print("bot is ready")
 
 
-@bot.group(invoke_without_command=True, aliases=["cpp", "bruh"])
-async def cp(ctx, args):
-    pass
-
-
-@cp.command(aliases=["b", "bb", "bbb"])
-async def pp(ctx, args):
-    pass
-
-
 @bot.event
 async def on_message(message):
     if re.fullmatch("<@(!)?661466532605460530>", message.content):
