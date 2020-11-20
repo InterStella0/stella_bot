@@ -103,13 +103,17 @@ class BotAddedList(ListPageSource):
         return embed
 
 
-def is_user(self, m):
+def is_user(_, m):
     """Event check for returning true if it's a bot."""
     return not m.author.bot
 
 
 def command_count_check(self, message):
     return self.compiled_pref and not message.author.bot and message.guild
+
+
+def dpy_bot(_, member):
+    return member.bot and member.guild.id == 336642139381301249
 
 
 class FindBot(commands.Cog, name="Bots"):
@@ -133,7 +137,7 @@ class FindBot(commands.Cog, name="Bots"):
         self.compiled_pref = compile_prefix(sorted(temp))
 
     @commands.Cog.listener("on_member_join")
-    @event_check(lambda s, m: m.bot and m.guild.id == 336642139381301249)
+    @event_check(dpy_bot)
     async def join_bot_tracker(self, member):
         """Tracks when a bot joins in discord.py where it logs all the BotAdded information."""
         if member.id in self.bot.pending_bots:
@@ -142,6 +146,13 @@ class FindBot(commands.Cog, name="Bots"):
             await self.bot.pool_pg.execute("DELETE FROM pending_bots WHERE bot_id = $1", member.id)
         else:
             await self.update_confirm(BotAdded.from_json(member, joined_at=member.joined_at))
+
+    @commands.Cog.listener("on_member_remove")
+    @event_check(dpy_bot)
+    async def remove_bot_tracker(self, member):
+        if member.id in self.bot.confirmed_bots:
+            await self.bot.pool_pg.execute("DELETE FROM confirmed_bots WHERE bot_id=$1", member.id)
+            self.bot.confirmed_bots.remove(member.id)
 
     async def update_prefix_bot(self, message, func, prefix):
         """Updates the prefix of a bot, or multiple bot where it waits for the bot to respond. It updates in the database."""
@@ -354,12 +365,23 @@ class FindBot(commands.Cog, name="Bots"):
         query = "SELECT * FROM {}_bots WHERE author_id=$1"
         total_list = [await self.bot.pool_pg.fetch(query.format(x), author.id) for x in ("pending", "confirmed")]
         total_list = list(itertools.chain.from_iterable(total_list))
-        list_bots = [ctx.guild.get_member(x["bot_id"]) or await self.bot.fetch_user(x["bot_id"]) for x in total_list]
-        embed = discord.Embed(title=f"{author}'s Bots", color=self.bot.color)
+
+        async def get_member(bot_id):
+            return ctx.guild.get_member(bot_id) or await self.bot.fetch_user(bot_id)
+        list_bots = [BotAdded.from_json(get_member(x["bot_id"]), **x) for x in total_list]
+        embed = BaseEmbed.default(ctx, title=plural(f"{author}'s bot(s) owned", len(list_bots)))
+        for dbot in list_bots:
+            bot_id = dbot.bot.id
+            value = ""
+            if bprefix := await try_call(BotPrefix.convert, ctx, str(bot_id)):
+                value += f"**Bot Prefix:** `{self.clean_prefix(bprefix.prefix)}`"
+            if buse := await try_call(BotUsage.convert, ctx, str(bot_id)):
+                value += f"**Bot Usage:** `{buse.count}`"
+            if value:
+                embed.add_field(name=dbot, value=value)
         embed.set_thumbnail(url=author.avatar_url)
-        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar_url)
-        embed.add_field(name="Bots Owned:",
-                        value=", ".join(str(x) for x in list_bots) or f"{author} doesnt own any bot here.")
+        if not list_bots:
+            embed.description = f"{author} doesnt own any bot here."
         await ctx.send(embed=embed)
 
     @commands.command(aliases=["whoowns", "whosebot", "whoadds", "whoadded"],
