@@ -45,14 +45,14 @@ class BotAdded:
             with contextlib.suppress(commands.BadArgument):
                 if user := await inst.convert(ctx, argument):
                     if not user.bot:
-                        raise NotBot(user)
+                        raise NotBot(user, converter=cls)
                     for attribute in ("pending", "confirmed")[isinstance(inst, commands.MemberConverter):]:
                         attribute += "_bots"
                         if user.id in getattr(ctx.bot, attribute):
                             data = await ctx.bot.pool_pg.fetchrow(f"SELECT * FROM {attribute} WHERE bot_id = $1", user.id)
                             return cls.from_json(user, **data)
-                    raise NotInDatabase(user)
-        raise BotNotFound(argument)
+                    raise NotInDatabase(user, converter=cls)
+        raise BotNotFound(argument, converter=cls)
 
     def __str__(self):
         return str(self.bot or "")

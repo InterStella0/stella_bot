@@ -9,9 +9,13 @@ from utils.useful import unpack
 class FetchUser(commands.Converter):
     """Glorified fetch_user"""
     async def convert(self, ctx, argument):
-        if argument.isdigit():
-            return await ctx.bot.fetch_user(int(argument))
-        return await commands.UserConverter().convert(ctx, argument)
+        try:
+            if argument.isdigit():
+                return await ctx.bot.fetch_user(int(argument))
+            return await commands.UserConverter().convert(ctx, argument)
+        except Exception as e:
+            e.converter = self.__class__
+            raise e from None
 
 
 class CleanListGreedy:
@@ -24,7 +28,7 @@ class CleanListGreedy:
         unclean = [*unpack(greedy_list)]
         final = _unique(unclean)
         if not final:
-            raise ThisEmpty(cls.__name__)
+            raise ThisEmpty(cls.__name__, converter=cls)
         return final
 
 
@@ -44,7 +48,7 @@ class ValidCog(CleanListGreedy):
                 if key == "all":
                     return [x for x in valid_cog if key != x]
                 return key
-        raise NotValidCog(argument)
+        raise NotValidCog(argument, converter=cls)
 
 
 class IsBot(commands.Converter):
@@ -52,7 +56,7 @@ class IsBot(commands.Converter):
     async def convert(self, ctx, argument):
         member = await commands.MemberConverter().convert(ctx, argument)
         if not member.bot:
-            raise NotBot(member)
+            raise NotBot(member, converter=self.__class__)
         return member
 
 
@@ -74,7 +78,7 @@ class BotData:
 
         if data := await ctx.bot.pool_pg.fetchrow(f"SELECT * FROM {cls.name} WHERE bot_id=$1", member.id):
             return member, data
-        raise NotInDatabase(member)
+        raise NotInDatabase(member, converter=cls)
 
 
 class BotPrefix(BotData):

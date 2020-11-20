@@ -45,8 +45,8 @@ class BaseEmbed(discord.Embed):
         return instance
 
     @classmethod
-    def to_error(cls, color=discord.Color.red(), **kwargs):
-        return cls(color=color, **kwargs)
+    def to_error(cls, title="Error", color=discord.Color.red(), **kwargs):
+        return cls(title=title, color=color, **kwargs)
 
 
 class AfterGreedy(commands.Command):
@@ -133,7 +133,7 @@ def search_prefix(array_result, content_buffer):
 
 @dataclass
 class DecoStore:
-    """Class that stores event callbacks for the source command"""
+    """Class that stores event callbacks for the source command."""
     functions: dict = field(default_factory=dict)
 
     def get(self, content):
@@ -148,7 +148,7 @@ decorator_store = DecoStore()
 
 
 def event_check(func):
-    """Event decorator check"""
+    """Event decorator check."""
     def check(method):
         decorator_store.update(method)
 
@@ -161,11 +161,13 @@ def event_check(func):
 
 
 def print_exception(text, error):
+    """Prints the exception with proper traceback."""
     print(text, file=sys.stderr)
     traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
 
 def plural(text, size):
+    """Auto corrects text to show plural or singular depending on the size number."""
     logic = size == 1
     target = (("(s)", ("s", "")), ("(is/are)", ("are", "is")))
     for x, y in target:

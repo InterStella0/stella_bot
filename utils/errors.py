@@ -1,31 +1,37 @@
 from discord.ext import commands
 
 
-class NotInDatabase(commands.UserInputError):
-    def __init__(self, _id):
-        super().__init__(f"{_id} is not in the database.")
+class ArgumentBaseError(commands.UserInputError):
+    def __init__(self, converter=None, **kwargs):
+        super().__init__(**kwargs)
+        self.converter = converter
 
 
-class NotValidCog(commands.UserInputError):
-    def __init__(self, cog):
-        super().__init__(f"{cog} is not a valid cog")
+class NotInDatabase(ArgumentBaseError):
+    def __init__(self, _id, **kwargs):
+        super().__init__(message=f"It appears that `{_id}` is not in the database. Try someone else.", **kwargs)
 
 
-class BotNotFound(commands.UserInputError):
-    def __init__(self, _id):
-        super().__init__(f"{_id} not found.")
+class NotValidCog(ArgumentBaseError):
+    def __init__(self, cog, **kwargs):
+        super().__init__(message=f"`{cog}` is not a valid cog.", **kwargs)
 
 
-class NotBot(commands.UserInputError):
-    def __init__(self, _id):
-        super().__init__(f"{_id} is not a bot")
+class BotNotFound(ArgumentBaseError):
+    def __init__(self, _id, **kwargs):
+        super().__init__(message=f"`{_id}` not found.", **kwargs)
+
+
+class NotBot(ArgumentBaseError):
+    def __init__(self, _id, **kwargs):
+        super().__init__(message=f"`{_id}` is not a bot. Give me a bot please.", **kwargs)
 
 
 class NotInDpy(commands.UserInputError):
     def __init__(self):
-        super().__init__(f"This command is only allowed in discord.py")
+        super().__init__(message=f"This command is only allowed in `discord.py` server.")
 
 
-class ThisEmpty(commands.UserInputError):
-    def __init__(self, arg):
-        super().__init__(f"{arg} is empty.")
+class ThisEmpty(ArgumentBaseError):
+    def __init__(self, arg, **kwargs):
+        super().__init__(message=f"No valid argument was converted. Which makes `{arg}` as empty.", **kwargs)
