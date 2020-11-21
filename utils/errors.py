@@ -35,3 +35,8 @@ class NotInDpy(commands.UserInputError):
 class ThisEmpty(ArgumentBaseError):
     def __init__(self, arg, **kwargs):
         super().__init__(message=f"No valid argument was converted. Which makes {arg} as empty.", **kwargs)
+
+
+class UserNotFound(ArgumentBaseError):
+    def __init__(self, arg, **kwargs):
+        super().__init__(message=f"I can't find {arg}, is this even a valid user?", **kwargs)

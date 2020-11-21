@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
-from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase
+from discord.ext.commands import MemberNotFound
+from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound
 from discord.utils import _unique
 from itertools import chain
 from utils.useful import unpack
@@ -13,9 +14,9 @@ class FetchUser(commands.Converter):
             if argument.isdigit():
                 return await ctx.bot.fetch_user(int(argument))
             return await commands.UserConverter().convert(ctx, argument)
-        except Exception as e:
+        except commands.UserNotFound as e:
             e.converter = self.__class__
-            raise e
+            raise UserNotFound(argument, converter=self.__class__) from None
 
 
 class CleanListGreedy:
@@ -54,10 +55,14 @@ class ValidCog(CleanListGreedy):
 class IsBot(commands.Converter):
     """Raises an error if the member is not a bot"""
     async def convert(self, ctx, argument):
-        member = await commands.MemberConverter().convert(ctx, argument)
-        if not member.bot:
-            raise NotBot(member, converter=self.__class__)
-        return member
+        try:
+            member = await commands.MemberConverter().convert(ctx, argument)
+        except MemberNotFound as e:
+            raise UserNotFound(argument, converter=self) from None
+        else:
+            if not member.bot:
+                raise NotBot(member, converter=self)
+            return member
 
 
 class BotData:
@@ -74,8 +79,7 @@ class BotData:
 
     @classmethod
     async def convert(cls, ctx, argument):
-        member = await IsBot().convert(ctx, argument)
-
+        member = await IsBot.convert(cls, ctx, argument)
         if data := await ctx.bot.pool_pg.fetchrow(f"SELECT * FROM {cls.name} WHERE bot_id=$1", member.id):
             return member, data
         raise NotInDatabase(member, converter=cls)
