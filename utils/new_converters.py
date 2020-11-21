@@ -42,6 +42,7 @@ class ValidCog(CleanListGreedy):
                      "myself": ["stella", "my", "self", "m"],
                      "find_bot": ["find", "f", "bot"],
                      "error_handler": ["error", "e", "err", "error_handlers"],
+                     "library_override": ["library_override", "library", "lib", "l"],
                      "all": ["al", "a", "*"]}
 
         for key in valid_cog:

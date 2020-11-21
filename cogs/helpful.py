@@ -209,7 +209,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     async def send_command_help(self, command):
         """Gets invoke when `uwu help <command>` is invoked."""
-        await self.get_destination().reply(embed=self.get_command_help(command))
+        await self.context.reply(embed=self.get_command_help(command), allowed_mentions=discord.AllowedMentions(replied_user=False))
 
     async def send_cog_help(self, cog):
         """Gets invoke when `uwu help <cog>` is invoked."""

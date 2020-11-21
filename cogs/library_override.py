@@ -107,7 +107,7 @@ async def send(self, content=None, *, tts=False, embed=None, file=None,
     return ret
 
 
-async def reply(self, content, **kwargs):
+async def reply(self, content=None, **kwargs):
     return await self.message.reply(content, **kwargs)
 
 
