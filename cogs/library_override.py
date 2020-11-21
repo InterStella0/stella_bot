@@ -195,17 +195,11 @@ def allowed_mentions__repr__(self):
 
 @classmethod
 def allowed_mentions_all(cls):
-    """A factory method that returns a :class:`AllowedMentions` with all fields explicitly set to ``True``
-    .. versionadded:: 1.5
-    """
     return cls(everyone=True, users=True, roles=True, replied_user=True)
 
 
 @classmethod
 def allowed_mentions_none(cls):
-    """A factory method that returns a :class:`AllowedMentions` with all fields set to ``False``
-    .. versionadded:: 1.5
-    """
     return cls(everyone=False, users=False, roles=False, replied_user=False)
 
 
@@ -217,33 +211,10 @@ discord.AllowedMentions.none = allowed_mentions_none
 
 @classmethod
 def from_message(cls, message):
-    """Creates a :class:`MessageReference` from an existing :class:`Message`.
-    .. versionadded:: 2.0
-    Parameters
-    ----------
-    message: :class:`Message`
-        The message to be converted into a reference.
-    Returns
-    -------
-    :class:`MessageReference`
-        A reference to the message.
-    """
     return cls(message._state, message_id=message.id, channel_id=message.channel.id, guild_id=message.guild and message.guild.id)
 
 
 def messagereference_to_dict(self, specify_channel=False):
-    """Converts the message reference to a dict, for transmission via the gateway.
-    .. versionadded:: 2.0
-    Parameters
-    -------
-    specify_channel: Optional[:class:`bool`]
-        Whether to include the channel ID in the returned object.
-        Defaults to False.
-    Returns
-    -------
-    :class:`dict`
-        The reference as a dict.
-    """
     result = {'message_id': self.message_id} if self.message_id is not None else {}
     if specify_channel:
         result['channel_id'] = self.channel_id
