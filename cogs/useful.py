@@ -34,7 +34,7 @@ class Useful(commands.Cog):
     async def parse_token(self, ctx, token):
         token_part = token.split(".")
         if len(token_part) != 3:
-            return await ctx.send("Invalid token")
+            return await ctx.maybe_reply("Invalid token")
 
         def decode_user(user):
             user_bytes = user.encode()
@@ -42,12 +42,12 @@ class Useful(commands.Cog):
             return user_id_decoded.decode("ascii")
         str_id = call(decode_user, token_part[0])
         if not str_id or not str_id.isdigit():
-            return await ctx.send("Invalid user")
+            return await ctx.maybe_reply("Invalid user")
         user_id = int(str_id)
         coro_user = try_call(self.bot.fetch_user, user_id, exception=discord.NotFound)
         member = ctx.guild.get_member(user_id) or self.bot.get_user(user_id) or await coro_user
         if not member:
-            return await ctx.send("Invalid user")
+            return await ctx.maybe_reply("Invalid user")
         timestamp = call(self.parse_date, token_part[1]) or "Invalid date"
 
         embed = discord.Embed(title=f"{member.display_name}'s token",
@@ -61,7 +61,7 @@ class Useful(commands.Cog):
         embed.set_thumbnail(url=member.avatar_url)
         embed.set_footer(text=f"Requested by {ctx.author}",
                          icon_url=ctx.author.avatar_url)
-        await ctx.send(embed=embed)
+        await ctx.maybe_reply(embed=embed)
 
     @commands.command(aliases=["gt", "gtoken"],
                       brief="Generate a new token given a user.",
@@ -105,7 +105,7 @@ class Useful(commands.Cog):
             embed.add_field(name=name, value=value, inline=False)
         embed.set_thumbnail(url=member.avatar_url)
         embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar_url)
-        await ctx.send(embed=embed)
+        await ctx.maybe_reply(embed=embed)
 
     @commands.command(aliases=["replycounts", "repliescount", "replyscounts", "threadcount"],
                       help="Finds the original message of a thread. This shows the amount of reply counts, the message itself, "

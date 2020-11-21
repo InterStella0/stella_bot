@@ -5,6 +5,7 @@ import asyncpg
 import json
 import datetime
 import utils.useful
+from utils.useful import StellaContext
 from discord.ext import commands
 from dotenv import load_dotenv
 from os.path import join, dirname
@@ -32,6 +33,8 @@ class StellaBot(commands.Bot):
         self.confirmed_bots = set()
         self.token = token
         self.existing_prefix = None
+        self._channel_cooldown = commands.CooldownMapping.from_cooldown(2, 1.5, commands.BucketType.channel)
+        self.too_speedy = False
 
     async def after_db(self):
         """Runs after the db is connected"""
@@ -86,6 +89,9 @@ class StellaBot(commands.Bot):
         """Gets the message from the cache"""
         return self._connection._get_message(message_id)
 
+    async def get_context(self, message, *, cls=None):
+        return await super().get_context(message, cls=StellaContext)
+
     def starter(self):
         """Starts the bot properly"""
         try:
@@ -117,6 +123,11 @@ bot_data = {"token": environ.get("TOKEN"),
             "owner_id": 591135329117798400}
 
 bot = StellaBot(**bot_data)
+
+
+@bot.listen("on_message")
+async def channel_messages(message):
+    bot._channel_cooldown.update_rate_limit(message)
 
 
 @bot.event

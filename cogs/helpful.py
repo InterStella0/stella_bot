@@ -228,7 +228,7 @@ class Helpful(commands.Cog):
     @commands.command(aliases=["ping", "p"],
                       help="Shows the bot latency from the discord websocket.")
     async def pping(self, ctx):
-        await ctx.send(embed=BaseEmbed.default(ctx,
+        await ctx.maybe_reply(embed=BaseEmbed.default(ctx,
                                                title="PP",
                                                description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`"))
 
@@ -236,7 +236,7 @@ class Helpful(commands.Cog):
                       help="Shows the bot uptime from when it was started.")
     async def uptime(self, ctx):
         c_uptime = datetime.datetime.utcnow() - self.bot.uptime
-        await ctx.send(embed=BaseEmbed.default(ctx,
+        await ctx.maybe_reply(embed=BaseEmbed.default(ctx,
                                                title="Uptime",
                                                description=f"Current uptime: `{humanize.precisedelta(c_uptime)}`"))
 
@@ -249,7 +249,7 @@ class Helpful(commands.Cog):
     async def source(self, ctx, *, content=None):
         source_url = 'https://github.com/InterStella0/stella_bot'
         if not content:
-            return await ctx.send(f"<{source_url}>")
+            return await ctx.maybe_reply(f"<{source_url}>")
         src, module = None, None
 
         def command_check(command):
@@ -278,12 +278,12 @@ class Helpful(commands.Cog):
             if not src:
                 func(content)
         if module is None:
-            return await ctx.send(f"Method {content} not found.")
+            return await ctx.maybe_reply(f"Method {content} not found.")
         lines, firstlineno = inspect.getsourcelines(src)
         location = module.replace('.', '/') + '.py'
 
         url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
-        await ctx.send(url)
+        await ctx.maybe_reply(url)
 
     def cog_unload(self):
         self.bot.help_command = self._default_help_command

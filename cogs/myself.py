@@ -42,7 +42,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
 
         outputs = [call(do_cog, ext, ret=True) or f"cogs.{ext} is {method}ed"
                    for ext in extensions]
-        await ctx.send(embed=BaseEmbed.default(ctx, description="\n".join(str(x) for x in outputs)))
+        await ctx.maybe_reply(embed=BaseEmbed.default(ctx, description="\n".join(str(x) for x in outputs)))
 
 
 def setup(bot):

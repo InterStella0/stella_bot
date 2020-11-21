@@ -107,10 +107,6 @@ async def send(self, content=None, *, tts=False, embed=None, file=None,
     return ret
 
 
-async def reply(self, content=None, **kwargs):
-    return await self.message.reply(content, **kwargs)
-
-
 def send_message(self, channel_id, content, *, tts=False, embed=None, nonce=None, allowed_mentions=None, message_reference=None):
     r = Route('POST', '/channels/{channel_id}/messages', channel_id=channel_id)
     payload = {}
@@ -172,7 +168,6 @@ class ModifiedAllowedMentions(AllowedMentions):
 
 
 Messageable.send = send
-Context.reply = reply
 HTTPClient.send_message = send_message
 HTTPClient.send_files = send_files
 discord.AllowedMentions = ModifiedAllowedMentions

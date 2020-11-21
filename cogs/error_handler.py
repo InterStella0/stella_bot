@@ -2,8 +2,8 @@ import discord
 import re
 import inspect
 import typing_inspect
+import contextlib
 from discord.ext import commands
-from utils import errors, useful
 from utils.useful import BaseEmbed, print_exception
 
 
@@ -14,14 +14,12 @@ class ErrorHandler(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        """The event triggered when an error is raised while invoking a command.
-        Parameters
-        ------------
-        ctx: commands.Context
-            The context used for command invocation.
-        error: commands.CommandError
-            The Exception raised.
-        """
+        """The event triggered when an error is raised while invoking a command."""
+        async def send_del(*args, **kwargs):
+            await ctx.reply(*args, delete_after=60, allowed_mentions=discord.AllowedMentions(replied_user=False), **kwargs)
+            if ctx.me.permissions_in(ctx.channel).manage_messages:
+                with contextlib.suppress(discord.NotFound):
+                    await ctx.message.delete(delay=60)
         if hasattr(ctx.command, 'on_error'):
             return
 
@@ -38,17 +36,17 @@ class ErrorHandler(commands.Cog):
             return
 
         if isinstance(error, commands.DisabledCommand):
-            await ctx.send(f'{ctx.command} has been disabled.')
+            await send_del(f'{ctx.command} has been disabled.')
 
         elif isinstance(error, commands.CommandOnCooldown):
-            await ctx.send(embed=BaseEmbed.to_error(
+            await send_del(embed=BaseEmbed.to_error(
                 title="Cooldown Error",
                 description=f"You're on cooldown. Retry after `{error.retry_after}` seconds"))
         else:
             if template := await self.generate_signature_error(ctx, error):
-                await ctx.send(embed=template)
+                await send_del(embed=template)
             else:
-                await ctx.send(embed=BaseEmbed.to_error(description=f"{error}"))
+                await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
                 print_exception(f'Ignoring exception in command {ctx.command}:', error)
 
     async def generate_signature_error(self, ctx, error):

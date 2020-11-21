@@ -368,7 +368,7 @@ class FindBot(commands.Cog, name="Bots"):
         if not author:
             author = ctx.author
         if author.bot:
-            return await ctx.send("That's a bot lol")
+            return await ctx.maybe_reply("That's a bot lol")
         query = "SELECT * FROM {}_bots WHERE author_id=$1"
         total_list = [await self.bot.pool_pg.fetch(query.format(x), author.id) for x in ("pending", "confirmed")]
         total_list = list(itertools.chain.from_iterable(total_list))
@@ -389,7 +389,7 @@ class FindBot(commands.Cog, name="Bots"):
         embed.set_thumbnail(url=author.avatar_url)
         if not list_bots:
             embed.description = f"{author} doesnt own any bot here."
-        await ctx.send(embed=embed)
+        await ctx.maybe_reply(embed=embed)
 
     @commands.command(aliases=["whoowns", "whosebot", "whoadds", "whoadded"],
                       brief="Shows who added the bot.",
@@ -416,7 +416,7 @@ class FindBot(commands.Cog, name="Bots"):
             if value:
                 embed.add_field(name=name, value=value, inline=False)
 
-        await ctx.send(embed=embed)
+        await ctx.maybe_reply(embed=embed)
 
     async def clean_prefix(self, ctx, prefix):
         prefix = await pprefix(ctx, prefix)
@@ -433,7 +433,7 @@ class FindBot(commands.Cog, name="Bots"):
                                   title=f"{member}'s Prefix",
                                   description=f"`{prefix}`")
 
-        await ctx.send(embed=embed)
+        await ctx.maybe_reply(embed=embed)
 
     @commands.command(aliases=["pu", "shares", "puse"],
                       brief="Shows the amount of bot that uses the same prefix.",
@@ -443,7 +443,7 @@ class FindBot(commands.Cog, name="Bots"):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         prefix = await self.clean_prefix(ctx, prefix)
         desk = plural(f"There (is/are) `{len(instance_bot)}` bot(s) that use `{prefix}` as prefix", len(instance_bot))
-        await ctx.send(embed=BaseEmbed.default(ctx, description=desk))
+        await ctx.maybe_reply(embed=BaseEmbed.default(ctx, description=desk))
 
     async def get_all_prefix(self, guild, prefix):
         """Quick function that gets the amount of bots that has the same prefix in a server."""
@@ -463,7 +463,7 @@ class FindBot(commands.Cog, name="Bots"):
         list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
         prefix = await self.clean_prefix(ctx, prefix)
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
-        await ctx.send(embed=BaseEmbed.default(ctx,
+        await ctx.maybe_reply(embed=BaseEmbed.default(ctx,
                                                description=plural(desk, len(list_bot))))
 
     @commands.command(aliases=["ap", "aprefix", "allprefixes"],
@@ -490,7 +490,7 @@ class FindBot(commands.Cog, name="Bots"):
                                   title=f"{bot}'s Usage",
                                   description=plural(f"`{bot.count}` command(s) has been called for **{bot}**.", bot.count))
 
-        await ctx.send(embed=embed)
+        await ctx.maybe_reply(embed=embed)
 
     @commands.command(aliases=["bot_info", "bi", "botinfos"],
                       brief="Shows the bot information such as bot owner, prefixes, command usage.",
@@ -523,7 +523,7 @@ class FindBot(commands.Cog, name="Bots"):
 
         embed.add_field(name="Created at", value=f"`{default_date(bot.created_at)}`")
         embed.add_field(name="Joined at", value=f"`{default_date(bot.joined_at)}`")
-        await ctx.send(embed=embed)
+        await ctx.maybe_reply(embed=embed)
 
     @commands.command(aliases=["rba", "recentbot", "recentadd"],
                       brief="Shows a list of bots that has been added in a day.",
@@ -535,7 +535,7 @@ class FindBot(commands.Cog, name="Bots"):
             return m.bot and m.joined_at > ctx.message.created_at - datetime.timedelta(days=1)
         members = {m.id: m for m in filter(predicate, ctx.guild.members)}
         if not members:
-            await ctx.send(embed=
+            await ctx.maybe_reply(embed=
                            BaseEmbed.default(ctx,
                                              title="Bots added today",
                                              description="Looks like there are no bots added in the span of 24 hours."))
@@ -564,7 +564,7 @@ class FindBot(commands.Cog, name="Bots"):
                 "title": "Recent Help Trigger",
                 "description": "There is no help command triggered recently."
             }
-        await ctx.send(embed=BaseEmbed.default(ctx, **embed_dict))
+        await ctx.maybe_reply(embed=BaseEmbed.default(ctx, **embed_dict))
 
 
 

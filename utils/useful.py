@@ -5,6 +5,7 @@ import ctypes
 import traceback
 import sys
 import functools
+from cogs.library_override import ModifiedAllowedMentions
 from dataclasses import dataclass, field
 from discord.ext.menus import First, Last, Button
 from discord.utils import maybe_coroutine
@@ -190,3 +191,16 @@ def plural(text, size):
     for x, y in target:
         text = text.replace(x, y[logic])
     return text
+
+
+class StellaContext(commands.Context):
+    async def maybe_reply(self, content=None, allowed_mentions=ModifiedAllowedMentions(replied_user=False), **kwargs):
+        bucket = self.bot._channel_cooldown.get_bucket(self.message)
+        is_speedy = bucket.update_rate_limit()
+        if is_speedy:
+            await self.reply(content, allowed_mentions=allowed_mentions, **kwargs)
+        else:
+            await self.send(content, **kwargs)
+
+    async def reply(self, content=None, **kwargs):
+        return await self.message.reply(content, **kwargs)
