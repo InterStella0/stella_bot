@@ -4,7 +4,7 @@ import datetime
 import random
 from discord.ext import commands
 from collections import namedtuple
-from utils.useful import try_call, call
+from utils.useful import try_call, call, BaseEmbed
 from utils.new_converters import FetchUser
 from typing import Union
 
@@ -106,6 +106,30 @@ class Useful(commands.Cog):
         embed.set_thumbnail(url=member.avatar_url)
         embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar_url)
         await ctx.send(embed=embed)
+
+    @commands.command(aliases=["replycounts", "repliescount", "replyscounts", "threadcount"],
+                      help="Finds the original message of a thread. This shows the amount of reply counts, the message itself, "
+                           "the url message of the thread and the author.",
+                      brief="Finds the original message of a thread.")
+    async def replycount(self, ctx, message: discord.Message):
+        def count_reply(m, replies=0):
+            if isinstance(m, discord.MessageReference):
+                return count_reply(m.cached_message, replies)
+            if isinstance(m, discord.Message):
+                if not m.reference:
+                    return m, replies
+                replies += 1
+                return count_reply(m.reference, replies)
+
+        msg, count = count_reply(message)
+        embed_dict = {
+            "title": "Reply Count",
+            "description": f"**Original:** `{msg.author}`\n"
+                           f"**Message:** `{msg.content}`\n"
+                           f"**Replies:** `{count}`\n"
+                           f"**Origin:** [`jump`]({msg.jump_url})"
+        }
+        await ctx.reply(embed=BaseEmbed.default(ctx, **embed_dict), allowed_mentions=discord.AllowedMentions(replied_user=False))
 
 
 def setup(bot):
