@@ -123,6 +123,7 @@ async def dpy_bot(self, member):
 class FindBot(commands.Cog, name="Bots"):
     def __init__(self, bot):
         self.bot = bot
+        self.help_trigger = {}
         valid_prefix = ("!", "?", "？", "<@(!?)80528701850124288> ")
         re_command = "(\{}|\{}|\{}|({}))addbot".format(*valid_prefix)
         re_bot = "[\s|\n]+(?P<id>[0-9]{17,19})[\s|\n]"
@@ -209,6 +210,8 @@ class FindBot(commands.Cog, name="Bots"):
         for x in "jsk", "help":
             if match := re.match("(?P<prefix>^.{{1,30}}?(?={}$))".format(x), message.content):
                 if x not in match["prefix"]:
+                    if x == "help":
+                        self.help_trigger.update({message.channel.id: message})
                     return await self.update_prefix_bot(message, locals()[f"check_{x}"], match["prefix"])
 
     @commands.Cog.listener("on_message")
@@ -542,6 +545,27 @@ class FindBot(commands.Cog, name="Bots"):
         member_data.sort(key=lambda x: x.joined_at)
         menu = MenuBase(source=BotAddedList(member_data), delete_message_after=True)
         await menu.start(ctx)
+
+    @commands.command(aliases=["rht", "recenthelp", "recenttrigger"],
+                      brief="Shows the last message that triggers a help command in a channel.",
+                      help="Shows the last message that triggers a help command in a channel that it was called from. "
+                           "Useful for finding out who's the annoying person that uses common prefix help command.")
+    async def recenthelptrigger(self, ctx):
+        if message := self.help_trigger.get(ctx.channel.id):
+            embed_dict = {
+                "title": "Recent Help Trigger",
+                "description": f"**Author:** `{message.author}`\n"
+                               f"**Message ID:** `{message.id}`\n"
+                               f"**Command:** `{message.content}`\n"
+                               f"**Message Link:** [`jump`]({message.jump_url})",
+            }
+        else:
+            embed_dict = {
+                "title": "Recent Help Trigger",
+                "description": "There is no help command triggered recently."
+            }
+        await ctx.send(embed=BaseEmbed.default(ctx, **embed_dict))
+
 
 
 def setup(bot):
