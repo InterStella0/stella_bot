@@ -68,27 +68,32 @@ def unpack(li: list):
 class MenuBase(menus.MenuPages):
     """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
        with a custom emoji, and keep the functionality."""
-    def __init__(self, source, **kwargs):
+    def __init__(self, source, dict_emoji=None, **kwargs):
         super().__init__(source, **kwargs)
         self.info = False
 
         EmojiB = namedtuple("EmojiB", "emoji position explain")
-        self.dict_emoji = {'\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
-                           EmojiB("<:before_fast_check:754948796139569224>", First(0), "Goes to the first page."),
+        def_dict_emoji = {'\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
+                          EmojiB("<:before_fast_check:754948796139569224>", First(0),
+                                 "Goes to the first page."),
 
-                           '\N{BLACK LEFT-POINTING TRIANGLE}\ufe0f':
-                           EmojiB("<:before_check:754948796487565332>", First(1), "Goes to the previous page."),
+                          '\N{BLACK LEFT-POINTING TRIANGLE}\ufe0f':
+                          EmojiB("<:before_check:754948796487565332>", First(1),
+                                 "Goes to the previous page."),
 
-                           '\N{BLACK RIGHT-POINTING TRIANGLE}\ufe0f':
-                           EmojiB("<:next_check:754948796361736213>", Last(1), "Goes to the next page."),
+                          '\N{BLACK RIGHT-POINTING TRIANGLE}\ufe0f':
+                          EmojiB("<:next_check:754948796361736213>", Last(1),
+                                 "Goes to the next page."),
 
-                           '\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
-                           EmojiB("<:next_fast_check:754948796391227442>", Last(2), "Goes to the last page."),
+                          '\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
+                          EmojiB("<:next_fast_check:754948796391227442>", Last(2),
+                                 "Goes to the last page."),
 
-                           '\N{BLACK SQUARE FOR STOP}\ufe0f':
-                           EmojiB("<:stop_check:754948796365930517>", Last(0), "Remove this message.")
-                           }
-
+                          '\N{BLACK SQUARE FOR STOP}\ufe0f':
+                          EmojiB("<:stop_check:754948796365930517>", Last(0),
+                                 "Remove this message.")
+                          }
+        self.dict_emoji = dict_emoji or def_dict_emoji
         for emoji in super().buttons:
             callback = super().buttons[emoji].action  # gets the function that would be called for that button
             if emoji.name not in self.dict_emoji:
@@ -99,6 +104,20 @@ class MenuBase(menus.MenuPages):
             self.dict_emoji[new_but.emoji] = new_but
             super().add_button(new_button)
             super().remove_button(emoji)
+
+    async def _get_kwargs_from_page(self, page):
+        value = await discord.utils.maybe_coroutine(self._source.format_page, self, page)
+        if isinstance(value, dict):
+            return value.update({'allowed_mentions': discord.AllowedMentions(replied_user=False)})
+        elif isinstance(value, str):
+            return {'content': value, 'embed': None, 'allowed_mentions': discord.AllowedMentions(replied_user=False)}
+        elif isinstance(value, discord.Embed):
+            return {'embed': value, 'content': None, 'allowed_mentions': discord.AllowedMentions(replied_user=False)}
+
+    async def send_initial_message(self, ctx, channel):
+        page = await self._source.get_page(0)
+        kwargs = await self._get_kwargs_from_page(page)
+        return await ctx.reply(**kwargs)
 
 
 def default_date(datetime_var):
@@ -152,7 +171,7 @@ def event_check(func):
 
         @functools.wraps(method)
         async def wrapper(*args, **kwargs):
-            if func(*args, **kwargs):
+            if await maybe_coroutine(func, *args, **kwargs):
                 await method(*args, **kwargs)
         return wrapper
     return check

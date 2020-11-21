@@ -46,7 +46,7 @@ class StellaBot(commands.Bot):
 
     def loading_cog(self):
         """Loads the cog"""
-        cogs = ("error_handler", "find_bot", "useful", "helpful", "myself", "library_override", "jishaku")
+        cogs = ("library_override", "error_handler", "find_bot", "useful", "helpful", "myself", "jishaku")
         for cog in cogs:
             ext = "cogs." if cog != "jishaku" else ""
             if error := call(self.load_extension, f"{ext}{cog}", ret=True):

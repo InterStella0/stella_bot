@@ -6,9 +6,9 @@ import discord
 import humanize
 import datetime
 from discord.ext import commands, menus
-from utils.useful import BaseEmbed
+from utils.useful import BaseEmbed, MenuBase
 from collections import namedtuple
-from discord.ext.menus import First, Last, Button, MenuPages
+from discord.ext.menus import First, Last, Button
 
 
 class CommandHelp:
@@ -17,45 +17,36 @@ class CommandHelp:
         self.brief = brief
 
 
-class HelpMenuBase(MenuPages):
+class HelpMenuBase(MenuBase):
     """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
        with a custom emoji, and keep the functionality."""
 
     def __init__(self, source, **kwargs):
-        super().__init__(source, **kwargs)
-        self.info = False
-
         EmojiB = namedtuple("EmojiB", "emoji position explain")
-        self.dict_emoji = {'\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
-                               EmojiB("<:before_fast_check:754948796139569224>", First(0),
-                                      "Goes to the first page."),
+        help_dict_emoji = {'\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
+                           EmojiB("<:before_fast_check:754948796139569224>", First(0),
+                                  "Goes to the first page."),
 
                            '\N{BLACK LEFT-POINTING TRIANGLE}\ufe0f':
-                               EmojiB("<:before_check:754948796487565332>", First(1), "Goes to the previous page."),
+                           EmojiB("<:before_check:754948796487565332>", First(1),
+                                  "Goes to the previous page."),
 
                            '\N{BLACK RIGHT-POINTING TRIANGLE}\ufe0f':
-                               EmojiB("<:next_check:754948796361736213>", Last(1), "Goes to the next page."),
+                           EmojiB("<:next_check:754948796361736213>", Last(1),
+                                  "Goes to the next page."),
 
                            '\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
-                               EmojiB("<:next_fast_check:754948796391227442>", Last(2), "Goes to the last page."),
+                           EmojiB("<:next_fast_check:754948796391227442>", Last(2),
+                                  "Goes to the last page."),
 
                            '\N{BLACK SQUARE FOR STOP}\ufe0f':
-                               EmojiB("<:stop_check:754948796365930517>", Last(0), "Remove this message."),
+                           EmojiB("<:stop_check:754948796365930517>", Last(0),
+                                  "Remove this message."),
 
                            '<:information_pp:754948796454010900>':
-                               EmojiB("<:information_pp:754948796454010900>", Last(4),
-                                      "Shows this infomation message.")}
-
-        for emoji in super().buttons:
-            callback = super().buttons[emoji].action  # gets the function that would be called for that button
-            if emoji.name not in self.dict_emoji:
-                continue
-            new_butO = self.dict_emoji[emoji.name]
-            new_button = Button(new_butO.emoji, callback, position=new_butO.position)
-            del self.dict_emoji[emoji.name]
-            self.dict_emoji[new_butO.emoji] = new_butO
-            super().add_button(new_button)
-            super().remove_button(emoji)
+                           EmojiB("<:information_pp:754948796454010900>", Last(4),
+                                  "Shows this infomation message.")}
+        super().__init__(source, dict_emoji=help_dict_emoji, **kwargs)
 
     async def show_page(self, page_number):
         self.info = False
@@ -90,7 +81,7 @@ class HelpMenu(HelpMenuBase):
                          name=f"You were on {pa} {curr}")
         nav = '\n'.join(f"{self.dict_emoji[e].emoji} {self.dict_emoji[e].explain}" for e in exists)
         embed.add_field(name="Navigation:", value=nav)
-        await self.message.edit(embed=embed)
+        await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
 
 class CogMenu(HelpMenuBase):
@@ -109,7 +100,7 @@ class CogMenu(HelpMenuBase):
                          name=f"You were on {pa} {curr}")
         nav = '\n'.join(f"{self.dict_emoji[e].emoji} {self.dict_emoji[e].explain}" for e in exists)
         embed.add_field(name="Navigation:", value=nav)
-        await self.message.edit(embed=embed)
+        await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
 
 class HelpCogSource(menus.ListPageSource):
@@ -218,7 +209,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     async def send_command_help(self, command):
         """Gets invoke when `uwu help <command>` is invoked."""
-        await self.get_destination().send(embed=self.get_command_help(command))
+        await self.get_destination().reply(embed=self.get_command_help(command))
 
     async def send_cog_help(self, cog):
         """Gets invoke when `uwu help <cog>` is invoked."""

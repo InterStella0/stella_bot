@@ -102,16 +102,21 @@ class BotAddedList(ListPageSource):
         return embed
 
 
-def is_user(_, m):
+async def is_user(self, m):
     """Event check for returning true if it's a bot."""
+    await self.bot.wait_until_ready()
     return not m.author.bot
 
 
-def command_count_check(self, message):
+async def command_count_check(self, message):
+    """Event check for command_count"""
+    await self.bot.wait_until_ready()
     return self.compiled_pref and not message.author.bot and message.guild
 
 
-def dpy_bot(_, member):
+async def dpy_bot(self, member):
+    """Event check for dpy_bots"""
+    await self.bot.wait_until_ready()
     return member.bot and member.guild.id == 336642139381301249
 
 
