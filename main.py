@@ -41,6 +41,9 @@ class StellaBot(commands.Bot):
         self.loading_cog()
         await self.fill_prefix()
         await self.fill_bots()
+        for command in bot.commands:
+            command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
+            command.cooldown_after_parsing = True
 
     @property
     def stella(self):
@@ -127,7 +130,8 @@ bot = StellaBot(**bot_data)
 
 @bot.listen("on_message")
 async def channel_messages(message):
-    bot._channel_cooldown.update_rate_limit(message)
+    if message.author != bot.user:
+        bot._channel_cooldown.update_rate_limit(message)
 
 
 @bot.event

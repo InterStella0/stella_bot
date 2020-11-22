@@ -363,7 +363,6 @@ class FindBot(commands.Cog, name="Bots"):
                            "This is useful for flexing for no reason."
                       )
     @is_discordpy()
-    @commands.cooldown(1, 5, BucketType.user)
     async def whatadd(self, ctx, author: discord.Member = None):
         if not author:
             author = ctx.author
@@ -396,7 +395,6 @@ class FindBot(commands.Cog, name="Bots"):
                       help="Shows who added the bot, when they requested it and when the bot was added including the "
                            "jump url to the original request message in discord.py.")
     @is_discordpy()
-    @commands.cooldown(1, 5, BucketType.user)
     async def whoadd(self, ctx, bot: BotAdded):
         data = bot
         author = await try_call(commands.UserConverter().convert, ctx, str(data.author), exception=UserNotFound)
@@ -546,7 +544,7 @@ class FindBot(commands.Cog, name="Bots"):
         menu = MenuBase(source=BotAddedList(member_data), delete_message_after=True)
         await menu.start(ctx)
 
-    @commands.command(aliases=["rht", "recenthelp", "recenttrigger"],
+    @commands.command(aliases=["rht", "recenthelptrip", "recenttrigger"],
                       brief="Shows the last message that triggers a help command in a channel.",
                       help="Shows the last message that triggers a help command in a channel that it was called from. "
                            "Useful for finding out who's the annoying person that uses common prefix help command.")
@@ -565,7 +563,6 @@ class FindBot(commands.Cog, name="Bots"):
                 "description": "There is no help command triggered recently."
             }
         await ctx.maybe_reply(embed=BaseEmbed.default(ctx, **embed_dict))
-
 
 
 def setup(bot):
