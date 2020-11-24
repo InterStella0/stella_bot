@@ -33,7 +33,7 @@ class StellaBot(commands.Bot):
         self.confirmed_bots = set()
         self.token = token
         self.existing_prefix = None
-        self._channel_cooldown = commands.CooldownMapping.from_cooldown(2, 1.5, commands.BucketType.channel)
+        self._channel_cooldown = commands.CooldownMapping.from_cooldown(3, 1.5, commands.BucketType.channel)
         self.too_speedy = False
 
     async def after_db(self):

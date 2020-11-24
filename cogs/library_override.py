@@ -163,7 +163,7 @@ class ModifiedAllowedMentions(AllowedMentions):
     __slots__ = ('everyone', 'users', 'roles', 'replied_user')
 
     def __init__(self, *, everyone=default, users=default, roles=default, replied_user=default):
-        super().__init__(everyone=everyone, users=everyone, roles=everyone)
+        super().__init__(everyone=everyone, users=users, roles=roles)
         self.replied_user = replied_user
 
 
