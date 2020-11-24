@@ -16,7 +16,7 @@ class ErrorHandler(commands.Cog):
     async def on_command_error(self, ctx, error):
         """The event triggered when an error is raised while invoking a command."""
         async def send_del(*args, **kwargs):
-            await ctx.reply(*args, delete_after=60, allowed_mentions=discord.AllowedMentions(replied_user=False), **kwargs)
+            await ctx.reply(*args, delete_after=60, mention_author=False, **kwargs)
             if ctx.me.permissions_in(ctx.channel).manage_messages:
                 with contextlib.suppress(discord.NotFound):
                     await ctx.message.delete(delay=60)
@@ -43,7 +43,7 @@ class ErrorHandler(commands.Cog):
                 return await ctx.reinvoke()
             await send_del(embed=BaseEmbed.to_error(
                 title="Cooldown Error",
-                description=f"You're on cooldown. Retry after `{error.retry_after}` seconds"))
+                description=f"You're on cooldown. Retry after `{error.retry_after:.2f}` seconds"))
         else:
             if template := await self.generate_signature_error(ctx, error):
                 await send_del(embed=template)

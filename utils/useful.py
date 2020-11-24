@@ -194,9 +194,9 @@ def plural(text, size):
 
 
 class StellaContext(commands.Context):
-    async def maybe_reply(self, content=None, allowed_mentions=ModifiedAllowedMentions(replied_user=False), **kwargs):
+    async def maybe_reply(self, content=None, mention_author=False, **kwargs):
         if self.channel.last_message != self.message:
-            await self.reply(content, allowed_mentions=allowed_mentions, **kwargs)
+            await self.reply(content, mention_author=mention_author, **kwargs)
         else:
             await self.send(content, **kwargs)
 

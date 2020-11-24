@@ -228,9 +228,10 @@ class Helpful(commands.Cog):
     @commands.command(aliases=["ping", "p"],
                       help="Shows the bot latency from the discord websocket.")
     async def pping(self, ctx):
-        await ctx.maybe_reply(embed=BaseEmbed.default(ctx,
-                                               title="PP",
-                                               description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`"))
+        await ctx.maybe_reply(embed=BaseEmbed.default(
+            ctx,
+            title="PP",
+            description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`"))
 
     @commands.command(aliases=["up"],
                       help="Shows the bot uptime from when it was started.")

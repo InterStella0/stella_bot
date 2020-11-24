@@ -129,7 +129,7 @@ class Useful(commands.Cog):
                            f"**Replies:** `{count}`\n"
                            f"**Origin:** [`jump`]({msg.jump_url})"
         }
-        await ctx.reply(embed=BaseEmbed.default(ctx, **embed_dict), allowed_mentions=discord.AllowedMentions(replied_user=False))
+        await ctx.reply(embed=BaseEmbed.default(ctx, **embed_dict), mention_author=False)
 
 
 def setup(bot):

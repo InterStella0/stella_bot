@@ -220,7 +220,12 @@ def messagereference_to_dict(self, specify_channel=False):
 
 async def message_reply(self, content=None, **kwargs):
     reference = MessageReference.from_message(self)
-    return await self.channel.send(content, message_reference=reference, **kwargs)
+    allowed_mentions = kwargs.pop('allowed_mentions', discord.AllowedMentions())
+    if (mention_author := kwargs.pop("mention_author", None)) is not None:
+        allowed_mentions.replied_user = mention_author
+        print("print", mention_author)
+
+    return await self.channel.send(content, message_reference=reference, allowed_mentions=allowed_mentions, **kwargs)
 
 MessageReference.from_message = from_message
 MessageReference.to_dict = messagereference_to_dict
