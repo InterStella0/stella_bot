@@ -39,6 +39,8 @@ class ErrorHandler(commands.Cog):
             await send_del(f'{ctx.command} has been disabled.')
 
         elif isinstance(error, commands.CommandOnCooldown):
+            if ctx.author == self.bot.stella:
+                return await ctx.reinvoke()
             await send_del(embed=BaseEmbed.to_error(
                 title="Cooldown Error",
                 description=f"You're on cooldown. Retry after `{error.retry_after}` seconds"))

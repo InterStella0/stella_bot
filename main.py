@@ -33,7 +33,6 @@ class StellaBot(commands.Bot):
         self.confirmed_bots = set()
         self.token = token
         self.existing_prefix = None
-        self._channel_cooldown = commands.CooldownMapping.from_cooldown(3, 1.5, commands.BucketType.channel)
         self.too_speedy = False
 
     async def after_db(self):
@@ -126,12 +125,6 @@ bot_data = {"token": environ.get("TOKEN"),
             "owner_id": 591135329117798400}
 
 bot = StellaBot(**bot_data)
-
-
-@bot.listen("on_message")
-async def channel_messages(message):
-    if message.author != bot.user:
-        bot._channel_cooldown.update_rate_limit(message)
 
 
 @bot.event

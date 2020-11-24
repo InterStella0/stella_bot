@@ -418,6 +418,8 @@ class FindBot(commands.Cog, name="Bots"):
 
     async def clean_prefix(self, ctx, prefix):
         prefix = await pprefix(ctx, prefix)
+        if prefix == "":
+            prefix = "\u200b"
         return re.sub("`", "`\u200b", prefix)
 
     @commands.command(aliases=["wp", "whatprefixes"],
@@ -461,8 +463,7 @@ class FindBot(commands.Cog, name="Bots"):
         list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
         prefix = await self.clean_prefix(ctx, prefix)
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
-        await ctx.maybe_reply(embed=BaseEmbed.default(ctx,
-                                               description=plural(desk, len(list_bot))))
+        await ctx.maybe_reply(embed=BaseEmbed.default(ctx, description=plural(desk, len(list_bot))))
 
     @commands.command(aliases=["ap", "aprefix", "allprefixes"],
                       brief="Shows every bot's prefix in the server.",

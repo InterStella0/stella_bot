@@ -195,9 +195,7 @@ def plural(text, size):
 
 class StellaContext(commands.Context):
     async def maybe_reply(self, content=None, allowed_mentions=ModifiedAllowedMentions(replied_user=False), **kwargs):
-        bucket = self.bot._channel_cooldown.get_bucket(self.message)
-        is_speedy = bucket.update_rate_limit()
-        if is_speedy:
+        if self.channel.last_message != self.message:
             await self.reply(content, allowed_mentions=allowed_mentions, **kwargs)
         else:
             await self.send(content, **kwargs)
