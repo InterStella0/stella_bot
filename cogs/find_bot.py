@@ -382,9 +382,10 @@ class FindBot(commands.Cog, name="Bots"):
             if buse := await try_call(BotUsage.convert, ctx, str(bot_id)):
                 value += f"**Usage:** `{buse.count}`\n"
             if bprefix := await try_call(BotPrefix.convert, ctx, str(bot_id)):
-                value += f"**Prefix:** `{await self.clean_prefix(ctx, bprefix.prefix)}`"
-            if value:
-                embed.add_field(name=dbot, value=value, inline=False)
+                value += f"**Prefix:** `{await self.clean_prefix(ctx, bprefix.prefix)}`\n"
+
+            value += f"**Created at:** `{default_date(dbot.bot.created_at)}`"
+            embed.add_field(name=dbot, value=value, inline=False)
         embed.set_thumbnail(url=author.avatar_url)
         if not list_bots:
             embed.description = f"{author} doesnt own any bot here."
