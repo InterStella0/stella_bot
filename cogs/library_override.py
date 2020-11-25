@@ -6,7 +6,6 @@ import re
 import aiohttp
 from discord import utils
 from discord.abc import Messageable
-from discord.ext.commands.context import Context
 from discord.http import Route, HTTPClient
 from discord.mentions import AllowedMentions, default
 from discord.message import MessageReference, Message
@@ -174,9 +173,6 @@ discord.AllowedMentions = ModifiedAllowedMentions
 
 
 def allowed_mentions_merge(self, other):
-    # Creates a new AllowedMentions by merging from another one.
-    # Merge is done by using the 'self' values unless explicitly
-    # overridden by the 'other' values.
     everyone = self.everyone if other.everyone is default else other.everyone
     users = self.users if other.users is default else other.users
     roles = self.roles if other.roles is default else other.roles
@@ -223,7 +219,6 @@ async def message_reply(self, content=None, **kwargs):
     allowed_mentions = kwargs.pop('allowed_mentions', discord.AllowedMentions())
     if (mention_author := kwargs.pop("mention_author", None)) is not None:
         allowed_mentions.replied_user = mention_author
-        print("print", mention_author)
 
     return await self.channel.send(content, message_reference=reference, allowed_mentions=allowed_mentions, **kwargs)
 

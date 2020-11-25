@@ -29,6 +29,7 @@ class ErrorHandler(commands.Cog):
                 return
 
         ignored = (commands.CommandNotFound,)
+        default_error = (commands.NotOwner,)
 
         error = getattr(error, 'original', error)
 
@@ -44,6 +45,8 @@ class ErrorHandler(commands.Cog):
             await send_del(embed=BaseEmbed.to_error(
                 title="Cooldown Error",
                 description=f"You're on cooldown. Retry after `{error.retry_after:.2f}` seconds"))
+        elif isinstance(error, default_error):
+            await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
         else:
             if template := await self.generate_signature_error(ctx, error):
                 await send_del(embed=template)

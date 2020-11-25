@@ -5,6 +5,7 @@ import ctypes
 import traceback
 import sys
 import functools
+import asyncio
 from cogs.library_override import ModifiedAllowedMentions
 from dataclasses import dataclass, field
 from discord.ext.menus import First, Last, Button
@@ -195,6 +196,7 @@ def plural(text, size):
 
 class StellaContext(commands.Context):
     async def maybe_reply(self, content=None, mention_author=False, **kwargs):
+        await asyncio.sleep(0.05)
         if self.channel.last_message != self.message:
             await self.reply(content, mention_author=mention_author, **kwargs)
         else:
