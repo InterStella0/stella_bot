@@ -2,7 +2,6 @@ import time
 import re
 import discord
 import asyncpg
-import json
 import datetime
 import utils.useful
 from utils.useful import StellaContext
@@ -51,7 +50,7 @@ class StellaBot(commands.Bot):
 
     def loading_cog(self):
         """Loads the cog"""
-        cogs = ("library_override", "error_handler", "find_bot", "useful", "helpful", "myself", "jishaku")
+        cogs = ("library_override", "error_handler", "find_bot", "useful", "helpful", "myself", "eros", "jishaku")
         for cog in cogs:
             ext = "cogs." if cog != "jishaku" else ""
             if error := call(self.load_extension, f"{ext}{cog}", ret=True):

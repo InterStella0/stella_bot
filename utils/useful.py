@@ -6,7 +6,6 @@ import traceback
 import sys
 import functools
 import asyncio
-from cogs.library_override import ModifiedAllowedMentions
 from dataclasses import dataclass, field
 from discord.ext.menus import First, Last, Button
 from discord.utils import maybe_coroutine
@@ -201,6 +200,3 @@ class StellaContext(commands.Context):
             await self.reply(content, mention_author=mention_author, **kwargs)
         else:
             await self.send(content, **kwargs)
-
-    async def reply(self, content=None, **kwargs):
-        return await self.message.reply(content, **kwargs)
