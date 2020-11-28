@@ -6,10 +6,11 @@ import itertools
 import ctypes
 import contextlib
 import humanize
+import collections
 from dataclasses import dataclass
-from discord.ext import commands
-from discord.ext.commands import BucketType, UserNotFound
-from discord.ext.menus import ListPageSource, MenuPages
+from discord.ext import commands, flags as flg
+from discord.ext.commands import UserNotFound
+from discord.ext.menus import ListPageSource
 from utils.new_converters import BotPrefix, BotUsage, IsBot, FetchUser
 from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check, plural
 from utils.errors import NotInDatabase, BotNotFound, NotBot
@@ -58,24 +59,24 @@ class BotAdded:
         return str(self.bot or "")
 
 
-async def pprefix(ctx, prefix):
-    if re.search("<@(!?)([0-9]*)>", prefix):
-        with contextlib.suppress(discord.NotFound):
-            user = await commands.UserConverter().convert(ctx, re.sub(" ", "", prefix))
+def pprefix(bot, prefix):
+    if content := re.search("<@(!?)(?P<id>[0-9]*)>", prefix):
+        if user := bot.get_user(int(content["id"])):
             return f"@{user.display_name} "
     return prefix
 
 
 class AllPrefixes(ListPageSource):
     """Menu for allprefix command."""
-    def __init__(self, data):
+    def __init__(self, data, count_mode):
         super().__init__(data, per_page=6)
+        self.count_mode = count_mode
 
     async def format_page(self, menu: MenuBase, entries):
         key = "(\u200b|\u200b)"
         offset = menu.current_page * self.per_page
-
-        contents = [f'`{i + 1}. {b} {key} {await pprefix(menu.ctx, b.prefix)}`' for i, b in enumerate(entries, start=offset)]
+        content = "`{no}. {prefix} {key} {b.count}`" if self.count_mode else "`{no}. {b} {key} {prefix}`"
+        contents = [content.format(no=i+1, b=b, key=key, prefix=pprefix(menu.ctx.bot, b.prefix)) for i, b in enumerate(entries, start=offset)]
         high = max(cont.index(key) for cont in contents)
         reform = [high - cont.index(key) for cont in contents]
         true_form = [x.replace(key, f'{" " * off} |') for x, off in zip(contents, reform)]
@@ -416,7 +417,7 @@ class FindBot(commands.Cog, name="Bots"):
         await ctx.maybe_reply(embed=embed)
 
     async def clean_prefix(self, ctx, prefix):
-        prefix = await pprefix(ctx, prefix)
+        prefix = pprefix(ctx.bot, prefix)
         if prefix == "":
             prefix = "\u200b"
         return re.sub("`", "`\u200b", prefix)
@@ -464,18 +465,25 @@ class FindBot(commands.Cog, name="Bots"):
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
         await ctx.maybe_reply(embed=BaseEmbed.default(ctx, description=plural(desk, len(list_bot))))
 
-    @commands.command(aliases=["ap", "aprefix", "allprefixes"],
-                      brief="Shows every bot's prefix in the server.",
-                      help="Shows a list of every single bot's prefix in a server.")
+    @flg.command(aliases=["ap", "aprefix", "allprefixes"],
+                 brief="Shows every bot's prefix in the server.",
+                 help="Shows a list of every single bot's prefix in a server.")
     @commands.guild_only()
-    async def allprefix(self, ctx):
+    @flg.add_flag("--count", type=bool, default=False)
+    async def allprefix(self, ctx, **flags):
         bots = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix")
+        attr = "count" if (count_mode := flags.pop("count", False)) else "prefix"
 
         def mem(x):
             return ctx.guild.get_member(x)
-        members = [BotPrefix(mem(bot["bot_id"]), bot["prefix"]) for bot in bots if mem(bot["bot_id"])]
-        members.sort(key=lambda x: x.prefix)
-        menu = MenuBase(source=AllPrefixes(members), delete_message_after=True)
+        if count_mode:
+            PrefixCount = collections.namedtuple("PrefixCount", "prefix count")
+            count_prefixes = collections.Counter(map(lambda x: x["prefix"], bots))
+            data = [PrefixCount(*a) for a in count_prefixes.items()]
+        else:
+            data = [BotPrefix(mem(bot["bot_id"]), bot["prefix"]) for bot in bots if mem(bot["bot_id"])]
+        data.sort(key=lambda x: getattr(x, attr), reverse=count_mode)
+        menu = MenuBase(source=AllPrefixes(data, count_mode), delete_message_after=True)
         await menu.start(ctx)
 
     @commands.command(aliases=["bot_use", "bu", "botusage", "botuses"],
