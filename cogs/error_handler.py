@@ -3,7 +3,7 @@ import re
 import inspect
 import typing_inspect
 import contextlib
-from discord.ext import commands
+from discord.ext import commands, flags
 from utils.useful import BaseEmbed, print_exception
 
 
@@ -29,7 +29,7 @@ class ErrorHandler(commands.Cog):
                 return
 
         ignored = (commands.CommandNotFound,)
-        default_error = (commands.NotOwner,)
+        default_error = (commands.NotOwner, commands.TooManyArguments, flags.ArgumentParsingError)
 
         error = getattr(error, 'original', error)
 
@@ -99,7 +99,7 @@ class ErrorHandler(commands.Cog):
                              f"{' '.join(list_sig)}\n" \
                              f"{space}{offset}^\n" \
                              f"```\n"
-        if demo := help_com.get_demo(command) and isinstance(error, commands.MissingRequiredArgument):
+        if (demo := help_com.get_demo(command)) and isinstance(error, commands.MissingRequiredArgument):
             cooldown = self.error_cooldown
             bucket = cooldown.get_bucket(ctx.message)
             if not bucket.update_rate_limit():

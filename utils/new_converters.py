@@ -85,6 +85,9 @@ class BotData:
             return member, data
         raise NotInDatabase(member, converter=cls)
 
+    def __int__(self):
+        return self.bot.id
+
 
 class BotPrefix(BotData):
     """Bot data for prefix"""

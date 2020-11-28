@@ -200,6 +200,13 @@ def plural(text, size):
     return text
 
 
+def realign(iterable, key, discrim='|'):
+    """Auto align a list of str with the highest substring before the key."""
+    high = max(cont.index(key) for cont in iterable)
+    reform = [high - cont.index(key) for cont in iterable]
+    return [x.replace(key, f'{" " * off} {discrim}') for x, off in zip(iterable, reform)]
+
+
 class StellaContext(commands.Context):
     async def maybe_reply(self, content=None, mention_author=False, **kwargs):
         await asyncio.sleep(0.05)

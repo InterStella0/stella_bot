@@ -12,7 +12,7 @@ from discord.ext import commands, flags as flg
 from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
 from utils.new_converters import BotPrefix, BotUsage, IsBot, FetchUser
-from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check, plural
+from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check, plural, realign
 from utils.errors import NotInDatabase, BotNotFound, NotBot
 from utils.decorators import is_discordpy
 
@@ -77,11 +77,23 @@ class AllPrefixes(ListPageSource):
         offset = menu.current_page * self.per_page
         content = "`{no}. {prefix} {key} {b.count}`" if self.count_mode else "`{no}. {b} {key} {prefix}`"
         contents = [content.format(no=i+1, b=b, key=key, prefix=pprefix(menu.ctx.bot, b.prefix)) for i, b in enumerate(entries, start=offset)]
-        high = max(cont.index(key) for cont in contents)
-        reform = [high - cont.index(key) for cont in contents]
-        true_form = [x.replace(key, f'{" " * off} |') for x, off in zip(contents, reform)]
         embed = BaseEmbed(title="All Prefixes",
-                          description="\n".join(true_form))
+                          description="\n".join(realign(contents, key)))
+        return menu.generate_page(embed, self._max_pages)
+
+
+class AllBotCount(ListPageSource):
+    """Menu for allprefix command."""
+    def __init__(self, data):
+        super().__init__(data, per_page=6)
+
+    async def format_page(self, menu: MenuBase, entries):
+        key = "(\u200b|\u200b)"
+        offset = menu.current_page * self.per_page
+        content = "`{no}. {b} {key} {b.count}`"
+        contents = [content.format(no=i+1, b=b, key=key) for i, b in enumerate(entries, start=offset)]
+        embed = BaseEmbed(title="Bot Command Rank",
+                          description="\n".join(realign(contents, key)))
         return menu.generate_page(embed, self._max_pages)
 
 
@@ -201,9 +213,9 @@ class FindBot(commands.Cog, name="Bots"):
         def check_help(m):
             def search(search_text):
                 possible_text = ("command", "help", "category", "categories")
-                return any(f"{x}" in search_text.lower() for x in possible_text)
+                return any(f"{t}" in search_text.lower() for t in possible_text)
             content = search(m.content)
-            embeds = any(search(str(x.to_dict())) for x in m.embeds)
+            embeds = any(search(str(e.to_dict())) for e in m.embeds)
             return content or embeds
 
         for x in "jsk", "help":
@@ -369,10 +381,10 @@ class FindBot(commands.Cog, name="Bots"):
             return await ctx.maybe_reply("That's a bot lol")
         query = "SELECT * FROM {}_bots WHERE author_id=$1"
         total_list = [await self.bot.pool_pg.fetch(query.format(x), author.id) for x in ("pending", "confirmed")]
-        total_list = list(itertools.chain.from_iterable(total_list))
+        total_list = itertools.chain.from_iterable(total_list)
 
-        async def get_member(bot_id):
-            return ctx.guild.get_member(bot_id) or await self.bot.fetch_user(bot_id)
+        async def get_member(b_id):
+            return ctx.guild.get_member(b_id) or await self.bot.fetch_user(b_id)
         list_bots = [BotAdded.from_json(await get_member(x["bot_id"]), **x) for x in total_list]
         embed = BaseEmbed.default(ctx, title=plural(f"{author}'s bot(s)", len(list_bots)))
         for dbot in list_bots:
@@ -381,7 +393,7 @@ class FindBot(commands.Cog, name="Bots"):
             if buse := await try_call(BotUsage.convert, ctx, str(bot_id)):
                 value += f"**Usage:** `{buse.count}`\n"
             if bprefix := await try_call(BotPrefix.convert, ctx, str(bot_id)):
-                value += f"**Prefix:** `{await self.clean_prefix(ctx, bprefix.prefix)}`\n"
+                value += f"**Prefix:** `{self.clean_prefix(bprefix.prefix)}`\n"
 
             value += f"**Created at:** `{default_date(dbot.bot.created_at)}`"
             embed.add_field(name=dbot, value=value, inline=False)
@@ -416,8 +428,8 @@ class FindBot(commands.Cog, name="Bots"):
 
         await ctx.maybe_reply(embed=embed)
 
-    async def clean_prefix(self, ctx, prefix):
-        prefix = pprefix(ctx.bot, prefix)
+    def clean_prefix(self, prefix):
+        prefix = pprefix(self.bot, prefix)
         if prefix == "":
             prefix = "\u200b"
         return re.sub("`", "`\u200b", prefix)
@@ -428,7 +440,7 @@ class FindBot(commands.Cog, name="Bots"):
                            "This also does not know it's aliases prefixes.")
     @commands.guild_only()
     async def whatprefix(self, ctx, member: BotPrefix):
-        prefix = await self.clean_prefix(ctx, member.prefix)
+        prefix = self.clean_prefix(member.prefix)
         embed = BaseEmbed.default(ctx,
                                   title=f"{member}'s Prefix",
                                   description=f"`{prefix}`")
@@ -441,7 +453,7 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.guild_only()
     async def prefixuse(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
-        prefix = await self.clean_prefix(ctx, prefix)
+        prefix = self.clean_prefix(prefix)
         desk = plural(f"There (is/are) `{len(instance_bot)}` bot(s) that use `{prefix}` as prefix", len(instance_bot))
         await ctx.maybe_reply(embed=BaseEmbed.default(ctx, description=desk))
 
@@ -461,7 +473,7 @@ class FindBot(commands.Cog, name="Bots"):
     async def prefixbot(self, ctx, prefix):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
-        prefix = await self.clean_prefix(ctx, prefix)
+        prefix = self.clean_prefix(prefix)
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
         await ctx.maybe_reply(embed=BaseEmbed.default(ctx, description=plural(desk, len(list_bot))))
 
@@ -469,7 +481,9 @@ class FindBot(commands.Cog, name="Bots"):
                  brief="Shows every bot's prefix in the server.",
                  help="Shows a list of every single bot's prefix in a server.")
     @commands.guild_only()
-    @flg.add_flag("--count", type=bool, default=False)
+    @flg.add_flag("--count", type=bool, default=False,
+                  help="Create a rank of the highest prefix that is being use by bots. This flag accepts True or False, "
+                       "defaults to False if not stated.")
     async def allprefix(self, ctx, **flags):
         bots = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix")
         attr = "count" if (count_mode := flags.pop("count", False)) else "prefix"
@@ -572,6 +586,25 @@ class FindBot(commands.Cog, name="Bots"):
                 "description": "There is no help command triggered recently."
             }
         await ctx.maybe_reply(embed=BaseEmbed.default(ctx, **embed_dict))
+
+    @flg.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
+                 help="Shows all bot's command usage in the server on a sorted list.")
+    async def botrank(self, ctx, bot: BotUsage = None):
+        bots = {x.id: x for x in ctx.guild.members if x.bot}
+        query = "SELECT * FROM bot_usage_count WHERE bot_id=ANY($1::BIGINT[])"
+        record = await self.bot.pool_pg.fetch(query, list(bots))
+        bot_data = [BotUsage(bots[r["bot_id"]], r["count"]) for r in record]
+        bot_data.sort(key=lambda x: x.count, reverse=True)
+        if not bot:
+            menu = MenuBase(source=AllBotCount(bot_data), delete_message_after=True)
+            await menu.start(ctx)
+        else:
+            key = "(\u200b|\u200b)"
+            idx = [*map(int, bot_data)].index(bot.bot.id)
+            scope_bot = bot_data[idx:min(idx + len(bot_data[idx:]), idx + 6)]
+            contents = ["`{0}. {1} {2} {1.count}`".format(i + idx + 1, b, key) for i, b in enumerate(scope_bot)]
+            embed = BaseEmbed(title="Bot Command Rank", description="\n".join(realign(contents, key)))
+            await ctx.maybe_reply(embed=embed)
 
 
 def setup(bot):
