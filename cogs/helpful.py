@@ -106,8 +106,7 @@ class CogMenu(HelpMenuBase):
 class HelpCogSource(menus.ListPageSource):
     """This is for help Cog ListPageSource"""
     async def format_page(self, menu: CogMenu, entry):
-        entry.set_author(name=f"Page {menu.current_page + 1}/{self._max_pages}")
-        return entry
+        return menu.generate_page(entry, self._max_pages)
 
 
 class HelpSource(menus.ListPageSource):
@@ -120,10 +119,9 @@ class HelpSource(menus.ListPageSource):
                                                         for command_help in list_commands),
                               color=menu.bot.color)
         author = menu.ctx.author
-        embed.set_author(name=f"Page {menu.current_page + 1}/{self._max_pages}")
         embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar_url)
 
-        return embed
+        return menu.generate_page(embed, self._max_pages)
 
 
 class StellaBotHelp(commands.DefaultHelpCommand):
@@ -260,7 +258,7 @@ class Helpful(commands.Cog):
                 module = src.__module__
             else:
                 obj = self.bot.get_command(command.replace('.', ' '))
-                if obj:
+                if obj and obj.cog_name != "Jishaku":
                     src = obj.callback.__code__
                     module = obj.callback.__module__
 

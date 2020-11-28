@@ -10,6 +10,10 @@ EmojiSettings = namedtuple('EmojiSettings', 'start back forward end close')
 
 
 class FakeEmote(discord.PartialEmoji):
+    """
+    Due to the nature of jishaku checking if an emoji object is the reaction, passing raw str into it will not work.
+    Creating a PartialEmoji object is needed instead.
+    """
     @classmethod
     def from_name(cls, name):
         emoji_name = re.sub("|<|>", "", name)
@@ -28,6 +32,10 @@ jishaku.paginators.EMOJI_DEFAULT = emote  # Overrides jishaku emojis
 
 
 async def attempt_add_reaction(msg: discord.Message, reaction: Union[str, discord.Emoji]):
+    """
+    This is responsible for every add reaction happening in jishaku. Instead of replacing each emoji that it uses in
+    the source code, it will try to find the corresponding emoji that is being used instead.
+    """
     reacts = {
         "\N{WHITE HEAVY CHECK MARK}": "<:checkmark:753619798021373974>",
         "\N{BLACK RIGHT-POINTING TRIANGLE}": emote.forward,
@@ -35,8 +43,9 @@ async def attempt_add_reaction(msg: discord.Message, reaction: Union[str, discor
         "\N{DOUBLE EXCLAMATION MARK}": "<:crossmark:753620331851284480>",
         "\N{ALARM CLOCK}": emote.end
     }
+    react = reacts[reaction] if reaction in reacts else reaction
     with contextlib.suppress(discord.HTTPException):
-        return await msg.add_reaction(reacts[reaction])
+        return await msg.add_reaction(react)
 
 
 jishaku.exception_handling.attempt_add_reaction = attempt_add_reaction

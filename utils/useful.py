@@ -108,12 +108,19 @@ class MenuBase(menus.MenuPages):
 
     async def _get_kwargs_from_page(self, page):
         value = await discord.utils.maybe_coroutine(self._source.format_page, self, page)
+        no_ping = {'mention_author': False}
         if isinstance(value, dict):
-            return value.update({'allowed_mentions': discord.AllowedMentions(replied_user=False)})
+            return value.update(no_ping)
         elif isinstance(value, str):
-            return {'content': value, 'embed': None, 'allowed_mentions': discord.AllowedMentions(replied_user=False)}
+            no_ping.update({'content': value})
         elif isinstance(value, discord.Embed):
-            return {'embed': value, 'content': None, 'allowed_mentions': discord.AllowedMentions(replied_user=False)}
+            no_ping.update({'embed': value, 'content': None})
+        return no_ping
+
+    def generate_page(self, embed, maximum):
+        if maximum > 1:
+            return embed.set_author(name=f"Page {self.current_page + 1}/{maximum}")
+        return embed
 
     async def send_initial_message(self, ctx, channel):
         page = await self._source.get_page(0)

@@ -71,7 +71,7 @@ class AllPrefixes(ListPageSource):
     def __init__(self, data):
         super().__init__(data, per_page=6)
 
-    async def format_page(self, menu: MenuPages, entries):
+    async def format_page(self, menu: MenuBase, entries):
         key = "(\u200b|\u200b)"
         offset = menu.current_page * self.per_page
 
@@ -81,8 +81,7 @@ class AllPrefixes(ListPageSource):
         true_form = [x.replace(key, f'{" " * off} |') for x, off in zip(contents, reform)]
         embed = BaseEmbed(title="All Prefixes",
                           description="\n".join(true_form))
-        embed.set_author(name=f"Page {menu.current_page + 1}/{self._max_pages}")
-        return embed
+        return menu.generate_page(embed, self._max_pages)
 
 
 class BotAddedList(ListPageSource):
@@ -90,7 +89,7 @@ class BotAddedList(ListPageSource):
     def __init__(self, data):
         super().__init__(data, per_page=6)
 
-    async def format_page(self, menu: MenuPages, entries):
+    async def format_page(self, menu: MenuBase, entries):
         offset = menu.current_page * self.per_page
         contents = ((f"{b.author}", f'**{b}** `{humanize.precisedelta(b.joined_at)}`')
                     for i, b in enumerate(entries, start=offset))
@@ -98,8 +97,7 @@ class BotAddedList(ListPageSource):
         embed = BaseEmbed(title="Bots added today")
         for n, v in contents:
             embed.add_field(name=n, value=v, inline=False)
-        embed.set_author(name=f"Page {menu.current_page + 1}/{self._max_pages}")
-        return embed
+        return menu.generate_page(embed, self._max_pages)
 
 
 async def is_user(self, m):
