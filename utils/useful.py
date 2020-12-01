@@ -1,4 +1,4 @@
-from collections import namedtuple
+import inspect
 import discord
 import datetime
 import ctypes
@@ -6,6 +6,7 @@ import traceback
 import sys
 import functools
 import asyncio
+from collections import namedtuple
 from dataclasses import dataclass, field
 from discord.ext.menus import First, Last, Button
 from discord.utils import maybe_coroutine
@@ -209,8 +210,16 @@ def realign(iterable, key, discrim='|'):
 
 class StellaContext(commands.Context):
     async def maybe_reply(self, content=None, mention_author=False, **kwargs):
+        """Replies if there is a message in between the command invoker and the bot's message."""
         await asyncio.sleep(0.05)
         if self.channel.last_message != self.message:
             await self.reply(content, mention_author=mention_author, **kwargs)
         else:
             await self.send(content, **kwargs)
+
+
+async def maybe_method(func, cls=None, *args, **kwargs):
+    """Pass the class if func is not a method."""
+    if not inspect.ismethod(func):
+        return await maybe_coroutine(func, cls, *args, **kwargs)
+    return await maybe_coroutine(func, *args, **kwargs)

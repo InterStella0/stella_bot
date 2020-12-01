@@ -1,4 +1,5 @@
 import discord
+import inspect
 import contextlib
 from discord.ext import commands
 from discord.ext.commands import MemberNotFound
@@ -14,7 +15,8 @@ class FetchUser(commands.Converter):
             if argument.isdigit():
                 return await ctx.bot.fetch_user(int(argument))
             return await commands.UserConverter().convert(ctx, argument)
-        raise UserNotFound(argument, converter=self.__class__) from None
+        converter = self if inspect.isclass(self) else self.__class__
+        raise UserNotFound(argument, converter=converter) from None
 
 
 class CleanListGreedy:

@@ -12,7 +12,7 @@ from discord.ext import commands, flags as flg
 from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
 from utils.new_converters import BotPrefix, BotUsage, IsBot, FetchUser
-from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check, plural, realign
+from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check, plural, realign, maybe_method
 from utils.errors import NotInDatabase, BotNotFound, NotBot
 from utils.decorators import is_discordpy
 
@@ -42,9 +42,9 @@ class BotAdded:
     @classmethod
     async def convert(cls, ctx, argument):
         """Invokes when the BotAdded is use as a typehint."""
-        for inst in commands.MemberConverter(), FetchUser():
+        for inst in commands.MemberConverter(), FetchUser:
             with contextlib.suppress(commands.BadArgument):
-                if user := await inst.convert(ctx, argument):
+                if user := await maybe_method(inst.convert, cls, ctx, argument):
                     if not user.bot:
                         raise NotBot(user, converter=cls)
                     for attribute in ("pending", "confirmed")[isinstance(inst, commands.MemberConverter):]:
@@ -318,7 +318,6 @@ class FindBot(commands.Cog, name="Bots"):
 
             else:
                 if member := get_member(int(result["id"])):
-                    print("This bot", int(result["id"]), "is already in the guild.")
                     if int(result["id"]) not in self.bot.confirmed_bots and \
                             await self.check_author(member.id, message.author.id, "confirmed_bots"):
                         newAddBot = BotAdded(author=message.author,
