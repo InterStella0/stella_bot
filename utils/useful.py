@@ -190,6 +190,10 @@ def print_exception(text, error):
     """Prints the exception with proper traceback."""
     print(text, file=sys.stderr)
     traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+    etype = type(error)
+    trace = error.__traceback__
+    lines = traceback.format_exception(etype, error, trace)
+    return "".join(lines)
 
 
 def plural(text, size):

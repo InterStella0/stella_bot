@@ -52,14 +52,22 @@ class ErrorHandler(commands.Cog):
                 await send_del(embed=template)
             else:
                 await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
-                print_exception(f'Ignoring exception in command {ctx.command}:', error)
+                traceback_error = print_exception(f'Ignoring exception in command {ctx.command}:', error)
+                error_message = f"**Command:** {ctx.message.content}\n" \
+                                f"**Message ID:** {ctx.message.id}\n" \
+                                f"**Author:** `{ctx.author}`\n" \
+                                f"**Guild:** `{ctx.guild}`\n" \
+                                f"**Channel:** `{ctx.channel}`\n" \
+                                f"**Jump:** [`jump`]({ctx.message.jump_url})```py\n" \
+                                f"{traceback_error}\n" \
+                                f"```"
+                await self.bot.error_channel.send(embed=BaseEmbed.default(ctx, description=error_message))
 
     async def generate_signature_error(self, ctx, error):
         command = ctx.command
         argument = ""
         found = False
         if _class := getattr(error, "converter", None):
-            print(_class, "This")
             signature = inspect.signature(command.callback).parameters
             for typing in signature.values():
                 if typing_inspect.is_union_type(typing):

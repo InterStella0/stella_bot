@@ -48,6 +48,10 @@ class StellaBot(commands.Bot):
         """Returns discord.User of the owner"""
         return self.get_user(self.owner_id)
 
+    @property
+    def error_channel(self):
+        return self.get_guild(environ.get("GUILD")).get_channel(environ.get("ERROR_CHANNEL"))
+
     def loading_cog(self):
         """Loads the cog"""
         cogs = ("library_override", "error_handler", "find_bot", "useful", "helpful", "myself", "eros", "jishaku")
