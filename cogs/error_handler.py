@@ -5,6 +5,7 @@ import typing_inspect
 import contextlib
 from discord.ext import commands, flags
 from utils.useful import BaseEmbed, print_exception
+from utils.errors import NotInDpy
 
 
 class ErrorHandler(commands.Cog):
@@ -29,7 +30,7 @@ class ErrorHandler(commands.Cog):
                 return
 
         ignored = (commands.CommandNotFound,)
-        default_error = (commands.NotOwner, commands.TooManyArguments, flags.ArgumentParsingError)
+        default_error = (commands.NotOwner, commands.TooManyArguments, flags.ArgumentParsingError, NotInDpy)
 
         error = getattr(error, 'original', error)
 
@@ -54,7 +55,7 @@ class ErrorHandler(commands.Cog):
                 await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
                 traceback_error = print_exception(f'Ignoring exception in command {ctx.command}:', error)
                 error_message = f"**Command:** {ctx.message.content}\n" \
-                                f"**Message ID:** {ctx.message.id}\n" \
+                                f"**Message ID:** `{ctx.message.id}`\n" \
                                 f"**Author:** `{ctx.author}`\n" \
                                 f"**Guild:** `{ctx.guild}`\n" \
                                 f"**Channel:** `{ctx.channel}`\n" \
