@@ -85,7 +85,7 @@ class AllPrefixes(ListPageSource):
 class AllBotCount(ListPageSource):
     """Menu for allprefix command."""
     def __init__(self, data):
-        super().__init__(data, per_page=6)
+        super().__init__(data, per_page=10)
 
     async def format_page(self, menu: MenuBase, entries):
         key = "(\u200b|\u200b)"
@@ -587,8 +587,8 @@ class FindBot(commands.Cog, name="Bots"):
             }
         await ctx.maybe_reply(embed=BaseEmbed.default(ctx, **embed_dict))
 
-    @flg.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
-                 help="Shows all bot's command usage in the server on a sorted list.")
+    @commands.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
+                      help="Shows all bot's command usage in the server on a sorted list.")
     async def botrank(self, ctx, bot: BotUsage = None):
         bots = {x.id: x for x in ctx.guild.members if x.bot}
         query = "SELECT * FROM bot_usage_count WHERE bot_id=ANY($1::BIGINT[])"
@@ -601,7 +601,7 @@ class FindBot(commands.Cog, name="Bots"):
         else:
             key = "(\u200b|\u200b)"
             idx = [*map(int, bot_data)].index(bot.bot.id)
-            scope_bot = bot_data[idx:min(idx + len(bot_data[idx:]), idx + 6)]
+            scope_bot = bot_data[idx:min(idx + len(bot_data[idx:]), idx + 10)]
             contents = ["`{0}. {1} {2} {1.count}`".format(i + idx + 1, b, key) for i, b in enumerate(scope_bot)]
             embed = BaseEmbed(title="Bot Command Rank", description="\n".join(realign(contents, key)))
             await ctx.maybe_reply(embed=embed)

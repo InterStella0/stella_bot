@@ -1,22 +1,20 @@
 import discord
+import contextlib
 from discord.ext import commands
 from discord.ext.commands import MemberNotFound
 from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound
 from discord.utils import _unique
-from itertools import chain
 from utils.useful import unpack
 
 
 class FetchUser(commands.Converter):
     """Glorified fetch_user"""
     async def convert(self, ctx, argument):
-        try:
+        with contextlib.suppress(commands.UserNotFound):
             if argument.isdigit():
                 return await ctx.bot.fetch_user(int(argument))
             return await commands.UserConverter().convert(ctx, argument)
-        except commands.UserNotFound as e:
-            e.converter = self.__class__
-            raise UserNotFound(argument, converter=self.__class__) from None
+        raise UserNotFound(argument, converter=self.__class__) from None
 
 
 class CleanListGreedy:

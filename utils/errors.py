@@ -40,3 +40,8 @@ class ThisEmpty(ArgumentBaseError):
 class UserNotFound(ArgumentBaseError):
     def __init__(self, arg, **kwargs):
         super().__init__(message=f"I can't find {arg}, is this even a valid user?", **kwargs)
+
+
+class CantRun(commands.CommandError):
+    def __init__(self, message, *arg):
+        super().__init__(message=message, *arg)

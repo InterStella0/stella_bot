@@ -6,9 +6,10 @@ import discord
 import humanize
 import datetime
 from discord.ext import commands, menus
-from utils.useful import BaseEmbed, MenuBase
+from utils.useful import BaseEmbed, MenuBase, try_call, plural
+from utils.errors import CantRun
 from collections import namedtuple
-from discord.ext.menus import First, Last, Button
+from discord.ext.menus import First, Last
 
 
 class CommandHelp:
@@ -202,12 +203,27 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         if demo := self.get_demo(command):
             embed.set_image(url=demo)
         if alias := self.get_aliases(command):
-            embed.add_field(name="Aliases", value=f'[{" | ".join(f"`{x}`" for x in alias)}]')
+            embed.add_field(name="Aliases", value=f'[{" | ".join(f"`{x}`" for x in alias)}]', inline=False)
+        if isinstance(command, commands.Group):
+            subcommand = command.commands
+            value = "\n".join(self.get_command_signature(c) for c in subcommand)
+            embed.add_field(name=plural("Subcommand(s)", len(subcommand)), value=value)
+
         return embed
+
+    async def handle_help(self, command):
+        with contextlib.suppress(commands.CommandError):
+            await command.can_run(self.context)
+            return await self.context.reply(embed=self.get_command_help(command), mention_author=False)
+        raise CantRun("You don't have enough permission to see this help.") from None
 
     async def send_command_help(self, command):
         """Gets invoke when `uwu help <command>` is invoked."""
-        await self.context.reply(embed=self.get_command_help(command), allowed_mentions=discord.AllowedMentions(replied_user=False))
+        await self.handle_help(command)
+
+    async def send_group_help(self, group):
+        """Gets invoke when `uwu help <group>` is invoked."""
+        await self.handle_help(group)
 
     async def send_cog_help(self, cog):
         """Gets invoke when `uwu help <cog>` is invoked."""

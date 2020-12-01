@@ -59,6 +59,7 @@ class ErrorHandler(commands.Cog):
         argument = ""
         found = False
         if _class := getattr(error, "converter", None):
+            print(_class, "This")
             signature = inspect.signature(command.callback).parameters
             for typing in signature.values():
                 if typing_inspect.is_union_type(typing):
