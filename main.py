@@ -50,7 +50,7 @@ class StellaBot(commands.Bot):
 
     @property
     def error_channel(self):
-        return self.get_guild(environ.get("GUILD")).get_channel(environ.get("ERROR_CHANNEL"))
+        return self.get_guild(environ.get("BOT_GUILD")).get_channel(environ.get("ERROR_CHANNEL"))
 
     def loading_cog(self):
         """Loads the cog"""
