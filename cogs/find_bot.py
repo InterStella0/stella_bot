@@ -8,9 +8,10 @@ import contextlib
 import humanize
 import collections
 from dataclasses import dataclass
-from discord.ext import commands, flags as flg
+from discord.ext import commands
 from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
+from utils import flags as flg
 from utils.new_converters import BotPrefix, BotUsage, IsBot, FetchUser
 from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check, plural, realign, maybe_method
 from utils.errors import NotInDatabase, BotNotFound, NotBot
@@ -476,11 +477,12 @@ class FindBot(commands.Cog, name="Bots"):
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
         await ctx.maybe_reply(embed=BaseEmbed.default(ctx, description=plural(desk, len(list_bot))))
 
-    @flg.command(aliases=["ap", "aprefix", "allprefixes"],
-                 brief="Shows every bot's prefix in the server.",
-                 help="Shows a list of every single bot's prefix in a server.")
+    @commands.command(aliases=["ap", "aprefix", "allprefixes"],
+                      brief="Shows every bot's prefix in the server.",
+                      help="Shows a list of every single bot's prefix in a server.",
+                      cls=flg.SFlagCommand)
     @commands.guild_only()
-    @flg.add_flag("--count", type=bool, default=False,
+    @flg.add_flag("--count", type=bool, default=False, action="store_true",
                   help="Create a rank of the highest prefix that is being use by bots. This flag accepts True or False, "
                        "defaults to False if not stated.")
     async def allprefix(self, ctx, **flags):

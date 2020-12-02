@@ -49,8 +49,3 @@ async def attempt_add_reaction(msg: discord.Message, reaction: Union[str, discor
 
 
 jishaku.exception_handling.attempt_add_reaction = attempt_add_reaction
-
-
-def setup(bot):
-    pass
-

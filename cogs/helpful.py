@@ -180,6 +180,12 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         """This isn't even needed jesus christ"""
         return command.aliases
 
+    def get_flag_help(self, command):
+        """Gets the flag help if there is any."""
+        def c(x):
+            return "_OPTIONAL" not in x.dest
+        return ["**--{0.dest}:** {0.help}".format(action) for action in command.callback._def_parser._actions if c(action)]
+
     async def send_bot_help(self, mapping):
         """Gets called when `uwu help` is invoked"""
         command_data = {}
@@ -204,6 +210,8 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             embed.set_image(url=demo)
         if alias := self.get_aliases(command):
             embed.add_field(name="Aliases", value=f'[{" | ".join(f"`{x}`" for x in alias)}]', inline=False)
+        if hasattr(command.callback, "_def_parser"):
+            embed.add_field(name="Optional Flags", value="\n".join(self.get_flag_help(command)))
         if isinstance(command, commands.Group):
             subcommand = command.commands
             value = "\n".join(self.get_command_signature(c) for c in subcommand)
