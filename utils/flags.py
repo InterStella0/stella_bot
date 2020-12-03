@@ -87,8 +87,12 @@ def add_flag(*flag_names, **kwargs):
         else:
             nfunc = func
 
+        if any("_OPTIONAL" in flag for flag in flag_names):
+            raise Exception("Flag with '_OPTIONAL' as it's name is not allowed.")
+
         if not hasattr(nfunc, '_def_parser'):
             nfunc._def_parser = FlagParser()
+
         if all(x in kwargs for x in ("type", "action")):
             _without = kwargs.copy()
             if _type := _without.pop("type"):
@@ -98,6 +102,7 @@ def add_flag(*flag_names, **kwargs):
             optional = [f'{x}_OPTIONAL' for x in flag_names]
             nfunc._def_parser.optional = [(x, f'{x}_OPTIONAL') for x in flag_names]
             nfunc._def_parser.add_argument(*optional, **_without)
+
         nfunc._def_parser.add_argument(*flag_names, **kwargs)
         return func
     return inner

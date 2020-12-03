@@ -4,6 +4,7 @@ import inspect
 import typing_inspect
 import contextlib
 from discord.ext import commands, flags
+from discord.ext.commands import converter as converters
 from utils.useful import BaseEmbed, print_exception
 from utils.errors import NotInDpy
 
@@ -54,15 +55,16 @@ class ErrorHandler(commands.Cog):
             else:
                 await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
                 traceback_error = print_exception(f'Ignoring exception in command {ctx.command}:', error)
-                error_message = f"**Command:** {ctx.message.content}\n" \
-                                f"**Message ID:** `{ctx.message.id}`\n" \
-                                f"**Author:** `{ctx.author}`\n" \
-                                f"**Guild:** `{ctx.guild}`\n" \
-                                f"**Channel:** `{ctx.channel}`\n" \
-                                f"**Jump:** [`jump`]({ctx.message.jump_url})```py\n" \
-                                f"{traceback_error}\n" \
-                                f"```"
-                await self.bot.error_channel.send(embed=BaseEmbed.default(ctx, description=error_message))
+                if not self.bot.tester:
+                    error_message = f"**Command:** {ctx.message.content}\n" \
+                                    f"**Message ID:** `{ctx.message.id}`\n" \
+                                    f"**Author:** `{ctx.author}`\n" \
+                                    f"**Guild:** `{ctx.guild}`\n" \
+                                    f"**Channel:** `{ctx.channel}`\n" \
+                                    f"**Jump:** [`jump`]({ctx.message.jump_url})```py\n" \
+                                    f"{traceback_error}\n" \
+                                    f"```"
+                    await self.bot.error_channel.send(embed=BaseEmbed.default(ctx, description=error_message))
 
     async def generate_signature_error(self, ctx, error):
         command = ctx.command

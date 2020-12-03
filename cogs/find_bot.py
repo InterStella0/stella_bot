@@ -556,11 +556,14 @@ class FindBot(commands.Cog, name="Bots"):
             return m.bot and m.joined_at > ctx.message.created_at - datetime.timedelta(days=1)
         members = {m.id: m for m in filter(predicate, ctx.guild.members)}
         if not members:
+            member = max(filter(lambda x: x.bot, ctx.guild.members), key=lambda x: x.joined_at)
+            time_add = humanize.precisedelta(member.joined_at, minimum_unit="minutes")
             await ctx.maybe_reply(
                 embed=BaseEmbed.default(
                     ctx,
                     title="Bots added today",
-                    description="Looks like there are no bots added in the span of 24 hours."))
+                    description="Looks like there are no bots added in the span of 24 hours.\n"
+                                f"The last time a bot was added was `{time_add}` for `{member}`"))
             return
         db_data = await self.bot.pool_pg.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
         member_data = [BotAdded.from_json(bot=members[data["bot_id"]], **data) for data in db_data]
