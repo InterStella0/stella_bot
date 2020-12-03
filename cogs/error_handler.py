@@ -3,6 +3,7 @@ import re
 import inspect
 import typing_inspect
 import contextlib
+import traceback
 from discord.ext import commands, flags
 from discord.ext.commands import converter as converters
 from utils.useful import BaseEmbed, print_exception
@@ -70,7 +71,16 @@ class ErrorHandler(commands.Cog):
         command = ctx.command
         argument = ""
         found = False
-        if _class := getattr(error, "converter", None):
+
+        def check_converter(_error):
+            if isinstance(_error, commands.BadArgument):
+                frames = [*traceback.walk_tb(_error.__traceback__)]
+                last_trace = frames[-1]
+                frame = last_trace[0]
+                converter = frame.f_locals["self"]
+                return getattr(discord, converter.__class__.__name__.replace("Converter", ""))
+
+        if _class := getattr(error, "converter", check_converter(error)):
             signature = inspect.signature(command.callback).parameters
             for typing in signature.values():
                 if typing_inspect.is_union_type(typing):
