@@ -30,7 +30,7 @@ class SFlagCommand(FlagCommand):
     def signature(self):
         result = self.old_signature
         to_append = [result]
-        parser = self.callback._def_parser  # type: FlagParser
+        parser = self.callback._def_parser  # type: _parser.DontExitArgumentParser
 
         for action in parser._actions:
             if action.option_strings:
@@ -72,14 +72,6 @@ class SFlagGroup(SFlagCommand, commands.Group):
     pass
 
 
-class FlagParser(_parser.DontExitArgumentParser):
-    def _get_value(self, action, arg_string):
-        type_func = self._registry_get('type', action.type, action.type)
-        if type_func is bool:
-            return commands.core._convert_to_bool(arg_string)
-        return super()._get_value(action, arg_string)
-
-
 def add_flag(*flag_names, **kwargs):
     def inner(func):
         if isinstance(func, commands.Command):
@@ -91,7 +83,7 @@ def add_flag(*flag_names, **kwargs):
             raise Exception("Flag with '_OPTIONAL' as it's name is not allowed.")
 
         if not hasattr(nfunc, '_def_parser'):
-            nfunc._def_parser = FlagParser()
+            nfunc._def_parser = _parser.DontExitArgumentParser()
 
         if all(x in kwargs for x in ("type", "action")):
             _without = kwargs.copy()
