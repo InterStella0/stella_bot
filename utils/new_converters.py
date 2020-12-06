@@ -3,6 +3,7 @@ import inspect
 import os
 import re
 import contextlib
+from collections import namedtuple
 from fuzzywuzzy import fuzz
 from discord.ext import commands
 from discord.ext.commands import MemberNotFound
@@ -40,14 +41,15 @@ class ValidCog(CleanListGreedy):
     """Tries to convert into a valid cog"""
     @classmethod
     async def convert(cls, ctx, argument):
+        Valid = namedtuple("Valid", "ratio key")
         loaded_cog = {re.sub("(cogs)|\.|(cog)", "", x.__module__) for _, x in ctx.bot.cogs.items()}
         valid_cog = {x[:-3] for x in os.listdir("cogs") if x[-3:] == ".py"} | loaded_cog
 
         if any(argument == x for x in ("all", "*", "al", "everything", "every", "ever")):
             return list(valid_cog)
-        for key in valid_cog:
-            if key == argument or fuzz.ratio(key, argument) >= 50:
-                return key
+        maximum = max((Valid(fuzz.ratio(key, argument), key) for key in valid_cog), key=lambda v: v.ratio)
+        if maximum.ratio >= 50:
+            return maximum.key
         raise NotValidCog(argument, converter=cls)
 
 

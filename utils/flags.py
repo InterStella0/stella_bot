@@ -28,44 +28,7 @@ class SFlagCommand(FlagCommand):
 
     @property
     def signature(self):
-        result = self.old_signature
-        to_append = [result]
-        parser = self.callback._def_parser  # type: _parser.DontExitArgumentParser
-
-        for action in parser._actions:
-            if action.option_strings:
-                flag = action.option_strings[0].lstrip('-').replace('-', '_')
-                k = '-' if len(flag) == 1 else '--'
-                should_print = action.default is not None and action.default != ''
-                if "_OPTIONAL" in flag:
-                    continue
-                if action.required:
-                    if should_print:
-                        to_append.append('<%s%s %s>' % (k, flag, action.default))
-                    else:
-                        to_append.append('<%s%s>' % (k, flag))
-                else:
-                    if should_print:
-                        to_append.append('[%s%s %s]' % (k, flag, action.default))
-                    else:
-                        to_append.append('[%s%s]' % (k, flag))
-
-        for action in parser._actions:
-            if not action.option_strings:
-                name = action.dest
-                should_print = action.default is not None and action.default != ''
-                if action.nargs in ('*', '?'):
-                    if should_print:
-                        to_append.append('[%s=%s]' % (name, action.default))
-                    else:
-                        to_append.append('[%s]' % name)
-                else:
-                    if should_print:
-                        to_append.append('<%s=%s>' % (name, action.default))
-                    else:
-                        to_append.append('<%s>' % name)
-
-        return ' '.join(to_append)
+        return self.old_signature
 
 
 class SFlagGroup(SFlagCommand, commands.Group):
@@ -84,6 +47,7 @@ def add_flag(*flag_names, **kwargs):
 
         if not hasattr(nfunc, '_def_parser'):
             nfunc._def_parser = _parser.DontExitArgumentParser()
+            nfunc._def_parser.optional = []
 
         if all(x in kwargs for x in ("type", "action")):
             _without = kwargs.copy()
@@ -92,7 +56,7 @@ def add_flag(*flag_names, **kwargs):
                     raise Exception(f"Combination of type and action must be a bool not {type(_type)}")
             kwargs.pop("action")
             optional = [f'{x}_OPTIONAL' for x in flag_names]
-            nfunc._def_parser.optional = [(x, f'{x}_OPTIONAL') for x in flag_names]
+            nfunc._def_parser.optional += [(x, f'{x}_OPTIONAL') for x in flag_names]
             nfunc._def_parser.add_argument(*optional, **_without)
 
         nfunc._def_parser.add_argument(*flag_names, **kwargs)

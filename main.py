@@ -33,13 +33,13 @@ class StellaBot(commands.Bot):
         self.confirmed_bots = set()
         self.token = token
         self.existing_prefix = None
-        self.too_speedy = False
+        self.blacklist = set()
 
     async def after_db(self):
         """Runs after the db is connected"""
         self.loading_cog()
-        await self.fill_prefix()
-        await self.fill_bots()
+        for name in "prefix", "bots", "blacklist":
+            await getattr(self, "fill_" + name)()
         for command in bot.commands:
             command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
             command.cooldown_after_parsing = True
@@ -51,6 +51,7 @@ class StellaBot(commands.Bot):
 
     @property
     def error_channel(self):
+        """Gets the error channel for the bot to log."""
         return self.get_guild(int(environ.get("BOT_GUILD"))).get_channel(int(environ.get("ERROR_CHANNEL")))
 
     def loading_cog(self):
@@ -76,6 +77,11 @@ class StellaBot(commands.Bot):
         record_confirmed = await self.pool_pg.fetch("SELECT bot_id FROM confirmed_bots;")
         self.confirmed_bots = set(x["bot_id"] for x in record_confirmed)
         print("Bots list are now filled.")
+
+    async def fill_blacklist(self):
+        """Loading up the blacklisted users."""
+        records = await self.pool_pg.fetch("SELECT snowflake_id FROM blacklist")
+        self.blacklist = {r["snowflake_id"] for r in records}
 
     async def get_prefix(self, message):
         """Handles custom prefixes, this function is invoked every time process_command method is invoke thus returning
@@ -143,6 +149,8 @@ async def on_message(message):
         return
 
     if not bot.tester or message.author == bot.stella:
+        if message.author.id in bot.blacklist or getattr(message.guild, "id", None) in bot.blacklist:
+            return
         await bot.process_commands(message)
 
 bot.starter()

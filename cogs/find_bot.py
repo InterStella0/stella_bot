@@ -233,7 +233,7 @@ class FindBot(commands.Cog, name="Bots"):
         Checks if the message contains a valid prefix, which will wait for the bot to respond to count that message
         as a command.
         """
-        limit = len(message.content) if len(message.content) < 31 else 31
+        limit = min(len(message.content), 31)
         content_compiled = ctypes.create_string_buffer(message.content[:limit].encode("utf-8"))
         if not (result := search_prefix(self.compiled_pref, content_compiled)):
             return
@@ -485,9 +485,12 @@ class FindBot(commands.Cog, name="Bots"):
     @flg.add_flag("--count", type=bool, default=False, action="store_true",
                   help="Create a rank of the highest prefix that is being use by bots. This flag accepts True or False, "
                        "defaults to False if not stated.")
+    @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
+                  help="Reverses the list. This flag accepts True or False, default to False if not stated.")
     async def allprefix(self, ctx, **flags):
         bots = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix")
         attr = "count" if (count_mode := flags.pop("count", False)) else "prefix"
+        reverse = flags.pop("reverse", False)
 
         def mem(x):
             return ctx.guild.get_member(x)
@@ -497,7 +500,7 @@ class FindBot(commands.Cog, name="Bots"):
             data = [PrefixCount(*a) for a in count_prefixes.items()]
         else:
             data = [BotPrefix(mem(bot["bot_id"]), bot["prefix"]) for bot in bots if mem(bot["bot_id"])]
-        data.sort(key=lambda x: getattr(x, attr), reverse=count_mode)
+        data.sort(key=lambda x: getattr(x, attr), reverse=count_mode is not reverse)
         menu = MenuBase(source=AllPrefixes(data, count_mode), delete_message_after=True)
         await menu.start(ctx)
 
@@ -549,9 +552,14 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.command(aliases=["rba", "recentbot", "recentadd"],
                       brief="Shows a list of bots that has been added in a day.",
                       help="Shows a list of bots that has been added in a day along with the owner that requested it, "
-                           "and how long ago it was added.")
+                           "and how long ago it was added.",
+                      cls=flg.SFlagCommand)
     @is_discordpy()
-    async def recentbotadd(self, ctx):
+    @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
+                  help="Reverses the list. This flag accepts True or False, default to False if not stated.")
+    async def recentbotadd(self, ctx, **flags):
+        reverse = flags.pop("reverse", False)
+
         def predicate(m):
             return m.bot and m.joined_at > ctx.message.created_at - datetime.timedelta(days=1)
         members = {m.id: m for m in filter(predicate, ctx.guild.members)}
@@ -567,7 +575,7 @@ class FindBot(commands.Cog, name="Bots"):
             return
         db_data = await self.bot.pool_pg.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
         member_data = [BotAdded.from_json(bot=members[data["bot_id"]], **data) for data in db_data]
-        member_data.sort(key=lambda x: x.joined_at)
+        member_data.sort(key=lambda x: x.joined_at, reverse=not reverse)
         menu = MenuBase(source=BotAddedList(member_data), delete_message_after=True)
         await menu.start(ctx)
 
@@ -592,13 +600,17 @@ class FindBot(commands.Cog, name="Bots"):
         await ctx.maybe_reply(embed=BaseEmbed.default(ctx, **embed_dict))
 
     @commands.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
-                      help="Shows all bot's command usage in the server on a sorted list.")
-    async def botrank(self, ctx, bot: BotUsage = None):
+                      help="Shows all bot's command usage in the server on a sorted list.",
+                      cls=flg.SFlagCommand)
+    @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
+                  help="Reverses the list. This flag accepts True or False, default to False if not stated.")
+    async def botrank(self, ctx, bot: BotUsage = None, **flags):
+        reverse = flags.pop("reverse", False)
         bots = {x.id: x for x in ctx.guild.members if x.bot}
         query = "SELECT * FROM bot_usage_count WHERE bot_id=ANY($1::BIGINT[])"
         record = await self.bot.pool_pg.fetch(query, list(bots))
         bot_data = [BotUsage(bots[r["bot_id"]], r["count"]) for r in record]
-        bot_data.sort(key=lambda x: x.count, reverse=True)
+        bot_data.sort(key=lambda x: x.count, reverse=not reverse)
         if not bot:
             menu = MenuBase(source=AllBotCount(bot_data), delete_message_after=True)
             await menu.start(ctx)
