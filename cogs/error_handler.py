@@ -126,7 +126,7 @@ class ErrorHandler(commands.Cog):
             if not bucket.update_rate_limit():
                 embed.description += "**Command Example**"
                 embed.set_image(url=demo)
-        embed.set_footer(icon_url=ctx.guild.me.avatar_url, text="The argument that was capitalize is the error.")
+        embed.set_footer(icon_url=ctx.me.avatar_url, text="The error is the capitalize argument.")
         return embed
 
 

@@ -36,7 +36,7 @@ def call(func, *args, exception=Exception, ret=False, **kwargs):
 class BaseEmbed(discord.Embed):
     """Main purpose is to get the usual setup of Embed for a command or an error embed"""
     def __init__(self, color=0xffcccb, timestamp=None, **kwargs):
-        super(BaseEmbed, self).__init__(color=color, timestamp=timestamp or datetime.datetime.utcnow(), **kwargs)
+        super().__init__(color=color, timestamp=timestamp or datetime.datetime.utcnow(), **kwargs)
 
     @classmethod
     def default(cls, ctx, **kwargs):
@@ -71,7 +71,7 @@ class MenuBase(menus.MenuPages):
     """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
        with a custom emoji, and keep the functionality."""
     def __init__(self, source, dict_emoji=None, **kwargs):
-        super().__init__(source, **kwargs)
+        super().__init__(source, delete_message_after=kwargs.pop('delete_message_after', True), **kwargs)
         self.info = False
 
         EmojiB = namedtuple("EmojiB", "emoji position explain")
@@ -96,16 +96,16 @@ class MenuBase(menus.MenuPages):
                                  "Remove this message.")
                           }
         self.dict_emoji = dict_emoji or def_dict_emoji
-        for emoji in super().buttons:
-            callback = super().buttons[emoji].action  # gets the function that would be called for that button
+        for emoji in self.buttons:
+            callback = self.buttons[emoji].action
             if emoji.name not in self.dict_emoji:
                 continue
             new_but = self.dict_emoji[emoji.name]
             new_button = Button(new_but.emoji, callback, position=new_but.position)
             del self.dict_emoji[emoji.name]
             self.dict_emoji[new_but.emoji] = new_but
-            super().add_button(new_button)
-            super().remove_button(emoji)
+            self.add_button(new_button)
+            self.remove_button(emoji)
 
     async def _get_kwargs_from_page(self, page):
         value = await discord.utils.maybe_coroutine(self._source.format_page, self, page)
@@ -118,10 +118,14 @@ class MenuBase(menus.MenuPages):
             no_ping.update({'embed': value, 'content': None})
         return no_ping
 
-    def generate_page(self, embed, maximum):
+    def generate_page(self, content, maximum):
         if maximum > 1:
-            return embed.set_author(name=f"Page {self.current_page + 1}/{maximum}")
-        return embed
+            page = f"Page {self.current_page + 1}/{maximum}"
+            if isinstance(content, discord.Embed):
+                return content.set_author(name=page)
+            elif isinstance(content, str):
+                return f"{page}\n{content}"
+        return content
 
     async def send_initial_message(self, ctx, channel):
         page = await self._source.get_page(0)
