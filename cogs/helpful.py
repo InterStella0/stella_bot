@@ -5,9 +5,11 @@ import re
 import discord
 import humanize
 import datetime
+import textwrap
 from discord.ext import commands, menus
-from utils.useful import BaseEmbed, MenuBase, try_call, plural
+from utils.useful import BaseEmbed, MenuBase, plural
 from utils.errors import CantRun
+from utils import flags as flg
 from collections import namedtuple
 from discord.ext.menus import First, Last
 
@@ -58,7 +60,7 @@ class HelpMenuBase(MenuBase):
         if info := not self.info:
             await self.on_information_show(payload)
         else:
-            self.current_page = self.current_page if self.current_page > 0 else 0
+            self.current_page = max(self.current_page, 0)
             await self.show_page(self.current_page)
         self.info = info
 
@@ -123,6 +125,12 @@ class HelpSource(menus.ListPageSource):
         embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar_url)
 
         return menu.generate_page(embed, self._max_pages)
+
+
+class CodeBlockPage(menus.ListPageSource):
+    """This is for Code Block ListPageSource"""
+    async def format_page(self, menu: CogMenu, entry):
+        return menu.generate_page(entry, self._max_pages)
 
 
 class StellaBotHelp(commands.DefaultHelpCommand):
@@ -259,17 +267,22 @@ class Helpful(commands.Cog):
                       help="Shows the bot uptime from when it was started.")
     async def uptime(self, ctx):
         c_uptime = datetime.datetime.utcnow() - self.bot.uptime
-        await ctx.maybe_reply(embed=BaseEmbed.default(ctx,
-                                               title="Uptime",
-                                               description=f"Current uptime: `{humanize.precisedelta(c_uptime)}`"))
+        await ctx.maybe_reply(embed=BaseEmbed.default(
+            ctx,
+            title="Uptime",
+            description=f"Current uptime: `{humanize.precisedelta(c_uptime)}`")
+        )
 
     @commands.command(aliases=["src", "sources"],
                       brief="Shows the source code link in github.",
                       help="Shows the source code in github given the cog/command name. "
                            "Defaults to the stella_bot source code link if not given any argument. "
                            "It accepts 2 types of content, the command name, or the Cog method name. "
-                           "Cog method must specify it's Cog name separate by a period and it's method.")
-    async def source(self, ctx, *, content=None):
+                           "Cog method must specify it's Cog name separate by a period and it's method.",
+                      cls=flg.SFlagCommand)
+    @flg.add_flag("--code", type=bool, action="store_true", default=False,
+                  help="Shows the code block instead of the link. Accepts True or False, defaults to False if not stated.")
+    async def source(self, ctx, content=None, **flags):
         source_url = 'https://github.com/InterStella0/stella_bot'
         if not content:
             return await ctx.maybe_reply(f"<{source_url}>")
@@ -302,11 +315,17 @@ class Helpful(commands.Cog):
                 func(content)
         if module is None:
             return await ctx.maybe_reply(f"Method {content} not found.")
-        lines, firstlineno = inspect.getsourcelines(src)
-        location = module.replace('.', '/') + '.py'
-
-        url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
-        await ctx.maybe_reply(url)
+        show_code = flags.pop("code", False)
+        if show_code:
+            code_block = inspect.getsource(src)
+            list_codeblock = [f"```py\n{cb}\n```" for cb in textwrap.wrap(code_block, width=1900, replace_whitespace=False)]
+            menu = MenuBase(CodeBlockPage(list_codeblock, per_page=1))
+            await menu.start(ctx)
+        else:
+            lines, firstlineno = inspect.getsourcelines(src)
+            location = module.replace('.', '/') + '.py'
+            content = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
+            await ctx.maybe_reply(content)
 
     def cog_unload(self):
         self.bot.help_command = self._default_help_command
