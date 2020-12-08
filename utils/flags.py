@@ -1,5 +1,8 @@
 import shlex
 import re
+import discord
+import argparse
+import sys
 from discord.ext import commands
 from discord.ext.flags import FlagCommand, _parser
 
@@ -17,14 +20,34 @@ class SFlagCommand(FlagCommand):
                         y = y.replace(p, q)
                     arguments[x] = y
         namespace = self.callback._def_parser.parse_args(arguments, ctx=ctx)
-        values = vars(namespace)
-        for x in values.copy():
+        flags = vars(namespace)
+        for flag, value in flags.items():
+            # Would only call if a value is from _get_value else it is already a value.
+            if type(value) is _parser.ParserResult:
+                try:
+                    value = await discord.utils.maybe_coroutine(value.result)
+
+                # ArgumentTypeErrors indicate errors
+                except argparse.ArgumentTypeError:
+                    msg = str(sys.exc_info()[1])
+                    raise argparse.ArgumentError(value.action, msg)
+
+                # TypeErrors or ValueErrors also indicate errors
+                except (TypeError, ValueError):
+                    name = getattr(value.action.type, '__name__', repr(value.action.type))
+                    args = {'type': name, 'value': value.arg_string}
+                    msg = 'invalid %(type)s value: %(value)r'
+                    raise argparse.ArgumentError(value.action, msg % args)
+
+            flags.update({flag: value})
+
+        for x in flags.copy():
             if hasattr(self.callback._def_parser, "optional"):
                 for val, y in self.callback._def_parser.optional:
                     y = re.sub("-", "", y)
-                    if y == x and values[y]:
-                        values.update({re.sub("-", "", val): True})
-        ctx.kwargs.update(values)
+                    if y == x and flags[y]:
+                        flags.update({re.sub("-", "", val): True})
+        ctx.kwargs.update(flags)
 
     @property
     def signature(self):
