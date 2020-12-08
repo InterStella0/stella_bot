@@ -180,7 +180,6 @@ class FindBot(commands.Cog, name="Bots"):
                 if not msg.author.bot:
                     return True
                 return inner(msg)
-
             return check
 
         bots = []
@@ -412,12 +411,11 @@ class FindBot(commands.Cog, name="Bots"):
         author = await try_call(commands.UserConverter().convert, ctx, str(data.author), exception=UserNotFound)
         embed = discord.Embed(title=f"{data.bot}",
                               color=self.bot.color)
-        request = default_date(data.requested_at) if data.requested_at else None
-        join = default_date(data.joined_at) if data.joined_at else None
         embed.set_thumbnail(url=data.bot.avatar_url)
-        fields = (("Reason", data.reason),
-                  ("Requested", request),
-                  ("Joined", join),
+        fields = (("Added by", f"{author.mention} (`{author.id}`)"),
+                  ("Reason", data.reason),
+                  ("Requested", default_date(data.requested_at) if data.requested_at else None),
+                  ("Joined", default_date(data.joined_at) if data.joined_at else None),
                   ("Message Request", f"[jump]({data.jump_url})" if data.jump_url else None))
 
         if author:
@@ -501,7 +499,7 @@ class FindBot(commands.Cog, name="Bots"):
         else:
             data = [BotPrefix(mem(bot["bot_id"]), bot["prefix"]) for bot in bots if mem(bot["bot_id"])]
         data.sort(key=lambda x: getattr(x, attr), reverse=count_mode is not reverse)
-        menu = MenuBase(source=AllPrefixes(data, count_mode), delete_message_after=True)
+        menu = MenuBase(source=AllPrefixes(data, count_mode))
         await menu.start(ctx)
 
     @commands.command(aliases=["bot_use", "bu", "botusage", "botuses"],
@@ -576,7 +574,7 @@ class FindBot(commands.Cog, name="Bots"):
         db_data = await self.bot.pool_pg.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
         member_data = [BotAdded.from_json(bot=members[data["bot_id"]], **data) for data in db_data]
         member_data.sort(key=lambda x: x.joined_at, reverse=not reverse)
-        menu = MenuBase(source=BotAddedList(member_data), delete_message_after=True)
+        menu = MenuBase(source=BotAddedList(member_data))
         await menu.start(ctx)
 
     @commands.command(aliases=["rht", "recenthelptrip", "recenttrigger"],
@@ -612,7 +610,7 @@ class FindBot(commands.Cog, name="Bots"):
         bot_data = [BotUsage(bots[r["bot_id"]], r["count"]) for r in record]
         bot_data.sort(key=lambda x: x.count, reverse=not reverse)
         if not bot:
-            menu = MenuBase(source=AllBotCount(bot_data), delete_message_after=True)
+            menu = MenuBase(source=AllBotCount(bot_data))
             await menu.start(ctx)
         else:
             key = "(\u200b|\u200b)"

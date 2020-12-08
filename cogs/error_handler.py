@@ -5,8 +5,7 @@ import typing_inspect
 import contextlib
 import traceback
 from discord.ext import commands, flags
-from discord.ext.commands import converter as converters
-from utils.useful import BaseEmbed, print_exception
+from utils.useful import BaseEmbed, print_exception, call
 from utils.errors import NotInDpy
 
 
@@ -77,10 +76,10 @@ class ErrorHandler(commands.Cog):
                 frames = [*traceback.walk_tb(_error.__traceback__)]
                 last_trace = frames[-1]
                 frame = last_trace[0]
-                converter = frame.f_locals["self"]
-                return getattr(discord, converter.__class__.__name__.replace("Converter", ""))
+                converter = frame.f_locals.get("self")
+                return getattr(discord, converter.__class__.__name__.replace("Converter", "")) if converter is not None else None
 
-        if _class := getattr(error, "converter", check_converter(error)):
+        if _class := getattr(error, "converter", call(check_converter, error)):
             signature = inspect.signature(command.callback).parameters
             for typing in signature.values():
                 if typing_inspect.is_union_type(typing):
