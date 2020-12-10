@@ -3,6 +3,8 @@ from discord.ext import commands
 from discord.ext.commands import Greedy
 from utils.useful import call, BaseEmbed, AfterGreedy, event_check
 from utils.new_converters import ValidCog
+from utils import flags as flg
+from jishaku.codeblocks import codeblock_converter
 
 
 class Myself(commands.Cog, command_attrs=dict(hidden=True)):
@@ -12,10 +14,38 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
     async def cog_check(self, ctx):
         return await commands.is_owner().predicate(ctx)
 
+    @commands.command(cls=flg.SFlagCommand)
+    @flg.add_flag("--uses", type=int, default=1)
+    @flg.add_flag("--code", type=codeblock_converter)
+    async def command(self, ctx, **flags):
+        coding = {
+            "_bot": self.bot,
+            "commands": commands
+        }
+        content = flags["code"].content
+        values = content.split("\n")
+        values.pop()
+        command = values.pop()
+        values.append(f'_bot.add_command({command})')
+        values.insert(1, f'@commands.is_owner()')
+        exec("\n".join(values), coding)
+
+        uses = flags["uses"]
+
+        def check(ctx):
+            return ctx.command.qualified_name == coding[command].qualified_name and self.bot.stella == ctx.author
+
+        await ctx.message.add_reaction("<:next_check:754948796361736213>")
+        while c := await self.bot.wait_for("command_completion", check=check):
+            uses -= 1
+            if uses <= 0:
+                await ctx.message.add_reaction("<:checkmark:753619798021373974>")
+                return self.bot.remove_command(c.command.qualified_name)
+
     @commands.Cog.listener()
     @event_check(lambda s, b, a: (b.content and a.content) or b.author.bot)
     async def on_message_edit(self, before, after):
-        if await self.bot.is_owner(before.author):
+        if await self.bot.is_owner(before.author) and not before.embeds and not after.embeds:
             await self.bot.process_commands(after)
 
     @commands.command(name="load", aliases=["cload", "loads", "lod"], cls=AfterGreedy)
