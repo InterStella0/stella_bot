@@ -16,22 +16,22 @@ load_dotenv(dotenv_path)
 
 
 class StellaBot(commands.Bot):
-    def __init__(self, help_src, color, token, db, user_db, pass_db, tester, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(self, **kwargs)
-        self.tester = tester
-        self.help_src = help_src
+        self.tester = kwargs.pop("tester", False)
+        self.help_src = kwargs.pop("help_src", None)
         self.command_prefix = self.get_prefix
         self.decorator_store = utils.useful.decorator_store
-        self.db = db
-        self.user_db = user_db
-        self.pass_db = pass_db
-        self.color = color
+        self.db = kwargs.pop("db", None)
+        self.user_db = kwargs.pop("user_db", None)
+        self.pass_db = kwargs.pop("pass_db", None)
+        self.color = kwargs.pop("color", None)
         self.pool_pg = None
         self.uptime = None
         self.all_bot_prefixes = {}
         self.pending_bots = set()
         self.confirmed_bots = set()
-        self.token = token
+        self.token = kwargs.pop("token", None)
         self.existing_prefix = None
         self.blacklist = set()
 
