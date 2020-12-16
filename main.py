@@ -3,7 +3,6 @@ import re
 import discord
 import asyncpg
 import datetime
-import utils.useful
 import utils.library_override
 from utils.useful import StellaContext
 from discord.ext import commands
@@ -17,11 +16,9 @@ load_dotenv(dotenv_path)
 
 class StellaBot(commands.Bot):
     def __init__(self, **kwargs):
-        super().__init__(self, **kwargs)
         self.tester = kwargs.pop("tester", False)
         self.help_src = kwargs.pop("help_src", None)
         self.command_prefix = self.get_prefix
-        self.decorator_store = utils.useful.decorator_store
         self.db = kwargs.pop("db", None)
         self.user_db = kwargs.pop("user_db", None)
         self.pass_db = kwargs.pop("pass_db", None)
@@ -34,6 +31,7 @@ class StellaBot(commands.Bot):
         self.token = kwargs.pop("token", None)
         self.existing_prefix = None
         self.blacklist = set()
+        super().__init__(self, **kwargs)
 
     async def after_db(self):
         """Runs after the db is connected"""
@@ -41,8 +39,9 @@ class StellaBot(commands.Bot):
         for name in "prefix", "bots", "blacklist":
             await getattr(self, "fill_" + name)()
         for command in bot.commands:
-            command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
             command.cooldown_after_parsing = True
+            if not command._buckets:
+                command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
 
     @property
     def stella(self):
@@ -103,6 +102,15 @@ class StellaBot(commands.Bot):
 
     async def get_context(self, message, *, cls=None):
         return await super().get_context(message, cls=StellaContext)
+
+    async def process_commands(self, message):
+        if message.author.bot:
+            return
+
+        ctx = await self.get_context(message)
+        if ctx.valid and getattr(ctx.cog, "qualified_name", None) != "Jishaku":
+            await ctx.trigger_typing()
+        await self.invoke(ctx)
 
     def starter(self):
         """Starts the bot properly"""

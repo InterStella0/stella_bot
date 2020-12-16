@@ -307,7 +307,7 @@ class Helpful(commands.Cog):
             cog = self.bot.get_cog(cog)
             if method_func := getattr(cog, method, None):
                 module = method_func.__module__
-                target = self.bot.decorator_store.get(f"{module}.{method}") or method_func
+                target = getattr(method_func, "callback", method_func)
                 src = target.__code__
 
         for func in (command_check, cog_check):
@@ -317,8 +317,8 @@ class Helpful(commands.Cog):
             return await ctx.maybe_reply(f"Method {content} not found.")
         show_code = flags.pop("code", False)
         if show_code:
-            code_block = inspect.getsource(src)
-            list_codeblock = [f"```py\n{cb}\n```" for cb in textwrap.wrap(code_block, width=1900, replace_whitespace=False)]
+            param = {"text": inspect.getsource(src), "width": 1900, "replace_whitespace": False}
+            list_codeblock = [f"```py\n{cb}\n```" for cb in textwrap.wrap(**param)]
             menu = MenuBase(CodeBlockPage(list_codeblock, per_page=1))
             await menu.start(ctx)
         else:

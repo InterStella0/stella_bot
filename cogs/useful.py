@@ -2,6 +2,7 @@ import discord
 import base64
 import datetime
 import random
+import itertools
 from discord.ext import commands
 from collections import namedtuple
 from utils.useful import try_call, call, BaseEmbed
@@ -125,11 +126,49 @@ class Useful(commands.Cog):
         embed_dict = {
             "title": "Reply Count",
             "description": f"**Original:** `{msg.author}`\n"
-                           f"**Message:** `{msg.content}`\n"
+                           f"**Message:** {msg.clean_content}\n"
                            f"**Replies:** `{count}`\n"
                            f"**Origin:** [`jump`]({msg.jump_url})"
         }
         await ctx.reply(embed=BaseEmbed.default(ctx, **embed_dict), mention_author=False)
+
+    @commands.command(aliases=["find_type", "findtypes", "idtype", "id_type", "idtypes"],
+                      help="Try to find the type of an ID.")
+    @commands.cooldown(1, 60, commands.BucketType.user)
+    async def findtype(self, ctx, id: discord.Object):
+        bot = self.bot
+
+        async def found_message(type_id):
+            await ctx.maybe_reply(
+                    embed=BaseEmbed.default(
+                        ctx,
+                        title="Type Finder",
+                        description=f"**ID**: `{id.id}`"
+                                    f"**Type:** `{type_id.capitalize()}`\n"
+                                    f"**Created:** `{id.created_at}`")
+                )
+
+        async def find(w, t):
+            try:
+                method = getattr(bot, f"{w}_{t}")
+                if result := await discord.utils.maybe_coroutine(method, id.id):
+                    return result is not None
+            except discord.Forbidden:
+                return ("fetch", "guild") != (w, t)
+            except (discord.NotFound, AttributeError):
+                pass
+
+        m = await bot.http._HTTPClient__session.get(f"https://cdn.discordapp.com/emojis/{id.id}")
+        if m.status == 200:
+            return await found_message("emoji")
+
+        if await try_call(commands.MessageConverter().convert, ctx, str(id.id)):
+            return await found_message("message")
+
+        for way, typeobj in itertools.product(("get", "fetch"), ("channel", "user", "webhook", "guild")):
+            if await find(way, typeobj):
+                return await found_message(typeobj)
+        await ctx.maybe_reply("idk")
 
 
 def setup(bot):

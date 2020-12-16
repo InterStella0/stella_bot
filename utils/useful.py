@@ -6,8 +6,8 @@ import traceback
 import sys
 import functools
 import asyncio
+import contextlib
 from collections import namedtuple
-from dataclasses import dataclass, field
 from discord.ext.menus import First, Last, Button
 from discord.utils import maybe_coroutine
 from discord.ext import commands, menus
@@ -161,26 +161,10 @@ def search_prefix(array_result, content_buffer):
     return strresult.decode('utf-8')
 
 
-@dataclass
-class DecoStore:
-    """Class that stores event callbacks for the source command."""
-    functions: dict = field(default_factory=dict)
-
-    def get(self, content):
-        if content in self.functions:
-            return self.functions[content]
-
-    def update(self, func):
-        self.functions.update({f"{func.__module__}.{func.__name__}": func})
-
-
-decorator_store = DecoStore()
-
-
 def event_check(func):
     """Event decorator check."""
     def check(method):
-        decorator_store.update(method)
+        method.callback = method
 
         @functools.wraps(method)
         async def wrapper(*args, **kwargs):
@@ -220,10 +204,10 @@ class StellaContext(commands.Context):
     async def maybe_reply(self, content=None, mention_author=False, **kwargs):
         """Replies if there is a message in between the command invoker and the bot's message."""
         await asyncio.sleep(0.05)
-        if self.channel.last_message != self.message:
-            await self.reply(content, mention_author=mention_author, **kwargs)
-        else:
-            await self.send(content, **kwargs)
+        with contextlib.suppress(discord.HTTPException):
+            if self.channel.last_message != self.message:
+                return await self.reply(content, mention_author=mention_author, **kwargs)
+        await self.send(content, **kwargs)
 
 
 async def maybe_method(func, cls=None, *args, **kwargs):
