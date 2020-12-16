@@ -18,7 +18,7 @@ class ErrorHandler(commands.Cog):
     async def on_command_error(self, ctx, error):
         """The event triggered when an error is raised while invoking a command."""
         async def send_del(*args, **kwargs):
-            await ctx.reply(*args, delete_after=60, mention_author=False, **kwargs)
+            await ctx.reply(*args, delete_after=60, **kwargs)
             if ctx.me.permissions_in(ctx.channel).manage_messages:
                 with contextlib.suppress(discord.NotFound):
                     await ctx.message.delete(delay=60)

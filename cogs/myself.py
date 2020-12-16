@@ -1,4 +1,5 @@
 import discord
+from typing import Union
 from discord.ext import commands
 from discord.ext.commands import Greedy
 from utils.useful import call, BaseEmbed, AfterGreedy, event_check
@@ -13,6 +14,13 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
 
     async def cog_check(self, ctx):
         return await commands.is_owner().predicate(ctx)
+
+    @commands.command()
+    async def su(self, ctx, member: Union[discord.Member, discord.User], *, content):
+        message = ctx.message
+        message.author = member
+        message.content = ctx.prefix + content
+        self.bot.dispatch("message", message)
 
     @commands.command(cls=flg.SFlagCommand)
     @flg.add_flag("--uses", type=int, default=1)

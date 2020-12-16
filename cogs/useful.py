@@ -143,7 +143,7 @@ class Useful(commands.Cog):
                     embed=BaseEmbed.default(
                         ctx,
                         title="Type Finder",
-                        description=f"**ID**: `{id.id}`"
+                        description=f"**ID**: `{id.id}`\n"
                                     f"**Type:** `{type_id.capitalize()}`\n"
                                     f"**Created:** `{id.created_at}`")
                 )
