@@ -117,7 +117,7 @@ class HelpSource(menus.ListPageSource):
     async def format_page(self, menu: HelpMenu, entry):
         cog, list_commands = entry
         new_line = "\n"
-        embed = discord.Embed(title=f"{cog.qualified_name} Category",
+        embed = discord.Embed(title=f"{getattr(cog, 'qualified_name', 'No')} Category",
                               description=new_line.join(f'{command_help.command}{new_line}{command_help.brief}'
                                                         for command_help in list_commands),
                               color=menu.bot.color)
@@ -174,7 +174,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     def get_help(self, command, brief=True):
         """Gets the command short_doc if brief is True while getting the longer help if it is false"""
-        real_help = command.help or "This command have not been documented"
+        real_help = command.help or "This command is not documented."
         return real_help if not brief else command.short_doc or real_help
 
     def get_demo(self, command):

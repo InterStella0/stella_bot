@@ -4,7 +4,7 @@ import discord
 import asyncpg
 import datetime
 import utils.library_override
-from utils.useful import StellaContext
+from utils.useful import StellaContext, event_check
 from discord.ext import commands
 from dotenv import load_dotenv
 from os.path import join, dirname
@@ -40,7 +40,7 @@ class StellaBot(commands.Bot):
             await getattr(self, "fill_" + name)()
         for command in bot.commands:
             command.cooldown_after_parsing = True
-            if not command._buckets:
+            if not getattr(command._buckets, "_cooldown", None):
                 command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
 
     @property
@@ -151,14 +151,14 @@ async def on_ready():
 
 
 @bot.event
+@event_check(lambda x: not bot.tester or x.author == bot.stella)
 async def on_message(message):
     if re.fullmatch("<@(!)?661466532605460530>", message.content):
         await message.channel.send(f"My prefix is `{await bot.get_prefix(message)}`")
         return
 
-    if not bot.tester or message.author == bot.stella:
-        if message.author.id in bot.blacklist or getattr(message.guild, "id", None) in bot.blacklist:
-            return
-        await bot.process_commands(message)
+    if message.author.id in bot.blacklist or getattr(message.guild, "id", None) in bot.blacklist:
+        return
+    await bot.process_commands(message)
 
 bot.starter()

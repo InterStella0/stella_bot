@@ -111,7 +111,7 @@ class MenuBase(menus.MenuPages):
         value = await discord.utils.maybe_coroutine(self._source.format_page, self, page)
         no_ping = {'mention_author': False}
         if isinstance(value, dict):
-            return value.update(no_ping)
+            value.update(no_ping)
         elif isinstance(value, str):
             no_ping.update({'content': value})
         elif isinstance(value, discord.Embed):

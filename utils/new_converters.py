@@ -58,7 +58,7 @@ class IsBot(commands.Converter):
     async def convert(self, ctx, argument):
         try:
             member = await commands.MemberConverter().convert(ctx, argument)
-        except MemberNotFound as e:
+        except MemberNotFound:
             raise UserNotFound(argument, converter=self) from None
         else:
             if not member.bot:
