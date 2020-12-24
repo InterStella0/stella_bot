@@ -6,18 +6,13 @@ import discord
 import humanize
 import datetime
 import textwrap
+import more_itertools
 from discord.ext import commands, menus
 from utils.useful import BaseEmbed, MenuBase, plural
 from utils.errors import CantRun
 from utils import flags as flg
 from collections import namedtuple
 from discord.ext.menus import First, Last
-
-
-class CommandHelp:
-    def __init__(self, command, brief):
-        self.command = command
-        self.brief = brief
 
 
 class HelpMenuBase(MenuBase):
@@ -139,12 +134,6 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         with open("d_json/help.json") as r:
             self.help_gif = json.load(r)
 
-    def get_bot_mapping(self):
-        """Retrieves the bot mapping passed to :meth:`send_bot_help`."""
-        mapping = super().get_bot_mapping()
-        filtered_mapping = {cog: self.filter_commands(mapping[cog], sort=True) for cog in mapping}
-        return filtered_mapping
-
     def get_command_signature(self, command, ctx=None):
         """Method to return a commands name and signature"""
         if not ctx:
@@ -196,14 +185,19 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     async def send_bot_help(self, mapping):
         """Gets called when `uwu help` is invoked"""
-        command_data = {}
-        for cog in mapping:
-            command_data[cog] = []
-            for command in await mapping[cog]:
-                data = (getattr(self, f"get_{x}")(command) for x in ("command_signature", "help"))
-                command_data[cog].append(CommandHelp(*data))
+        filtered_mapping = {cog: await self.filter_commands(mapping[cog], sort=True) for cog in mapping}
+        command_data = []
+        CommandHelp = namedtuple("CommandHelp", 'command brief')
 
-        command_data = tuple((cog, command_data[cog]) for cog in mapping if command_data[cog])
+        def get_info(com):
+            return (getattr(self, f"get_{x}")(com) for x in ("command_signature", "help"))
+
+        for cog, list_commands in filtered_mapping.items():
+            if not list_commands:
+                continue
+            for chunks in more_itertools.flatten([more_itertools.chunked(list_commands, 6)]):
+                command_data.append((cog, [CommandHelp(*get_info(data)) for data in chunks]))
+
         pages = HelpMenu(source=HelpSource(command_data, per_page=1), delete_message_after=True)
         with contextlib.suppress(discord.NotFound):
             await pages.start(self.context, wait=True)

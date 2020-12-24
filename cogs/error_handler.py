@@ -77,7 +77,8 @@ class ErrorHandler(commands.Cog):
                 last_trace = frames[-1]
                 frame = last_trace[0]
                 converter = frame.f_locals.get("self")
-                return getattr(discord, converter.__class__.__name__.replace("Converter", "")) if converter is not None else None
+                if converter is not None:
+                    return getattr(discord, converter.__class__.__name__.replace("Converter", ""), None)
 
         if _class := getattr(error, "converter", call(check_converter, error)):
             signature = inspect.signature(command.callback).parameters
