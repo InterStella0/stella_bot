@@ -195,7 +195,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         for cog, list_commands in filtered_mapping.items():
             if not list_commands:
                 continue
-            for chunks in more_itertools.flatten([more_itertools.chunked(list_commands, 6)]):
+            for chunks in more_itertools.chunked(list_commands, 6):
                 command_data.append((cog, [CommandHelp(*get_info(data)) for data in chunks]))
 
         pages = HelpMenu(source=HelpSource(command_data, per_page=1), delete_message_after=True)
