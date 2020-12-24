@@ -185,7 +185,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     async def send_bot_help(self, mapping):
         """Gets called when `uwu help` is invoked"""
-        filtered_mapping = {cog: await self.filter_commands(mapping[cog], sort=True) for cog in mapping}
+        filtered_mapping = {cog: await self.filter_commands(unfil, sort=True) for cog, unfil in mapping.items()}
         command_data = []
         CommandHelp = namedtuple("CommandHelp", 'command brief')
 
@@ -193,8 +193,6 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             return (getattr(self, f"get_{x}")(com) for x in ("command_signature", "help"))
 
         for cog, list_commands in filtered_mapping.items():
-            if not list_commands:
-                continue
             for chunks in more_itertools.chunked(list_commands, 6):
                 command_data.append((cog, [CommandHelp(*get_info(data)) for data in chunks]))
 
