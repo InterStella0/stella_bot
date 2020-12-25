@@ -185,16 +185,15 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     async def send_bot_help(self, mapping):
         """Gets called when `uwu help` is invoked"""
-        filtered_mapping = {cog: await self.filter_commands(unfil, sort=True) for cog, unfil in mapping.items()}
-        command_data = []
-        CommandHelp = namedtuple("CommandHelp", 'command brief')
-
         def get_info(com):
             return (getattr(self, f"get_{x}")(com) for x in ("command_signature", "help"))
 
-        for cog, list_commands in filtered_mapping.items():
+        command_data = []
+        CommandHelp = namedtuple("CommandHelp", 'command brief')
+        for cog, unfiltered_commands in mapping.items():
+            list_commands = await self.filter_commands(unfiltered_commands, sort=True)
             for chunks in more_itertools.chunked(list_commands, 6):
-                command_data.append((cog, [CommandHelp(*get_info(data)) for data in chunks]))
+                command_data.append((cog, [CommandHelp(*get_info(command)) for command in chunks]))
 
         pages = HelpMenu(source=HelpSource(command_data, per_page=1), delete_message_after=True)
         with contextlib.suppress(discord.NotFound):
