@@ -12,9 +12,9 @@ from discord.ext import commands
 from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
 from utils import flags as flg
-from utils.new_converters import BotPrefix, BotUsage, IsBot, FetchUser
-from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check, plural, realign, maybe_method
-from utils.errors import NotInDatabase, BotNotFound, NotBot
+from utils.new_converters import BotPrefix, BotUsage, IsBot
+from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check, plural, realign, wait_ready
+from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy
 
 
@@ -29,31 +29,28 @@ class BotAdded:
     joined_at: datetime.datetime = None
 
     @classmethod
-    def from_json(cls, bot=None, bot_id=None, author_id=None, joined_at=None, **data):
+    def from_json(cls, bot=None, **data):
         """factory method on data from a dictionary like object into BotAdded."""
-        author = author_id
-        join = joined_at
-        bot = bot or bot_id
-        if bot and isinstance(bot, discord.Member):
+        author = data.pop("author_id", None)
+        join = data.pop("joined_at", None)
+        bot = bot or data.pop("bot_id", None)
+        if isinstance(bot, discord.Member):
             join = bot.joined_at
-            author = bot.guild.get_member(author)
+            author = bot.guild.get_member(author) or author
 
         return cls(author=author, bot=bot, joined_at=join, **data)
 
     @classmethod
     async def convert(cls, ctx, argument):
         """Invokes when the BotAdded is use as a typehint."""
-        for inst in commands.MemberConverter(), FetchUser:
-            with contextlib.suppress(commands.BadArgument):
-                if user := await maybe_method(inst.convert, cls, ctx, argument):
-                    if not user.bot:
-                        raise NotBot(user, converter=cls)
-                    for attribute in ("pending", "confirmed")[isinstance(inst, commands.MemberConverter):]:
-                        attribute += "_bots"
-                        if user.id in getattr(ctx.bot, attribute):
-                            data = await ctx.bot.pool_pg.fetchrow(f"SELECT * FROM {attribute} WHERE bot_id = $1", user.id)
-                            return cls.from_json(user, **data)
-                    raise NotInDatabase(user, converter=cls)
+        with contextlib.suppress(commands.BadArgument):
+            if user := await IsBot().convert(ctx, argument, cls=BotAdded):
+                for attribute in ("pending", "confirmed")[isinstance(user, discord.Member):]:
+                    attribute += "_bots"
+                    if user.id in getattr(ctx.bot, attribute):
+                        data = await ctx.bot.pool_pg.fetchrow(f"SELECT * FROM {attribute} WHERE bot_id = $1", user.id)
+                        return cls.from_json(user, **data)
+                raise NotInDatabase(user, converter=cls)
         raise BotNotFound(argument, converter=cls)
 
     def __str__(self):
@@ -122,13 +119,11 @@ async def is_user(self, m):
 
 async def command_count_check(self, message):
     """Event check for command_count"""
-    await self.bot.wait_until_ready()
     return self.compiled_pref and not message.author.bot and message.guild
 
 
-async def dpy_bot(self, member):
+async def dpy_bot(_, member):
     """Event check for dpy_bots"""
-    await self.bot.wait_until_ready()
     return member.bot and member.guild.id == 336642139381301249
 
 
@@ -154,6 +149,7 @@ class FindBot(commands.Cog, name="Bots"):
         self.compiled_pref = compile_prefix(sorted(temp))
 
     @commands.Cog.listener("on_member_join")
+    @wait_ready()
     @event_check(dpy_bot)
     async def join_bot_tracker(self, member):
         """Tracks when a bot joins in discord.py where it logs all the BotAdded information."""
@@ -165,6 +161,7 @@ class FindBot(commands.Cog, name="Bots"):
             await self.update_confirm(BotAdded.from_json(member, joined_at=member.joined_at))
 
     @commands.Cog.listener("on_member_remove")
+    @wait_ready()
     @event_check(dpy_bot)
     async def remove_bot_tracker(self, member):
         if member.id in self.bot.confirmed_bots:
@@ -203,6 +200,7 @@ class FindBot(commands.Cog, name="Bots"):
         self.compiled_pref = compile_prefix(sorted(temp))
 
     @commands.Cog.listener("on_message")
+    @wait_ready()
     @event_check(is_user)
     async def find_bot_prefix(self, message):
         """Responsible for checking if a message has a prefix for a bot or not by checking if it's a jishaku or help command."""
@@ -226,6 +224,7 @@ class FindBot(commands.Cog, name="Bots"):
                     return await self.update_prefix_bot(message, locals()[f"check_{x}"], match["prefix"])
 
     @commands.Cog.listener("on_message")
+    @wait_ready()
     @event_check(command_count_check)
     async def command_count(self, message):
         """
@@ -260,6 +259,7 @@ class FindBot(commands.Cog, name="Bots"):
         await self.bot.pool_pg.executemany(query, values)
 
     @commands.Cog.listener("on_message")
+    @wait_ready()
     @event_check(is_user)
     async def addbot_command_tracker(self, message):
         """Tracks ?addbot command. This is an exact copy of R. Danny code."""
@@ -373,7 +373,7 @@ class FindBot(commands.Cog, name="Bots"):
                            "This is useful for flexing for no reason."
                       )
     @is_discordpy()
-    async def whatadd(self, ctx, author: discord.Member = None):
+    async def whatadd(self, ctx, author: IsBot(is_bot=False, user_check=False) = None):
         if not author:
             author = ctx.author
         if author.bot:
@@ -418,8 +418,6 @@ class FindBot(commands.Cog, name="Bots"):
                   ("Joined", default_date(data.joined_at) if data.joined_at else None),
                   ("Message Request", f"[jump]({data.jump_url})" if data.jump_url else None))
 
-        if author:
-            embed.set_author(name=author, icon_url=author.avatar_url)
         for name, value in fields:
             if value:
                 embed.add_field(name=name, value=value, inline=False)

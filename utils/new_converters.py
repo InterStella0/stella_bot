@@ -6,8 +6,7 @@ import contextlib
 from collections import namedtuple
 from fuzzywuzzy import fuzz
 from discord.ext import commands
-from discord.ext.commands import MemberNotFound
-from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound
+from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound, MustMember
 from discord.utils import _unique
 from utils.useful import unpack
 
@@ -55,15 +54,20 @@ class ValidCog(CleanListGreedy):
 
 class IsBot(commands.Converter):
     """Raises an error if the member is not a bot"""
-    async def convert(self, ctx, argument):
-        try:
-            member = await commands.MemberConverter().convert(ctx, argument)
-        except MemberNotFound:
-            raise UserNotFound(argument, converter=self) from None
-        else:
-            if not member.bot:
-                raise NotBot(member, converter=self)
-            return member
+    def __init__(self, is_bot=True, user_check=True):
+        self.is_bot = is_bot
+        self.user_check = user_check
+
+    async def convert(self, ctx, argument, cls=None):
+        for converter in ("Member", "User"):
+            with contextlib.suppress(commands.BadArgument):
+                user = await getattr(commands, f"{converter}Converter")().convert(ctx, argument)
+                if user.bot is not self.is_bot:
+                    raise NotBot(user, is_bot=self.is_bot, converter=cls or self)
+                if isinstance(user, discord.User) and not self.user_check:
+                    raise MustMember(user, converter=cls or self)
+                return user
+        raise UserNotFound(argument, converter=cls or self) from None
 
 
 class BotData:

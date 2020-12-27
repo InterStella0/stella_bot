@@ -4,7 +4,7 @@ import discord
 import asyncpg
 import datetime
 import utils.library_override
-from utils.useful import StellaContext, event_check
+from utils.useful import StellaContext, event_check, wait_ready
 from discord.ext import commands
 from dotenv import load_dotenv
 from os.path import join, dirname
@@ -151,6 +151,7 @@ async def on_ready():
 
 
 @bot.event
+@wait_ready(bot=bot)
 @event_check(lambda x: not bot.tester or x.author == bot.stella)
 async def on_message(message):
     if re.fullmatch("<@(!)?661466532605460530>", message.content):

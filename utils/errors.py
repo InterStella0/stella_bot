@@ -24,7 +24,16 @@ class BotNotFound(ArgumentBaseError):
 
 class NotBot(ArgumentBaseError):
     def __init__(self, _id, **kwargs):
-        super().__init__(message=f"{_id} is not a bot. Give me a bot please.", **kwargs)
+        if kwargs.pop("is_bot", True):
+            m = f"{_id} is not a bot. Give me a bot please."
+        else:
+            m = f"{_id} is a bot. Give me a user please."
+        super().__init__(message=m, **kwargs)
+
+
+class MustMember(ArgumentBaseError):
+    def __init__(self, _id, **kwargs):
+        super().__init__(message=f"{_id} must be in the server.", **kwargs)
 
 
 class NotInDpy(commands.UserInputError):

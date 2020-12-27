@@ -109,7 +109,7 @@ class MenuBase(menus.MenuPages):
 
     async def _get_kwargs_from_page(self, page):
         value = await discord.utils.maybe_coroutine(self._source.format_page, self, page)
-        no_ping = {'mention_author': False}
+        no_ping = {'allowed_mentions': discord.AllowedMentions(replied_user=False)}
         if isinstance(value, dict):
             value.update(no_ping)
         elif isinstance(value, str):
@@ -172,6 +172,19 @@ def event_check(func):
                 await method(*args, **kwargs)
         return wrapper
     return check
+
+
+def wait_ready(bot=None):
+    async def predicate(*args, **_):
+        nonlocal bot
+        self = args[0] if args else None
+        if isinstance(self, commands.Cog):
+            bot = bot or self.bot
+        if not isinstance(bot, commands.Bot):
+            raise Exception(f"bot must derived from commands.Bot not {bot.__class__.__name__}")
+        await bot.wait_until_ready()
+        return True
+    return event_check(predicate)
 
 
 def print_exception(text, error):
