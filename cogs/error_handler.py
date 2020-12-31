@@ -31,7 +31,8 @@ class ErrorHandler(commands.Cog):
                 return
 
         ignored = (commands.CommandNotFound,)
-        default_error = (commands.NotOwner, commands.TooManyArguments, flags.ArgumentParsingError, NotInDpy)
+        default_error = (commands.NotOwner, commands.TooManyArguments, flags.ArgumentParsingError, NotInDpy,
+                         commands.MaxConcurrencyReached)
 
         error = getattr(error, 'original', error)
 

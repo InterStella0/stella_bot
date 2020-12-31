@@ -8,11 +8,13 @@ import datetime
 import textwrap
 import more_itertools
 from discord.ext import commands, menus
-from utils.useful import BaseEmbed, MenuBase, plural
+from utils.useful import BaseEmbed, MenuBase, plural, print_exception
 from utils.errors import CantRun
 from utils import flags as flg
 from collections import namedtuple
 from discord.ext.menus import First, Last
+
+CommandHelp = namedtuple("CommandHelp", 'command brief')
 
 
 class HelpMenuBase(MenuBase):
@@ -66,6 +68,11 @@ class HelpMenuBase(MenuBase):
 class HelpMenu(HelpMenuBase):
     """This is a MenuPages class that is used only in help command. All it has is custom information and
        custom initial message."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._current_wait = None
+        self.help_command = None
+
     async def on_information_show(self, payload):
         ctx = self.ctx
         exists = [str(emoji) for emoji in super().buttons]
@@ -81,8 +88,33 @@ class HelpMenu(HelpMenuBase):
         embed.add_field(name="Navigation:", value=nav)
         await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
+    async def background_update(self):
+        """Makes a help menu responsive"""
+        if not hasattr(self._source, "wait_for_update"):
+            return
+        while self._running:
+            try:
+                command = await self.ctx.bot.wait_for("command_remove")
+                if not await self._source.wait_for_update(self, command):
+                    continue
+            except Exception as e:
+                print_exception("background_update fucking dies", e)
+            else:
+                self._source._max_pages = len(self._source.entries)
+                await self.show_page(min(self.current_page, self._source._max_pages - 1))
 
-class CogMenu(HelpMenuBase):
+    async def start(self, ctx, **kwargs):
+        self.help_command = ctx.bot.help_command
+        self.help_command.context = ctx
+        self._current_wait = ctx.bot.loop.create_task(self.background_update())
+        await super().start(ctx, **kwargs)
+
+    def stop(self):
+        super().stop()
+        self._current_wait.cancel()
+
+
+class CogMenu(HelpMenu):
     """This is a MenuPages class that is used only in Cog help command. All it has is custom information and
        custom initial message."""
     async def on_information_show(self, payload):
@@ -103,8 +135,21 @@ class CogMenu(HelpMenuBase):
 
 class HelpCogSource(menus.ListPageSource):
     """This is for help Cog ListPageSource"""
+    def __init__(self, *args, cog=None):
+        super().__init__(*args, per_page=1)
+        self.cog = cog
+
     async def format_page(self, menu: CogMenu, entry):
         return menu.generate_page(entry, self._max_pages)
+
+    async def wait_for_update(self, menu, command):
+        """Makes cog menu responsive"""
+        if getattr(command.cog, "qualified_name", None) != self.cog:
+            return
+        signature = menu.help_command.get_command_signature(command)
+        i, _ = discord.utils.find(lambda entry: entry[1].title == signature, enumerate(self.entries))
+        del self.entries[i]
+        return True
 
 
 class HelpSource(menus.ListPageSource):
@@ -120,6 +165,25 @@ class HelpSource(menus.ListPageSource):
         embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar_url)
 
         return menu.generate_page(embed, self._max_pages)
+
+    async def wait_for_update(self, menu, command):
+        """Makes the help command responsive, I do this for the hell of it I'm bored."""
+        cog_name = getattr(command.cog, "qualified_name", None)
+        command = CommandHelp(menu.help_command.get_command_signature(command), "")
+
+        def find_command(iterable):
+            return discord.utils.find(lambda current: command.command == current.command, iterable)
+
+        def find_cog_command(value):
+            cogs, list_of_commands = value
+            return getattr(cogs, "qualified_name", None) == cog_name and find_command(list_of_commands)
+        _, list_commands = discord.utils.find(find_cog_command, self.entries)
+        i, _ = discord.utils.find(lambda x: x[1].command == command.command, enumerate(list_commands))
+        del list_commands[i]
+        if not list_commands:
+            index, _ = discord.utils.find(lambda x: not bool(x[1][1]), enumerate(self.entries))
+            del self.entries[index]
+        return True
 
 
 class CodeBlockPage(menus.ListPageSource):
@@ -189,14 +253,13 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             return (getattr(self, f"get_{x}")(com) for x in ("command_signature", "help"))
 
         command_data = []
-        CommandHelp = namedtuple("CommandHelp", 'command brief')
         for cog, unfiltered_commands in mapping.items():
             list_commands = await self.filter_commands(unfiltered_commands, sort=True)
             for chunks in more_itertools.chunked(list_commands, 6):
                 command_data.append((cog, [CommandHelp(*get_info(command)) for command in chunks]))
 
         pages = HelpMenu(source=HelpSource(command_data, per_page=1), delete_message_after=True)
-        with contextlib.suppress(discord.NotFound):
+        with contextlib.suppress(discord.NotFound, discord.Forbidden):
             await pages.start(self.context, wait=True)
             await self.context.message.add_reaction("<:checkmark:753619798021373974>")
 
@@ -235,7 +298,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
     async def send_cog_help(self, cog):
         """Gets invoke when `uwu help <cog>` is invoked."""
         cog_commands = [self.get_command_help(c) for c in await self.filter_commands(cog.walk_commands(), sort=True)]
-        pages = CogMenu(source=HelpCogSource(cog_commands, per_page=1), delete_message_after=True)
+        pages = CogMenu(source=HelpCogSource(cog_commands, cog=getattr(cog, "qualified_name", None)), delete_message_after=True)
         await pages.start(self.context)
 
 

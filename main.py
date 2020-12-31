@@ -103,6 +103,11 @@ class StellaBot(commands.Bot):
     async def get_context(self, message, *, cls=None):
         return await super().get_context(message, cls=StellaContext)
 
+    def remove_command(self, name):
+        if command := super().remove_command(name):
+            self.dispatch("command_remove", command)
+            return command
+
     async def process_commands(self, message):
         if message.author.bot:
             return

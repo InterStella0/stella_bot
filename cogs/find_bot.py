@@ -29,11 +29,11 @@ class BotAdded:
     joined_at: datetime.datetime = None
 
     @classmethod
-    def from_json(cls, bot=None, **data):
+    def from_json(cls, bot=None, *, bot_id=None, **data):
         """factory method on data from a dictionary like object into BotAdded."""
         author = data.pop("author_id", None)
         join = data.pop("joined_at", None)
-        bot = bot or data.pop("bot_id", None)
+        bot = bot or bot_id
         if isinstance(bot, discord.Member):
             join = bot.joined_at
             author = bot.guild.get_member(author) or author
@@ -183,7 +183,7 @@ class FindBot(commands.Cog, name="Bots"):
         while message.created_at + datetime.timedelta(seconds=2) > datetime.datetime.utcnow():
             with contextlib.suppress(asyncio.TimeoutError):
                 if m := await self.bot.wait_for("message", check=setting(func), timeout=1):
-                    if not m.author.bot:  # TODO: Find out the cause of race condition here
+                    if not m.author.bot:
                         break
                     if m.author.bot and not (m.author.id in self.all_bot_prefixes and self.all_bot_prefixes[m.author.id] == prefix):
                         bots.append(m.author.id)
