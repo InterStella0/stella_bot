@@ -18,7 +18,6 @@ class StellaBot(commands.Bot):
     def __init__(self, **kwargs):
         self.tester = kwargs.pop("tester", False)
         self.help_src = kwargs.pop("help_src", None)
-        self.command_prefix = self.get_prefix
         self.db = kwargs.pop("db", None)
         self.user_db = kwargs.pop("user_db", None)
         self.pass_db = kwargs.pop("pass_db", None)
@@ -31,7 +30,7 @@ class StellaBot(commands.Bot):
         self.token = kwargs.pop("token", None)
         self.existing_prefix = None
         self.blacklist = set()
-        super().__init__(self, **kwargs)
+        super().__init__(self.get_prefix, **kwargs)
 
     async def after_db(self):
         """Runs after the db is connected"""

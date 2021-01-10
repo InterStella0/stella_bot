@@ -111,6 +111,17 @@ class BotAddedList(ListPageSource):
         return menu.generate_page(embed, self._max_pages)
 
 
+class MissingBots(ListPageSource):
+    async def format_page(self, menu, items):
+        offset = menu.current_page * self.per_page
+        stuff = [f"{i + offset + 1}.(`{x[1]}`): {x[0]}" for i, x in enumerate(items)]
+        return BaseEmbed.default(
+            menu.ctx,
+            title=f"{menu.current_page + 1}/{self._max_pages}",
+            description="\n".join(stuff)
+        )
+
+
 async def is_user(self, m):
     """Event check for returning true if it's a bot."""
     await self.bot.wait_until_ready()
@@ -617,6 +628,13 @@ class FindBot(commands.Cog, name="Bots"):
             contents = ["`{0}. {1} {2} {1.count}`".format(i + idx + 1, b, key) for i, b in enumerate(scope_bot)]
             embed = BaseEmbed(title="Bot Command Rank", description="\n".join(realign(contents, key)))
             await ctx.maybe_reply(embed=embed)
+
+    @commands.command(help="Shows all the bots that have an unknown owner. You can DM me if you know the bot's owner.")
+    @is_discordpy()
+    async def missing_bots(self, ctx):
+        data = [(x, x.id) for x in filter(lambda x: x.bot and x.id not in self.bot.confirmed_bots, ctx.guild.members)]
+        menu = MenuBase(MissingBots(data, per_page=9), delete_message_after=True)
+        await menu.start(ctx)
 
 
 def setup(bot):

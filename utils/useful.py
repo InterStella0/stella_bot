@@ -218,7 +218,7 @@ class StellaContext(commands.Context):
         """Replies if there is a message in between the command invoker and the bot's message."""
         await asyncio.sleep(0.05)
         with contextlib.suppress(discord.HTTPException):
-            if self.channel.last_message != self.message:
+            if getattr(self.channel,"last_message", False) != self.message:
                 return await self.reply(content, mention_author=mention_author, **kwargs)
         await self.send(content, **kwargs)
 
