@@ -193,15 +193,23 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         }
 
         values = code.content.splitlines()
-        if not values[-1].startswith(("return", "raise")):
+        if not values[-1].startswith(("return", "raise", " ", "yield")):
             values[-1] = f"return {values[-1]}"
+        values.insert(0, "yield")
         values = [f"{'':>4}{v}" for v in values]
-        values.insert(0, "def _to_executor():")
+        values.insert(0, "def _to_run():")
         exec("\n".join(values), variables)
+
+        def running():
+            yield (yield from variables['_to_run']())
+
+        def in_exec():
+            ctx.bot.loop.create_task(starting(datetime.datetime.utcnow()))
+            for result in running():
+                if result is not None:
+                    ctx.bot.loop.create_task(ctx.send(result))
         try:
-            self.bot.loop.create_task(starting(datetime.datetime.utcnow()))
-            if to_send := await ctx.bot.loop.run_in_executor(None, variables['_to_executor']):
-                await ctx.send(to_send)
+            await ctx.bot.loop.run_in_executor(None, in_exec)
             if ctx.failed:
                 raise ctx.failed from None
         except:
