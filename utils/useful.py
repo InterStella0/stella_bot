@@ -214,6 +214,10 @@ def realign(iterable, key, discrim='|'):
 
 
 class StellaContext(commands.Context):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.__dict__.update(dict.fromkeys(["waiting", "result", "channel_used", "running", "failed"]))
+
     async def maybe_reply(self, content=None, mention_author=False, **kwargs):
         """Replies if there is a message in between the command invoker and the bot's message."""
         await asyncio.sleep(0.05)

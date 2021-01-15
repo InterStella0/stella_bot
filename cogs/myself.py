@@ -1,6 +1,8 @@
 import discord
 import datetime
 import contextlib
+import time
+import asyncio
 from typing import Union
 from discord.ext import commands
 from discord.ext.commands import Greedy
@@ -108,30 +110,122 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
                 await ctx.message.add_reaction("<:checkmark:753619798021373974>")
                 return self.bot.remove_command(c.command.qualified_name)
 
+    @commands.command(name="eval", help="Eval for input/print feature", aliases=["e", "ev", "eva"])
+    async def _eval(self, ctx, *, code: codeblock_converter):
+        # Shittiest code I've ever wrote remind me to think of another way
+        def run_async(coro, wait_for_value=False):
+            if wait_for_value:
+                ctx.waiting = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
+                ctx.result = None
+
+                async def getting_result():
+                    ctx.result = await coro
+
+                run_async(getting_result())
+                while ctx.waiting > datetime.datetime.utcnow() and not ctx.result:
+                    time.sleep(1)
+                if not ctx.result:
+                    raise asyncio.TimeoutError(f"{coro} took to long to give a result")
+                return ctx.result
+
+            task = ctx.bot.loop.create_task(coro)
+
+            def coroutine_dies(target_task):
+                ctx.failed = target_task.exception()
+
+            task.add_done_callback(coroutine_dies)
+            return task
+
+        def printing(*content, **kwargs):
+            async def sending(cont):
+                nonlocal kwargs
+                channel = kwargs.pop("channel", ctx)
+                reply = kwargs.pop("reply", True)
+                mention = kwargs.pop("mention", False)
+                if c := channel is not ctx:
+                    channel = await commands.TextChannelConverter().convert(ctx, str(channel))
+
+                attr = ("send", "reply")[reply is not c]
+                sent = getattr(channel, attr)
+                kwargs = {"content": cont}
+                if attr == "reply":
+                    kwargs.update({"mention_author": mention})
+                ctx.channel_used = channel if channel is not ctx else ctx.channel
+                await sent(**kwargs)
+
+            showing = " ".join(map(lambda x: (str(x), '\u200b')[x == ''], content if content else ('\u200b',)))
+            run_async(sending(showing))
+
+        def inputting(*content, channel=ctx, target=(ctx.author.id,)):
+            target = discord.utils.SnowflakeList(target, is_sorted=True)
+
+            async def waiting_respond():
+                if content:
+                    printing(*content, channel=channel)
+                return await ctx.bot.wait_for("message", check=waiting, timeout=60)
+
+            def waiting(m):
+                return target.has(m.author.id) and m.channel == ctx.channel_used
+
+            if result := run_async(waiting_respond(), wait_for_value=True):
+                return result.content
+
+        async def giving_emote(e):
+            if ctx.me.permissions_in(ctx.channel).external_emojis:
+                await ctx.message.add_reaction(e)
+
+        async def starting(startup):
+            ctx.running = True
+            while ctx.running:
+                if datetime.datetime.utcnow() > startup + datetime.timedelta(seconds=5):
+                    await giving_emote("<:next_check:754948796361736213>")
+                    break
+                await asyncio.sleep(1)
+
+        variables = {
+            "discord": discord,
+            "commands": commands,
+            "_channel": ctx.channel,
+            "_bot": self.bot,
+            "_ctx": ctx,
+            "print": printing,
+            "input": inputting,
+        }
+
+        values = code.content.splitlines()
+        if not values[-1].startswith(("return", "raise")):
+            values[-1] = f"return {values[-1]}"
+        values = [f"{'':>4}{v}" for v in values]
+        values.insert(0, "def _to_executor():")
+        exec("\n".join(values), variables)
+        try:
+            self.bot.loop.create_task(starting(datetime.datetime.utcnow()))
+            if to_send := await ctx.bot.loop.run_in_executor(None, variables['_to_executor']):
+                await ctx.send(to_send)
+            if ctx.failed:
+                raise ctx.failed from None
+        except:
+            ctx.running = False
+            await giving_emote("<:crossmark:753620331851284480>")
+            raise
+        else:
+            ctx.running = False
+            await giving_emote("<:checkmark:753619798021373974>")
+
     @commands.Cog.listener()
     @event_check(lambda s, b, a: (b.content and a.content) or b.author.bot)
     async def on_message_edit(self, before, after):
         if await self.bot.is_owner(before.author) and not before.embeds and not after.embeds:
             await self.bot.process_commands(after)
 
-    @commands.command(name="load", aliases=["cload", "loads", "lod"], cls=AfterGreedy)
-    async def _cog_load(self, ctx, extension: Greedy[ValidCog]):
-        await self.cogs_handler(ctx, "load", extension)
-
-    @commands.command(name="reload", aliases=["creload", "reloads", "relod"], cls=AfterGreedy)
-    async def _cog_reload(self, ctx, extension: Greedy[ValidCog]):
-        await self.cogs_handler(ctx, "reload", extension)
-
-    @commands.command(name="unload", aliases=["cunload", "unloads", "unlod"], cls=AfterGreedy)
-    async def _cog_unload(self, ctx, extension: Greedy[ValidCog]):
-        await self.cogs_handler(ctx, "unload", extension)
-
     @commands.command()
     async def dispatch(self, ctx, message: discord.Message):
         self.bot.dispatch('message', message)
         await ctx.message.add_reaction("<:checkmark:753619798021373974>")
 
-    async def cogs_handler(self, ctx, method, extensions):
+    async def cogs_handler(self, ctx, extensions):
+        method = ctx.command.name
+
         def do_cog(exts):
             func = getattr(self.bot, f"{method}_extension")
             return func(f"cogs.{exts}")
@@ -142,4 +236,11 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
 
 
 def setup(bot):
-    bot.add_cog(Myself(bot))
+    cog = Myself(bot)
+    for name in ("load", "unload", "reload"):
+        @commands.command(name=name, aliases=["c"+name, name+"s"], cls=AfterGreedy)
+        async def _cog_load(self, ctx, extension: Greedy[ValidCog]):
+            await self.cogs_handler(ctx, extension)
+
+        cog.__cog_commands__ += (_cog_load,)
+    bot.add_cog(cog)
