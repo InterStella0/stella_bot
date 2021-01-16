@@ -3,10 +3,11 @@ import datetime
 import contextlib
 import time
 import asyncio
+import traceback
 from typing import Union
 from discord.ext import commands
 from discord.ext.commands import Greedy
-from utils.useful import call, BaseEmbed, AfterGreedy, event_check
+from utils.useful import call, BaseEmbed, AfterGreedy, event_check, print_exception
 from utils.new_converters import ValidCog, IsBot
 from utils import flags as flg
 from jishaku.codeblocks import codeblock_converter
@@ -156,12 +157,12 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
             showing = " ".join(map(lambda x: (str(x), '\u200b')[x == ''], content if content else ('\u200b',)))
             run_async(sending(showing))
 
-        def inputting(*content, channel=ctx, target=(ctx.author.id,)):
+        def inputting(*content, channel=ctx, target=(ctx.author.id,), **kwargs):
             target = discord.utils.SnowflakeList(target, is_sorted=True)
 
             async def waiting_respond():
                 if content:
-                    printing(*content, channel=channel)
+                    printing(*content, channel=channel, **kwargs)
                 return await ctx.bot.wait_for("message", check=waiting, timeout=60)
 
             def waiting(m):
@@ -190,6 +191,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
             "_ctx": ctx,
             "print": printing,
             "input": inputting,
+            "_message": ctx.message
         }
 
         values = code.content.splitlines()
@@ -212,10 +214,11 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
             await ctx.bot.loop.run_in_executor(None, in_exec)
             if ctx.failed:
                 raise ctx.failed from None
-        except:
+        except Exception as e:
             ctx.running = False
             await giving_emote("<:crossmark:753620331851284480>")
-            raise
+            lines = traceback.format_exception(type(e), e, e.__traceback__)
+            await ctx.reply(f"Evaluation failed:\n{''.join(lines)}", delete_after=60)
         else:
             ctx.running = False
             await giving_emote("<:checkmark:753619798021373974>")
