@@ -200,7 +200,6 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         values.insert(0, "yield")
         values = [f"{'':>4}{v}" for v in values]
         values.insert(0, "def _to_run():")
-        exec("\n".join(values), variables)
 
         def running():
             yield (yield from variables['_to_run']())
@@ -211,6 +210,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
                 if result is not None:
                     ctx.bot.loop.create_task(ctx.send(result))
         try:
+            exec("\n".join(values), variables)
             await ctx.bot.loop.run_in_executor(None, in_exec)
             if ctx.failed:
                 raise ctx.failed from None
