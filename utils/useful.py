@@ -4,7 +4,6 @@ import datetime
 import ctypes
 import traceback
 import sys
-import functools
 import asyncio
 import contextlib
 from collections import namedtuple
@@ -74,6 +73,7 @@ class MenuBase(menus.MenuPages):
         super().__init__(source, delete_message_after=kwargs.pop('delete_message_after', True), **kwargs)
         self.info = False
 
+        # Remind me to redo this dumb code
         EmojiB = namedtuple("EmojiB", "emoji position explain")
         def_dict_emoji = {'\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
                           EmojiB("<:before_fast_check:754948796139569224>", First(0),
@@ -161,32 +161,6 @@ def search_prefix(array_result, content_buffer):
     return strresult.decode('utf-8')
 
 
-def event_check(func):
-    """Event decorator check."""
-    def check(method):
-        method.callback = method
-
-        @functools.wraps(method)
-        async def wrapper(*args, **kwargs):
-            if await maybe_coroutine(func, *args, **kwargs):
-                await method(*args, **kwargs)
-        return wrapper
-    return check
-
-
-def wait_ready(bot=None):
-    async def predicate(*args, **_):
-        nonlocal bot
-        self = args[0] if args else None
-        if isinstance(self, commands.Cog):
-            bot = bot or self.bot
-        if not isinstance(bot, commands.Bot):
-            raise Exception(f"bot must derived from commands.Bot not {bot.__class__.__name__}")
-        await bot.wait_until_ready()
-        return True
-    return event_check(predicate)
-
-
 def print_exception(text, error):
     """Prints the exception with proper traceback."""
     print(text, file=sys.stderr)
@@ -224,7 +198,21 @@ class StellaContext(commands.Context):
         with contextlib.suppress(discord.HTTPException):
             if getattr(self.channel,"last_message", False) != self.message:
                 return await self.reply(content, mention_author=mention_author, **kwargs)
-        await self.send(content, **kwargs)
+        return await self.send(content, **kwargs)
+
+    async def embed(self, content=None, *, reply=True, mention_author=False, embed=None, fields=(), **kwargs):
+        ori_embed = BaseEmbed.default(self, **kwargs)
+        if embed:
+            new_embed = embed.to_dict()
+            new_embed.update(ori_embed.to_dict())
+            ori_embed = discord.Embed.from_dict(new_embed)
+        for name, value in fields:
+            if value:
+                ori_embed.add_field(name=name, value=value, inline=False)
+        to_send = self.maybe_reply if reply else self.send
+        if not self.me.permissions_in(self.channel).embed_links:
+            raise commands.BotMissingPermissions(["embed_links"])
+        return await to_send(content, mention_author=mention_author, embed=ori_embed)
 
 
 async def maybe_method(func, cls=None, *args, **kwargs):

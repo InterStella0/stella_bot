@@ -89,12 +89,15 @@ class HelpMenu(HelpMenuBase):
         await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
     async def background_update(self):
-        """Makes a help menu responsive"""
+        """Makes a help menu triggers every time a command is remove while active"""
         if not hasattr(self._source, "wait_for_update"):
             return
         while self._running:
             try:
-                command = await self.ctx.bot.wait_for("command_remove")
+                bot = self.ctx.bot
+                command = await bot.wait_for("command_remove")
+                if not self._running:
+                    break
                 if not await self._source.wait_for_update(self, command):
                     continue
             except Exception as e:

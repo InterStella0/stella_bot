@@ -3,10 +3,10 @@ import base64
 import datetime
 import random
 import itertools
+import functools
 from discord.ext import commands
 from collections import namedtuple
 from utils.useful import try_call, call, BaseEmbed
-from utils.new_converters import FetchUser
 from typing import Union
 
 
@@ -45,8 +45,8 @@ class Useful(commands.Cog):
         if not str_id or not str_id.isdigit():
             return await ctx.maybe_reply("Invalid user")
         user_id = int(str_id)
-        coro_user = try_call(self.bot.fetch_user, user_id, exception=discord.NotFound)
-        member = ctx.guild.get_member(user_id) or self.bot.get_user(user_id) or await coro_user
+        coro_user = functools.partial(try_call(self.bot.fetch_user, user_id, exception=discord.NotFound))
+        member = ctx.guild.get_member(user_id) or self.bot.get_user(user_id) or await coro_user()
         if not member:
             return await ctx.maybe_reply("Invalid user")
         timestamp = call(self.parse_date, token_part[1]) or "Invalid date"
@@ -56,13 +56,9 @@ class Useful(commands.Cog):
                                           f"**ID:** `{member.id}`\n"
                                           f"**Bot:** `{member.bot}`\n"
                                           f"**Created:** `{member.created_at}`\n"
-                                          f"**Token Created:** `{timestamp}`",
-                              color=self.bot.color,
-                              timestamp=datetime.datetime.utcnow())
+                                          f"**Token Created:** `{timestamp}`")
         embed.set_thumbnail(url=member.avatar_url)
-        embed.set_footer(text=f"Requested by {ctx.author}",
-                         icon_url=ctx.author.avatar_url)
-        await ctx.maybe_reply(embed=embed)
+        await ctx.embed(embed=embed)
 
     @commands.command(aliases=["gt", "gtoken"],
                       brief="Generate a new token given a user.",
@@ -70,7 +66,7 @@ class Useful(commands.Cog):
                            "This works by encoding the user id into base 64 str. While the current datetime in utc "
                            "is converted into timestamp and gets converted into base64 using the standard b64 encoding. "
                            "The final part of the token is randomly generated.")
-    async def generate_token(self, ctx, member: Union[discord.Member, discord.User, FetchUser] = None):
+    async def generate_token(self, ctx, member: Union[discord.Member, discord.User] = None):
         if not member:
             member = ctx.author
         byte_first = str(member.id).encode('ascii')
@@ -99,14 +95,9 @@ class Useful(commands.Cog):
         embed = discord.Embed(title=f"{member.display_name}'s token",
                               description=f"**User:** `{member}`\n"
                                           f"**ID:** `{member.id}`\n"
-                                          f"**Bot:** `{member.bot}`",
-                              color=self.bot.color,
-                              timestamp=datetime.datetime.utcnow())
-        for name, value in fields:
-            embed.add_field(name=name, value=value, inline=False)
+                                          f"**Bot:** `{member.bot}`")
         embed.set_thumbnail(url=member.avatar_url)
-        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar_url)
-        await ctx.maybe_reply(embed=embed)
+        await ctx.embed(embed=embed, fields=fields)
 
     @commands.command(aliases=["replycounts", "repliescount", "replyscounts", "threadcount"],
                       help="Finds the original message of a thread. This shows the amount of reply counts, the message itself, "
@@ -130,7 +121,7 @@ class Useful(commands.Cog):
                            f"**Replies:** `{count}`\n"
                            f"**Origin:** [`jump`]({msg.jump_url})"
         }
-        await ctx.reply(embed=BaseEmbed.default(ctx, **embed_dict), mention_author=False)
+        await ctx.embed(**embed_dict)
 
     @commands.command(aliases=["find_type", "findtypes", "idtype", "id_type", "idtypes"],
                       help="Try to find the type of an ID.")
@@ -139,14 +130,10 @@ class Useful(commands.Cog):
         bot = self.bot
 
         async def found_message(type_id):
-            await ctx.maybe_reply(
-                    embed=BaseEmbed.default(
-                        ctx,
-                        title="Type Finder",
-                        description=f"**ID**: `{id.id}`\n"
-                                    f"**Type:** `{type_id.capitalize()}`\n"
-                                    f"**Created:** `{id.created_at}`")
-                )
+            await ctx.embed(title="Type Finder",
+                            description=f"**ID**: `{id.id}`\n"
+                                        f"**Type:** `{type_id.capitalize()}`\n"
+                                        f"**Created:** `{id.created_at}`")
 
         async def find(w, t):
             try:

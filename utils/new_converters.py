@@ -1,5 +1,4 @@
 import discord
-import inspect
 import os
 import re
 import contextlib
@@ -9,17 +8,6 @@ from discord.ext import commands
 from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound, MustMember
 from discord.utils import _unique
 from utils.useful import unpack
-
-
-class FetchUser(commands.Converter):
-    """Glorified fetch_user"""
-    async def convert(self, ctx, argument):
-        with contextlib.suppress(commands.UserNotFound):
-            if argument.isdigit():
-                return await ctx.bot.fetch_user(int(argument))
-            return await commands.UserConverter().convert(ctx, argument)
-        converter = self if inspect.isclass(self) else self.__class__
-        raise UserNotFound(argument, converter=converter) from None
 
 
 class CleanListGreedy:

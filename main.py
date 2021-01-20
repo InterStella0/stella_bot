@@ -4,7 +4,8 @@ import discord
 import asyncpg
 import datetime
 import utils.library_override
-from utils.useful import StellaContext, event_check, wait_ready
+from utils.useful import StellaContext
+from utils.decorators import event_check, wait_ready
 from discord.ext import commands
 from dotenv import load_dotenv
 from os.path import join, dirname
@@ -30,6 +31,7 @@ class StellaBot(commands.Bot):
         self.token = kwargs.pop("token", None)
         self.existing_prefix = None
         self.blacklist = set()
+        self.cached_users = {}
         super().__init__(self.get_prefix, **kwargs)
 
     async def after_db(self):

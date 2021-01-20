@@ -13,9 +13,9 @@ from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
 from utils import flags as flg
 from utils.new_converters import BotPrefix, BotUsage, IsBot
-from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, event_check, plural, realign, wait_ready
+from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, plural, realign
 from utils.errors import NotInDatabase, BotNotFound
-from utils.decorators import is_discordpy
+from utils.decorators import is_discordpy, event_check, wait_ready
 
 
 @dataclass
@@ -410,7 +410,7 @@ class FindBot(commands.Cog, name="Bots"):
         embed.set_thumbnail(url=author.avatar_url)
         if not list_bots:
             embed.description = f"{author} doesnt own any bot here."
-        await ctx.maybe_reply(embed=embed)
+        await ctx.embed(embed=embed)
 
     @commands.command(aliases=["whoowns", "whosebot", "whoadds", "whoadded"],
                       brief="Shows who added the bot.",
@@ -420,20 +420,20 @@ class FindBot(commands.Cog, name="Bots"):
     async def whoadd(self, ctx, bot: BotAdded):
         data = bot
         author = await try_call(commands.UserConverter().convert, ctx, str(data.author), exception=UserNotFound)
-        embed = discord.Embed(title=f"{data.bot}",
-                              color=self.bot.color)
+        embed = discord.Embed(title=str(data.bot))
         embed.set_thumbnail(url=data.bot.avatar_url)
+
+        def or_none(condition, func):
+            if condition:
+                return func(condition)
+
         fields = (("Added by", f"{author.mention} (`{author.id}`)"),
                   ("Reason", data.reason),
-                  ("Requested", default_date(data.requested_at) if data.requested_at else None),
-                  ("Joined", default_date(data.joined_at) if data.joined_at else None),
-                  ("Message Request", f"[jump]({data.jump_url})" if data.jump_url else None))
+                  ("Requested", or_none(data.requested_at, default_date)),
+                  ("Joined", or_none(data.joined_at, default_date)),
+                  ("Message Request", or_none(data.jump_url, "[jump]({})".format)))
 
-        for name, value in fields:
-            if value:
-                embed.add_field(name=name, value=value, inline=False)
-
-        await ctx.maybe_reply(embed=embed)
+        await ctx.embed(embed=embed, fields=fields)
 
     def clean_prefix(self, prefix):
         prefix = pprefix(self.bot, prefix)
@@ -448,11 +448,8 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.guild_only()
     async def whatprefix(self, ctx, member: BotPrefix):
         prefix = self.clean_prefix(member.prefix)
-        embed = BaseEmbed.default(ctx,
-                                  title=f"{member}'s Prefix",
-                                  description=f"`{prefix}`")
-
-        await ctx.maybe_reply(embed=embed)
+        await ctx.embed(title=f"{member}'s Prefix",
+                              description=f"`{prefix}`")
 
     @commands.command(aliases=["pu", "shares", "puse"],
                       brief="Shows the amount of bot that uses the same prefix.",
@@ -462,7 +459,7 @@ class FindBot(commands.Cog, name="Bots"):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         prefix = self.clean_prefix(prefix)
         desk = plural(f"There (is/are) `{len(instance_bot)}` bot(s) that use `{prefix}` as prefix", len(instance_bot))
-        await ctx.maybe_reply(embed=BaseEmbed.default(ctx, description=desk))
+        await ctx.embed(description=desk)
 
     async def get_all_prefix(self, guild, prefix):
         """Quick function that gets the amount of bots that has the same prefix in a server."""
@@ -482,7 +479,7 @@ class FindBot(commands.Cog, name="Bots"):
         list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
         prefix = self.clean_prefix(prefix)
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
-        await ctx.maybe_reply(embed=BaseEmbed.default(ctx, description=plural(desk, len(list_bot))))
+        await ctx.embed(description=plural(desk, len(list_bot)))
 
     @commands.command(aliases=["ap", "aprefix", "allprefixes"],
                       brief="Shows every bot's prefix in the server.",
@@ -517,11 +514,8 @@ class FindBot(commands.Cog, name="Bots"):
                            "a message is considered a command for that bot where that bot has responded in less than "
                            "2 seconds.")
     async def botuse(self, ctx, bot: BotUsage):
-        embed = BaseEmbed.default(ctx,
-                                  title=f"{bot}'s Usage",
-                                  description=plural(f"`{bot.count}` command(s) has been called for **{bot}**.", bot.count))
-
-        await ctx.maybe_reply(embed=embed)
+        await ctx.embed(title=f"{bot}'s Usage",
+                        description=plural(f"`{bot.count}` command(s) has been called for **{bot}**.", bot.count))
 
     @commands.command(aliases=["bot_info", "bi", "botinfos"],
                       brief="Shows the bot information such as bot owner, prefixes, command usage.",
@@ -554,7 +548,7 @@ class FindBot(commands.Cog, name="Bots"):
 
         embed.add_field(name="Created at", value=f"`{default_date(bot.created_at)}`")
         embed.add_field(name="Joined at", value=f"`{default_date(bot.joined_at)}`")
-        await ctx.maybe_reply(embed=embed)
+        await ctx.embed(embed=embed)
 
     @commands.command(aliases=["rba", "recentbot", "recentadd"],
                       brief="Shows a list of bots that has been added in a day.",
@@ -573,13 +567,11 @@ class FindBot(commands.Cog, name="Bots"):
         if not members:
             member = max(filter(lambda x: x.bot, ctx.guild.members), key=lambda x: x.joined_at)
             time_add = humanize.precisedelta(member.joined_at, minimum_unit="minutes")
-            await ctx.maybe_reply(
-                embed=BaseEmbed.default(
-                    ctx,
-                    title="Bots added today",
-                    description="Looks like there are no bots added in the span of 24 hours.\n"
-                                f"The last time a bot was added was `{time_add}` for `{member}`"))
-            return
+            return await ctx.embed(
+                            title="Bots added today",
+                            description="Looks like there are no bots added in the span of 24 hours.\n"
+                                        f"The last time a bot was added was `{time_add}` for `{member}`"
+            )
         db_data = await self.bot.pool_pg.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
         member_data = [BotAdded.from_json(bot=members[data["bot_id"]], **data) for data in db_data]
         member_data.sort(key=lambda x: x.joined_at, reverse=not reverse)
@@ -604,7 +596,7 @@ class FindBot(commands.Cog, name="Bots"):
                 "title": "Recent Help Trigger",
                 "description": "There is no help command triggered recently."
             }
-        await ctx.maybe_reply(embed=BaseEmbed.default(ctx, **embed_dict))
+        await ctx.embed(**embed_dict)
 
     @commands.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
                       help="Shows all bot's command usage in the server on a sorted list.",
@@ -626,15 +618,13 @@ class FindBot(commands.Cog, name="Bots"):
             idx = [*map(int, bot_data)].index(bot.bot.id)
             scope_bot = bot_data[idx:min(idx + len(bot_data[idx:]), idx + 10)]
             contents = ["`{0}. {1} {2} {1.count}`".format(i + idx + 1, b, key) for i, b in enumerate(scope_bot)]
-            embed = BaseEmbed(title="Bot Command Rank", description="\n".join(realign(contents, key)))
-            await ctx.maybe_reply(embed=embed)
+            await ctx.embed(title="Bot Command Rank", description="\n".join(realign(contents, key)))
 
-    @commands.command(help="Shows all the bots that have an unknown owner. You can DM me if you know the bot's owner.")
+    @commands.command(aliases=["pendingbots", "penbot", "peb"],
+                      help="A bot that registered to ?addbot command of R. Danny but never joined the server.")
     @is_discordpy()
-    async def missing_bots(self, ctx):
-        data = [(x, x.id) for x in filter(lambda x: x.bot and x.id not in self.bot.confirmed_bots, ctx.guild.members)]
-        menu = MenuBase(MissingBots(data, per_page=9), delete_message_after=True)
-        await menu.start(ctx)
+    async def pendingbot(self, ctx):
+        bots = await self.bot.pool_pg.fetch("SELECT * FROM pending_bots")
 
 
 def setup(bot):

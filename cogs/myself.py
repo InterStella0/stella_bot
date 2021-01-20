@@ -7,7 +7,8 @@ import traceback
 from typing import Union
 from discord.ext import commands
 from discord.ext.commands import Greedy
-from utils.useful import call, BaseEmbed, AfterGreedy, event_check, print_exception
+from utils.decorators import event_check
+from utils.useful import call, BaseEmbed, AfterGreedy
 from utils.new_converters import ValidCog, IsBot
 from utils import flags as flg
 from jishaku.codeblocks import codeblock_converter
@@ -218,7 +219,8 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
             ctx.running = False
             await giving_emote("<:crossmark:753620331851284480>")
             lines = traceback.format_exception(type(e), e, e.__traceback__)
-            await ctx.reply(f"Evaluation failed:\n{''.join(lines)}", delete_after=60)
+            error_trace = f"Evaluation failed:\n{''.join(lines)}"
+            await ctx.reply(f"```py\n{error_trace}```", delete_after=60)
         else:
             ctx.running = False
             await giving_emote("<:checkmark:753619798021373974>")
@@ -243,7 +245,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
 
         outputs = [call(do_cog, ext, ret=True) or f"cogs.{ext} is {method}ed"
                    for ext in extensions]
-        await ctx.maybe_reply(embed=BaseEmbed.default(ctx, description="\n".join(str(x) for x in outputs)))
+        await ctx.embed(description="\n".join(str(x) for x in outputs))
 
 
 def setup(bot):
