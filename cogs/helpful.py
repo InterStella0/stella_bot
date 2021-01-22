@@ -9,6 +9,7 @@ import textwrap
 import more_itertools
 from discord.ext import commands, menus
 from utils.useful import BaseEmbed, MenuBase, plural, print_exception
+from utils.decorators import Pages
 from utils.errors import CantRun
 from utils import flags as flg
 from collections import namedtuple
@@ -189,10 +190,10 @@ class HelpSource(menus.ListPageSource):
         return True
 
 
-class CodeBlockPage(menus.ListPageSource):
+@Pages()
+async def code_block_page(self, menu: CogMenu, entry):
     """This is for Code Block ListPageSource"""
-    async def format_page(self, menu: CogMenu, entry):
-        return menu.generate_page(entry, self._max_pages)
+    return menu.generate_page(entry, self._max_pages)
 
 
 class StellaBotHelp(commands.DefaultHelpCommand):
@@ -376,7 +377,7 @@ class Helpful(commands.Cog):
         if show_code:
             param = {"text": inspect.getsource(src), "width": 1900, "replace_whitespace": False}
             list_codeblock = [f"```py\n{cb}\n```" for cb in textwrap.wrap(**param)]
-            menu = MenuBase(CodeBlockPage(list_codeblock, per_page=1))
+            menu = MenuBase(code_block_page(list_codeblock, per_page=1))
             await menu.start(ctx)
         else:
             lines, firstlineno = inspect.getsourcelines(src)

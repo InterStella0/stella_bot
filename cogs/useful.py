@@ -6,7 +6,7 @@ import itertools
 import functools
 from discord.ext import commands
 from collections import namedtuple
-from utils.useful import try_call, call, BaseEmbed
+from utils.useful import try_call, call
 from typing import Union
 
 
@@ -45,7 +45,7 @@ class Useful(commands.Cog):
         if not str_id or not str_id.isdigit():
             return await ctx.maybe_reply("Invalid user")
         user_id = int(str_id)
-        coro_user = functools.partial(try_call(self.bot.fetch_user, user_id, exception=discord.NotFound))
+        coro_user = functools.partial(try_call, self.bot.fetch_user, user_id, exception=discord.NotFound)
         member = ctx.guild.get_member(user_id) or self.bot.get_user(user_id) or await coro_user()
         if not member:
             return await ctx.maybe_reply("Invalid user")

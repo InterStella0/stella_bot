@@ -15,7 +15,7 @@ from utils import flags as flg
 from utils.new_converters import BotPrefix, BotUsage, IsBot
 from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, plural, realign
 from utils.errors import NotInDatabase, BotNotFound
-from utils.decorators import is_discordpy, event_check, wait_ready
+from utils.decorators import is_discordpy, event_check, wait_ready, Pages
 
 
 @dataclass
@@ -80,46 +80,29 @@ class AllPrefixes(ListPageSource):
         return menu.generate_page(embed, self._max_pages)
 
 
-class AllBotCount(ListPageSource):
-    """Menu for allprefix command."""
-    def __init__(self, data):
-        super().__init__(data, per_page=10)
-
-    async def format_page(self, menu: MenuBase, entries):
-        key = "(\u200b|\u200b)"
-        offset = menu.current_page * self.per_page
-        content = "`{no}. {b} {key} {b.count}`"
-        contents = [content.format(no=i+1, b=b, key=key) for i, b in enumerate(entries, start=offset)]
-        embed = BaseEmbed(title="Bot Command Rank",
-                          description="\n".join(realign(contents, key)))
-        return menu.generate_page(embed, self._max_pages)
+@Pages(per_page=10)
+async def all_bot_count(self, menu: MenuBase, entries):
+    """Menu for botrank command."""
+    key = "(\u200b|\u200b)"
+    offset = menu.current_page * self.per_page
+    content = "`{no}. {b} {key} {b.count}`"
+    contents = [content.format(no=i+1, b=b, key=key) for i, b in enumerate(entries, start=offset)]
+    embed = BaseEmbed(title="Bot Command Rank",
+                      description="\n".join(realign(contents, key)))
+    return menu.generate_page(embed, self._max_pages)
 
 
-class BotAddedList(ListPageSource):
+@Pages(per_page=6)
+async def bot_added_list(self, menu: MenuBase, entries):
     """Menu for recentbotadd command."""
-    def __init__(self, data):
-        super().__init__(data, per_page=6)
+    offset = menu.current_page * self.per_page
+    contents = ((f"{b.author}", f'**{b}** `{humanize.precisedelta(b.joined_at)}`')
+                for i, b in enumerate(entries, start=offset))
 
-    async def format_page(self, menu: MenuBase, entries):
-        offset = menu.current_page * self.per_page
-        contents = ((f"{b.author}", f'**{b}** `{humanize.precisedelta(b.joined_at)}`')
-                    for i, b in enumerate(entries, start=offset))
-
-        embed = BaseEmbed(title="Bots added today")
-        for n, v in contents:
-            embed.add_field(name=n, value=v, inline=False)
-        return menu.generate_page(embed, self._max_pages)
-
-
-class MissingBots(ListPageSource):
-    async def format_page(self, menu, items):
-        offset = menu.current_page * self.per_page
-        stuff = [f"{i + offset + 1}.(`{x[1]}`): {x[0]}" for i, x in enumerate(items)]
-        return BaseEmbed.default(
-            menu.ctx,
-            title=f"{menu.current_page + 1}/{self._max_pages}",
-            description="\n".join(stuff)
-        )
+    embed = BaseEmbed(title="Bots added today")
+    for n, v in contents:
+        embed.add_field(name=n, value=v, inline=False)
+    return menu.generate_page(embed, self._max_pages)
 
 
 async def is_user(self, m):
@@ -575,7 +558,7 @@ class FindBot(commands.Cog, name="Bots"):
         db_data = await self.bot.pool_pg.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
         member_data = [BotAdded.from_json(bot=members[data["bot_id"]], **data) for data in db_data]
         member_data.sort(key=lambda x: x.joined_at, reverse=not reverse)
-        menu = MenuBase(source=BotAddedList(member_data))
+        menu = MenuBase(source=bot_added_list(member_data))
         await menu.start(ctx)
 
     @commands.command(aliases=["rht", "recenthelptrip", "recenttrigger"],
@@ -611,7 +594,7 @@ class FindBot(commands.Cog, name="Bots"):
         bot_data = [BotUsage(bots[r["bot_id"]], r["count"]) for r in record]
         bot_data.sort(key=lambda x: x.count, reverse=not reverse)
         if not bot:
-            menu = MenuBase(source=AllBotCount(bot_data))
+            menu = MenuBase(source=all_bot_count(bot_data))
             await menu.start(ctx)
         else:
             key = "(\u200b|\u200b)"
