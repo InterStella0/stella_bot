@@ -61,8 +61,9 @@ class IsBot(commands.Converter):
 class BotData:
     """BotData Base for Bot data that was fetch from the database. It checks if it's a member and gets it's data."""
     __slots__ = ("bot",)
-    name = "NONE"
-    use = "NONE"
+    name = None
+    use = None
+    method = None
 
     def __init__(self, member):
         self.bot = member
@@ -73,7 +74,8 @@ class BotData:
     @classmethod
     async def convert(cls, ctx, argument):
         member = await IsBot().convert(ctx, argument, cls=cls)
-        if data := await ctx.bot.pool_pg.fetchrow(f"SELECT * FROM {cls.name} WHERE bot_id=$1", member.id):
+        method = getattr(ctx.bot.pool_pg, cls.method)
+        if data := await method(f"SELECT * FROM {cls.name} WHERE bot_id=$1", member.id):
             return member, data
         raise NotInDatabase(member, converter=cls)
 
@@ -83,18 +85,35 @@ class BotData:
 
 class BotPrefix(BotData):
     """Bot data for prefix"""
-    name = "bot_prefix"
-    use = "prefix"
-    __slots__ = ("prefix",)
+    name = "bot_prefix_list"
+    use = "prefixes"
+    method = "fetch"
+    __slots__ = ("prefixes",)
 
-    def __init__(self, member, prefix):
+    def __init__(self, member, prefixes):
         super().__init__(member)
-        self.prefix = prefix
+        print(prefixes)
+        self.prefixes = prefixes
 
     @classmethod
     async def convert(cls, ctx, argument):
         member, data = await super().convert(ctx, argument)
-        return cls(member, data[cls.use])
+        prefixes = {payload['prefix']: payload['usage'] for payload in data}
+        return cls(member, prefixes)
+
+    @property
+    def prefix(self):
+        return max(self.prefixes, key=lambda x: self.prefixes[x])
+
+    @property
+    def aliases(self):
+        alias = {x: y for x, y in self.prefixes.items() if x != self.prefix}
+        total = sum(alias.values())
+        return [p for p, v in alias.items() if v / total > 0.5]
+
+    @property
+    def allprefixes(self):
+        return ", ".join(map("`{0}`".format, [self.prefix, *self.aliases]))
 
 
 class BotUsage(BotData):
@@ -102,6 +121,7 @@ class BotUsage(BotData):
     __slots__ = ("count",)
     name = "bot_usage_count"
     use = "count"
+    method = "fetchrow"
 
     def __init__(self, member, count):
         super().__init__(member)
