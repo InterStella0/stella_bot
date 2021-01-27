@@ -1,15 +1,14 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-char** append(char**, size_t*, const char*);
-int search(char**, char[], int);
+
 typedef struct ResultStruct{
     char** found_prefixes;
     int size;
 }Result;
 
-
-char* formatting(char* strvalue);
+char** append(char**, size_t*, const char*);
+int search(char**, char[], int);
 Result* multi_find_prefix(char** prefixes, char content[], int n){
     int start = strlen(content);
     size_t found = 1;
@@ -26,6 +25,8 @@ Result* multi_find_prefix(char** prefixes, char content[], int n){
     *pointer_result = result;
     return pointer_result;
 }
+
+char* formatting(char* strvalue);
 char* find_prefix(char** prefixes, char content[], int n){
     int start = strlen(content);
     while(start > 0){
@@ -44,6 +45,7 @@ char** append(char** arr, size_t* size, const char* target){
     arr[*size - 1] = strdup(target);
     return realloc(arr, (*size+=1) * sizeof(char *));
 }
+
 int search(char** arr, char target[], int n){
     int low = 0;
     int high = n - 1;
@@ -59,11 +61,13 @@ int search(char** arr, char target[], int n){
     }
     return -1;
 }
+
 char* formatting(char* strvalue){
     char* content = malloc(sizeof(char) * (strlen(strvalue) + 1));
     strcpy(content, strvalue);
     return content;
 }
+
 void free_result(Result* pointer_result){
     free(pointer_result);
 }
