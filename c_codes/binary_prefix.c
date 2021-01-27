@@ -1,9 +1,31 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-int search(char** x, char[], int);
-char* find_prefix(char** prefixes, char content[], int n);
+char** append(char**, size_t*, const char*);
+int search(char**, char[], int);
+typedef struct ResultStruct{
+    char** found_prefixes;
+    int size;
+}Result;
+
+
 char* formatting(char* strvalue);
+Result* multi_find_prefix(char** prefixes, char content[], int n){
+    int start = strlen(content);
+    size_t found = 1;
+    char** found_prefixes = malloc(sizeof(char*)*found);
+    while(start > 0){
+        int result = search(prefixes, content, n);
+        if (result != -1){
+            found_prefixes = append(found_prefixes, &found, content);
+        }
+        content[start-=1] = '\0';
+    }
+    Result* pointer_result = malloc(sizeof(Result));
+    Result result = {found_prefixes, found};
+    *pointer_result = result;
+    return pointer_result;
+}
 char* find_prefix(char** prefixes, char content[], int n){
     int start = strlen(content);
     while(start > 0){
@@ -16,9 +38,12 @@ char* find_prefix(char** prefixes, char content[], int n){
         }
     }
     return formatting("");
-
 }
 
+char** append(char** arr, size_t* size, const char* target){
+    arr[*size - 1] = strdup(target);
+    return realloc(arr, (*size+=1) * sizeof(char *));
+}
 int search(char** arr, char target[], int n){
     int low = 0;
     int high = n - 1;
@@ -34,9 +59,11 @@ int search(char** arr, char target[], int n){
     }
     return -1;
 }
-
 char* formatting(char* strvalue){
     char* content = malloc(sizeof(char) * (strlen(strvalue) + 1));
     strcpy(content, strvalue);
     return content;
+}
+void free_result(Result* pointer_result){
+    free(pointer_result);
 }
