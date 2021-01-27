@@ -138,9 +138,17 @@ def default_date(datetime_var):
     return datetime_var.strftime('%d %b %Y %I:%M %p %Z')
 
 
-lib = ctypes.CDLL("c_codes/binary_prefix.so")
+lib = ctypes.CDLL("./c_codes/binary_prefix.so")
+multi_find_prefix = lib.multi_find_prefix
 find_prefix = lib.find_prefix
+freeing = lib.free_result
+multi_find_prefix.restype = ctypes.c_void_p
 find_prefix.restype = ctypes.c_char_p
+
+
+class RESULT(ctypes.Structure):
+    _fields_ = [('found_prefixes', ctypes.POINTER(ctypes.c_char_p)),
+                ('size', ctypes.c_int)]
 
 
 def compile_prefix(prefixes):
@@ -148,17 +156,23 @@ def compile_prefix(prefixes):
     ArrString = ctypes.c_char_p * len(prefixes)
     pre = (x.encode('utf-8') for x in prefixes)
     array_string = ArrString(*pre)
-    size = len(prefixes)
-    return array_string, size
+    return array_string, len(prefixes)
 
 
-def search_prefix(array_result, content_buffer):
+def search_prefix(array_result, content_buffer, multi=True):
     """Calls a function called find_prefix from C."""
     array_string, size = array_result
-    find_prefix.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
-    result = find_prefix(array_string, content_buffer, size)
-    strresult = ctypes.c_char_p(result).value
-    return strresult.decode('utf-8')
+    func = (find_prefix, multi_find_prefix)[multi]
+    func.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
+    return_result = func(array_string, content_buffer, size)
+    if multi:
+        result = RESULT.from_address(return_result)
+        to_return = [x.decode("utf-8") for x in result.found_prefixes[:result.size-1]]
+        freeing(ctypes.byref(result))
+    else:
+        strresult = ctypes.c_char_p(return_result).value
+        to_return = strresult.decode("utf-8")
+    return to_return
 
 
 def print_exception(text, error):
