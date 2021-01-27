@@ -13,7 +13,7 @@ from discord.ext import commands
 from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
 from utils import flags as flg
-from utils.new_converters import BotPrefix, BotUsage, IsBot
+from utils.new_converters import BotPrefix, BotUsage, IsBot, BotCommand
 from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, plural, realign
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, Pages
@@ -273,20 +273,27 @@ class FindBot(commands.Cog, name="Bots"):
                     break
         if not bot_found:
             return
-        command_query = "INSERT INTO bot_usage_count VALUES($1, $2) " \
-                        "ON CONFLICT (bot_id) DO " \
-                        "UPDATE SET count=bot_usage_count.count + 1"
+
+        commands_query = "INSERT INTO bot_commands_list VALUES($1, $2, $3) " \
+                         "ON CONFLICT (bot_id, command) DO " \
+                         "UPDATE SET usage=bot_commands_list.usage + 1"
         prefix_query = "INSERT INTO bot_prefix_list VALUES($1, $2, $3) " \
                        "ON CONFLICT (bot_id, prefix) DO " \
                        "UPDATE SET usage=bot_prefix_list.usage + 1"
 
-        command_values = [(x, 1) for x in bot_found]
+        responded = filter(lambda x: x["bot_id"] in bot_found, bots)
+        commands_values = []
         prefix_values = []
-        for prefix, bot in itertools.product(result, bots):
-            if bot["prefix"] == prefix and bot["bot_id"] in bot_found:
+        for prefix, bot in itertools.product(result, responded):
+            if bot["prefix"] == prefix:
                 prefix_values.append((bot["bot_id"], bot["prefix"], 1))
-        for x in ("command", "prefix"):
-            await self.bot.pool_pg.executemany(locals()[x + "_query"], locals()[x + "_values"])
+                command = message.content[len(prefix):]
+                word, _, _ = command.partition(" ")
+                if word:
+                    commands_values.append((bot["bot_id"], word, 1))
+
+        for x in ("commands", "prefix"):
+            await self.bot.pool_pg.executemany(locals()[f"{x}_query"], locals()[f"{x}_values"])
 
     @commands.Cog.listener("on_message")
     @wait_ready()
@@ -394,8 +401,7 @@ class FindBot(commands.Cog, name="Bots"):
         await self.bot.pool_pg.execute(query, *value)
         if result.bot.id in self.bot.pending_bots:
             self.bot.pending_bots.remove(result.bot.id)
-        if result.bot.id not in self.bot.confirmed_bots:
-            self.bot.confirmed_bots.add(result.bot.id)
+        self.bot.confirmed_bots.add(result.bot.id)
 
     @commands.command(aliases=["owns", "userowns", "whatadds", "whatadded"],
                       brief="Shows what bot the user owns in discord.py.",
@@ -664,6 +670,12 @@ class FindBot(commands.Cog, name="Bots"):
         menu = MenuBase(bot_pending_list(sorted(bots, key=lambda x: x["requested_at"], reverse=not flags.get("reverse", False))))
         menu.cached_bots = self.cached_bots
         await menu.start(ctx)
+
+    @commands.command(aliases=["botcommand", "bc", "bcs"],
+                      help="Predicting the bot's command based on the message history.")
+    async def botcommands(self, ctx, bot: BotCommand):
+        await ctx.embed(title=f"{bot}'s Command",
+                        description="\n".join(f"{x}. {c}" for x, c in enumerate(bot.commands, start=1)))
 
 
 def setup(bot):

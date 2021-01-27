@@ -131,3 +131,30 @@ class BotUsage(BotData):
     async def convert(cls, ctx, argument):
         member, data = await super().convert(ctx, argument)
         return cls(member, data[cls.use])
+
+
+class BotCommand(BotData):
+    """Bot data for command counts"""
+    __slots__ = ("_commands",)
+    name = "bot_commands_list"
+    use = "commands"
+    method = "fetch"
+
+    def __init__(self, member, commands):
+        super().__init__(member)
+        self._commands = commands
+
+    @classmethod
+    async def convert(cls, ctx, argument):
+        member, data = await super().convert(ctx, argument)
+        commands = {payload['command']: payload['usage'] for payload in data}
+        return cls(member, commands)
+
+    @property
+    def commands(self):
+        total = sum(self._commands.values())
+        return [c for c, v in self._commands.items() if v / total > 0.05]
+
+    @property
+    def highest_command(self):
+        return max(self._commands, key=lambda x: self._commands[x])

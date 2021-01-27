@@ -377,7 +377,7 @@ class Helpful(commands.Cog):
         if show_code:
             param = {"text": inspect.getsource(src), "width": 1900, "replace_whitespace": False}
             list_codeblock = [f"```py\n{cb}\n```" for cb in textwrap.wrap(**param)]
-            menu = MenuBase(code_block_page(list_codeblock, per_page=1))
+            menu = MenuBase(code_block_page(list_codeblock))
             await menu.start(ctx)
         else:
             lines, firstlineno = inspect.getsourcelines(src)
