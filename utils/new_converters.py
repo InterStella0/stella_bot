@@ -92,7 +92,6 @@ class BotPrefix(BotData):
 
     def __init__(self, member, prefixes):
         super().__init__(member)
-        print(prefixes)
         self.prefixes = prefixes
 
     @classmethod
@@ -109,7 +108,8 @@ class BotPrefix(BotData):
     def aliases(self):
         alias = {x: y for x, y in self.prefixes.items() if x != self.prefix}
         total = sum(alias.values())
-        return [p for p, v in alias.items() if v / total > 0.5]
+        highest = self.prefixes[self.prefix]
+        return [p for p, v in alias.items() if v / total > 0.5 and v / highest > 0.05]
 
     @property
     def allprefixes(self):

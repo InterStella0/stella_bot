@@ -107,6 +107,22 @@ async def bot_added_list(self, menu: MenuBase, entries):
     return menu.generate_page(embed, self._max_pages)
 
 
+@Pages()
+async def bot_pending_list(self, menu: MenuBase, entry):
+    stellabot = menu.ctx.bot
+    bot = menu.cached_bots.setdefault(entry["bot_id"], await stellabot.fetch_user(entry["bot_id"]))
+    embed = BaseEmbed(title=f"{bot}(`{bot.id}`)")
+    fields = (("Requested by", stellabot.get_user(entry["author_id"]) or "idk really"),
+              ("Reason", entry["reason"]),
+              ("Created at", default_date(bot.created_at)),
+              ("Requested at", default_date(entry["requested_at"])),
+              ("Message", f"[jump]({entry['jump_url']})"))
+    embed.set_thumbnail(url=bot.avatar_url)
+    for n, v in fields:
+        embed.add_field(name=n, value=v, inline=False)
+    return menu.generate_page(embed, self._max_pages)
+
+
 def is_user():
     """Event check for returning true if it's a bot."""
     return event_check(lambda _, m: not m.author.bot)
@@ -131,6 +147,7 @@ class FindBot(commands.Cog, name="Bots"):
         re_bot = "[\s|\n]+(?P<id>[0-9]{17,19})[\s|\n]"
         re_reason = "+(?P<reason>.[\s\S\r]+)"
         self.re_addbot = re_command + re_bot + re_reason
+        self.cached_bots = {}
         self.compiled_pref = None
         self.all_bot_prefixes = {}
         bot.loop.create_task(self.loading_all_prefixes())
@@ -188,7 +205,7 @@ class FindBot(commands.Cog, name="Bots"):
         exist_query = "SELECT * FROM bot_prefix_list WHERE bot_id=ANY($1::BIGINT[])"
         existing = await self.bot.pool_pg.fetch(exist_query, bots)
         for x in existing:
-            if prefix.startswith(x["prefix"]):
+            if prefix.startswith(x["prefix"]) and x["bot_id"] in bots:
                 bots.remove(x["bot_id"])
         if not bots:
             return
@@ -636,10 +653,17 @@ class FindBot(commands.Cog, name="Bots"):
             await ctx.embed(title="Bot Command Rank", description="\n".join(realign(contents, key)))
 
     @commands.command(aliases=["pendingbots", "penbot", "peb"],
-                      help="A bot that registered to ?addbot command of R. Danny but never joined the server.")
+                      help="A bot that registered to ?addbot command of R. Danny but never joined the server.",
+                      cls=flg.SFlagCommand)
+    @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
+                  help="Reverses the list based on the requested date. This flag accepts True or False, default to "
+                       "False if not stated.")
     @is_discordpy()
-    async def pendingbot(self, ctx):
+    async def pendingbot(self, ctx, **flags):
         bots = await self.bot.pool_pg.fetch("SELECT * FROM pending_bots")
+        menu = MenuBase(bot_pending_list(sorted(bots, key=lambda x: x["requested_at"], reverse=not flags.get("reverse", False))))
+        menu.cached_bots = self.cached_bots
+        await menu.start(ctx)
 
 
 def setup(bot):
