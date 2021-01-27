@@ -181,8 +181,15 @@ class FindBot(commands.Cog, name="Bots"):
                 if m := await self.bot.wait_for("message", check=setting(func), timeout=1):
                     if not m.author.bot:
                         break
-                    if m.author.bot:
-                        bots.append(m.author.id)
+                    bots.append(m.author.id)
+        if not bots:
+            return
+        # Possibility of duplication removal
+        exist_query = "SELECT * FROM bot_prefix_list WHERE bot_id=ANY($1::BIGINT[])"
+        existing = await self.bot.pool_pg.fetch(exist_query, bots)
+        for x in existing:
+            if prefix.startswith(x["prefix"]):
+                bots.remove(x["bot_id"])
         if not bots:
             return
         query = "INSERT INTO bot_prefix_list VALUES($1, $2, $3) " \
@@ -233,7 +240,8 @@ class FindBot(commands.Cog, name="Bots"):
         if not (result := search_prefix(self.compiled_pref, content_compiled)):
             return
 
-        bots = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix_list WHERE prefix=$1", result)
+        query = f"SELECT * FROM bot_prefix_list WHERE {' OR '.join(map('prefix=${}'.format, range(1, len(result) + 1)))}"
+        bots = await self.bot.pool_pg.fetch(query, *result)
         match_bot = {bot["bot_id"] for bot in bots if message.guild.get_member(bot["bot_id"])}
 
         def check(msg):
@@ -256,7 +264,10 @@ class FindBot(commands.Cog, name="Bots"):
                        "UPDATE SET usage=bot_prefix_list.usage + 1"
 
         command_values = [(x, 1) for x in bot_found]
-        prefix_values = [(x, result, 1) for x in bot_found]
+        prefix_values = []
+        for prefix, bot in itertools.product(result, bots):
+            if bot["prefix"] == prefix and bot["bot_id"] in bot_found:
+                prefix_values.append((bot["bot_id"], bot["prefix"], 1))
         for x in ("command", "prefix"):
             await self.bot.pool_pg.executemany(locals()[x + "_query"], locals()[x + "_values"])
 
