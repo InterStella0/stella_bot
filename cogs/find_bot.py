@@ -16,7 +16,7 @@ from utils import flags as flg
 from utils.new_converters import BotPrefix, BotUsage, IsBot, BotCommand
 from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, plural, realign
 from utils.errors import NotInDatabase, BotNotFound
-from utils.decorators import is_discordpy, event_check, wait_ready, Pages
+from utils.decorators import is_discordpy, event_check, wait_ready, pages
 
 
 @dataclass
@@ -82,45 +82,38 @@ class AllPrefixes(ListPageSource):
         return menu.generate_page(embed, self._max_pages)
 
 
-@Pages(per_page=10)
+@pages(per_page=10)
 async def all_bot_count(self, menu: MenuBase, entries):
     """Menu for botrank command."""
     key = "(\u200b|\u200b)"
     offset = menu.current_page * self.per_page
     content = "`{no}. {b} {key} {b.count}`"
     contents = [content.format(no=i+1, b=b, key=key) for i, b in enumerate(entries, start=offset)]
-    embed = BaseEmbed(title="Bot Command Rank",
-                      description="\n".join(realign(contents, key)))
-    return menu.generate_page(embed, self._max_pages)
+    return BaseEmbed(title="Bot Command Rank",
+                     description="\n".join(realign(contents, key)))
 
 
-@Pages(per_page=6)
+@pages(per_page=6)
 async def bot_added_list(self, menu: MenuBase, entries):
     """Menu for recentbotadd command."""
     offset = menu.current_page * self.per_page
     contents = ((f"{b.author}", f'**{b}** `{humanize.precisedelta(b.joined_at)}`')
                 for i, b in enumerate(entries, start=offset))
-
-    embed = BaseEmbed(title="Bots added today")
-    for n, v in contents:
-        embed.add_field(name=n, value=v, inline=False)
-    return menu.generate_page(embed, self._max_pages)
+    return BaseEmbed(title="Bots added today", fields=contents)
 
 
-@Pages()
+@pages()
 async def bot_pending_list(self, menu: MenuBase, entry):
     stellabot = menu.ctx.bot
     bot = menu.cached_bots.setdefault(entry["bot_id"], await stellabot.fetch_user(entry["bot_id"]))
-    embed = BaseEmbed(title=f"{bot}(`{bot.id}`)")
     fields = (("Requested by", stellabot.get_user(entry["author_id"]) or "idk really"),
               ("Reason", entry["reason"]),
               ("Created at", default_date(bot.created_at)),
               ("Requested at", default_date(entry["requested_at"])),
               ("Message", f"[jump]({entry['jump_url']})"))
+    embed = BaseEmbed(title=f"{bot}(`{bot.id}`)", fields=fields)
     embed.set_thumbnail(url=bot.avatar_url)
-    for n, v in fields:
-        embed.add_field(name=n, value=v, inline=False)
-    return menu.generate_page(embed, self._max_pages)
+    return embed
 
 
 def is_user():
@@ -262,13 +255,16 @@ class FindBot(commands.Cog, name="Bots"):
         match_bot = {bot["bot_id"] for bot in bots if message.guild.get_member(bot["bot_id"])}
 
         def check(msg):
-            return msg.author.bot and msg.channel == message.channel and msg.author.id in match_bot
+            return msg.channel == message.channel
 
         bot_found = []
         while message.created_at + datetime.timedelta(seconds=5) > datetime.datetime.utcnow():
             with contextlib.suppress(asyncio.TimeoutError):
                 if m := await self.bot.wait_for("message", check=check, timeout=1):
-                    bot_found.append(m.author.id)
+                    if not m.author.bot:
+                        break
+                    if m.author.id in match_bot:
+                        bot_found.append(m.author.id)
                 if len(bot_found) == len(match_bot):
                     break
         if not bot_found:
@@ -288,7 +284,8 @@ class FindBot(commands.Cog, name="Bots"):
             if bot["prefix"] == prefix:
                 prefix_values.append((bot["bot_id"], bot["prefix"], 1))
                 command = message.content[len(prefix):]
-                word, _, _ = command.partition(" ")
+                word, _, _ = command.partition("\n")
+                word, _, _ = word.partition(" ")
                 if word:
                     commands_values.append((bot["bot_id"], word, 1))
 
@@ -658,14 +655,14 @@ class FindBot(commands.Cog, name="Bots"):
             contents = ["`{0}. {1} {2} {1.count}`".format(i + idx + 1, b, key) for i, b in enumerate(scope_bot)]
             await ctx.embed(title="Bot Command Rank", description="\n".join(realign(contents, key)))
 
-    @commands.command(aliases=["pendingbots", "penbot", "peb"],
+    @commands.command(aliases=["pendingbot", "penbot", "peb"],
                       help="A bot that registered to ?addbot command of R. Danny but never joined the server.",
                       cls=flg.SFlagCommand)
     @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
                   help="Reverses the list based on the requested date. This flag accepts True or False, default to "
                        "False if not stated.")
     @is_discordpy()
-    async def pendingbot(self, ctx, **flags):
+    async def pendingbots(self, ctx, **flags):
         bots = await self.bot.pool_pg.fetch("SELECT * FROM pending_bots")
         menu = MenuBase(bot_pending_list(sorted(bots, key=lambda x: x["requested_at"], reverse=not flags.get("reverse", False))))
         menu.cached_bots = self.cached_bots
@@ -674,8 +671,14 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.command(aliases=["botcommand", "bc", "bcs"],
                       help="Predicting the bot's command based on the message history.")
     async def botcommands(self, ctx, bot: BotCommand):
-        await ctx.embed(title=f"{bot}'s Command",
-                        description="\n".join(f"{x}. {c}" for x, c in enumerate(bot.commands, start=1)))
+        @pages(per_page=6)
+        def each_page(self, menu, entries):
+            number = menu.current_page * self.per_page + 1
+            list_commands = "\n".join(f"{x}. {c}" for x, c in enumerate(entries, start=number))
+            embed = BaseEmbed.default(ctx, title=f"{bot} Commands", description=list_commands)
+            return embed.set_thumbnail(url=bot.bot.avatar_url)
+        menu = MenuBase(each_page(bot.commands))
+        await menu.start(ctx)
 
 
 def setup(bot):

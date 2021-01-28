@@ -4,7 +4,7 @@ import discord
 import asyncpg
 import datetime
 import utils.library_override
-from utils.useful import StellaContext
+from utils.useful import StellaContext, ListCall
 from utils.decorators import event_check, wait_ready
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -13,6 +13,7 @@ from utils.useful import call, print_exception
 from os import environ
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
+to_call = ListCall()
 
 
 class StellaBot(commands.Bot):
@@ -36,9 +37,7 @@ class StellaBot(commands.Bot):
 
     async def after_db(self):
         """Runs after the db is connected"""
-        self.loading_cog()
-        for name in "prefix", "bots", "blacklist":
-            await getattr(self, "fill_" + name)()
+        await to_call.call(self)
         for command in bot.commands:
             command.cooldown_after_parsing = True
             if not getattr(command._buckets, "_cooldown", None):
@@ -54,6 +53,7 @@ class StellaBot(commands.Bot):
         """Gets the error channel for the bot to log."""
         return self.get_guild(int(environ.get("BOT_GUILD"))).get_channel(int(environ.get("ERROR_CHANNEL")))
 
+    @to_call.append
     def loading_cog(self):
         """Loads the cog"""
         cogs = ("error_handler", "find_bot", "useful", "helpful", "myself", "eros", "jishaku")
@@ -64,11 +64,13 @@ class StellaBot(commands.Bot):
             else:
                 print(f"cog {cog} is loaded")
 
+    @to_call.append
     async def fill_prefix(self):
         """Fills the bot actual prefix"""
         prefixes = await self.pool_pg.fetch("SELECT * FROM internal_prefix")
         self.existing_prefix = {data["snowflake_id"]: data["prefix"] for data in prefixes}
 
+    @to_call.append
     async def fill_bots(self):
         """Fills the pending/confirmed bots in discord.py"""
         record_pending = await self.pool_pg.fetch("SELECT bot_id FROM pending_bots;")
@@ -78,6 +80,7 @@ class StellaBot(commands.Bot):
         self.confirmed_bots = set(x["bot_id"] for x in record_confirmed)
         print("Bots list are now filled.")
 
+    @to_call.append
     async def fill_blacklist(self):
         """Loading up the blacklisted users."""
         records = await self.pool_pg.fetch("SELECT snowflake_id FROM blacklist")
@@ -103,11 +106,6 @@ class StellaBot(commands.Bot):
 
     async def get_context(self, message, *, cls=None):
         return await super().get_context(message, cls=StellaContext)
-
-    def remove_command(self, name):
-        if command := super().remove_command(name):
-            self.dispatch("command_remove", command)
-            return command
 
     async def process_commands(self, message):
         if message.author.bot:
