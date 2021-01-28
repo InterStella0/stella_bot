@@ -43,14 +43,18 @@ def wait_ready(bot=None):
     return event_check(predicate)
 
 
-def Pages(per_page=1):
-    """Compact Embed page that was originally made teru but was modified"""
+def pages(per_page=1, show_page=True):
+    """Compact ListPageSource that was originally made teru but was modified"""
     def page_source(coro):
-        def __init__(self, pages):
-            super(self.__class__, self).__init__(pages, per_page=per_page)
+        async def create_page_header(self, menu, entry):
+            result = await discord.utils.maybe_coroutine(coro, self, menu, entry)
+            return menu.generate_page(result, self._max_pages)
+
+        def __init__(self, list_pages):
+            super(self.__class__, self).__init__(list_pages, per_page=per_page)
         kwargs = {
             '__init__': __init__,
-            'format_page': coro
+            'format_page': (coro, create_page_header)[show_page]
         }
         return type(coro.__name__, (menus.ListPageSource,), kwargs)
     return page_source
