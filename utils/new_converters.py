@@ -153,7 +153,8 @@ class BotCommand(BotData):
     @property
     def commands(self):
         total = sum(self._commands.values())
-        return [c for c, v in self._commands.items() if v / total > 0.05]
+        pair = [(c, v) for c, v in self._commands.items() if v / total > 0.001]
+        return [c[0] for c in sorted(pair, key=lambda x: x[1], reverse=True)]
 
     @property
     def highest_command(self):

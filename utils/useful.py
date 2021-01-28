@@ -34,8 +34,10 @@ def call(func, *args, exception=Exception, ret=False, **kwargs):
 
 class BaseEmbed(discord.Embed):
     """Main purpose is to get the usual setup of Embed for a command or an error embed"""
-    def __init__(self, color=0xffcccb, timestamp=None, **kwargs):
+    def __init__(self, color=0xffcccb, timestamp=None, fields=(), field_inline=False, **kwargs):
         super().__init__(color=color, timestamp=timestamp or datetime.datetime.utcnow(), **kwargs)
+        for n, v in fields:
+            self.add_field(name=n, value=v, inline=field_inline)
 
     @classmethod
     def default(cls, ctx, **kwargs):
@@ -234,3 +236,12 @@ async def maybe_method(func, cls=None, *args, **kwargs):
     if not inspect.ismethod(func):
         return await maybe_coroutine(func, cls, *args, **kwargs)
     return await maybe_coroutine(func, *args, **kwargs)
+
+
+class ListCall(list):
+    """Quick data structure for calling every element in the array regardless of awaitable or not"""
+    def append(self, rhs):
+        return super().append(rhs)
+
+    def call(self, *args, **kwargs):
+        return asyncio.gather(*(maybe_coroutine(func, *args, **kwargs) for func in self))
