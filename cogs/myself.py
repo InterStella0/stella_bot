@@ -4,11 +4,13 @@ import contextlib
 import time
 import asyncio
 import traceback
+import io
+import textwrap
 from typing import Union
 from discord.ext import commands
 from discord.ext.commands import Greedy
 from utils.decorators import event_check
-from utils.useful import call, BaseEmbed, AfterGreedy
+from utils.useful import call, AfterGreedy, empty_page_format, MenuBase
 from utils.new_converters import ValidCog, IsBot
 from utils import flags as flg
 from jishaku.codeblocks import codeblock_converter
@@ -114,23 +116,35 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
 
     @commands.command(name="eval", help="Eval for input/print feature", aliases=["e", "ev", "eva"])
     async def _eval(self, ctx, *, code: codeblock_converter):
+        loop = ctx.bot.loop
+        stdout = io.StringIO()
+
+        def sending_print():
+            nonlocal stdout
+            content = stdout.getvalue()
+            if content:
+                printing(content, now=True)
+                stdout.truncate(0)
+                stdout.seek(0)
+
         # Shittiest code I've ever wrote remind me to think of another way
-        def run_async(coro, wait_for_value=False):
+        def run_async(coro, wait_for_value=True):
             if wait_for_value:
+                sending_print()
                 ctx.waiting = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
                 ctx.result = None
 
                 async def getting_result():
                     ctx.result = await coro
 
-                run_async(getting_result())
-                while ctx.waiting > datetime.datetime.utcnow() and not ctx.result:
+                run = run_async(getting_result(), wait_for_value=False)
+                while ctx.waiting > datetime.datetime.utcnow() and not run.done():
                     time.sleep(1)
-                if not ctx.result:
+                if not run.done():
                     raise asyncio.TimeoutError(f"{coro} took to long to give a result")
                 return ctx.result
 
-            task = ctx.bot.loop.create_task(coro)
+            task = loop.create_task(coro)
 
             def coroutine_dies(target_task):
                 ctx.failed = target_task.exception()
@@ -138,38 +152,42 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
             task.add_done_callback(coroutine_dies)
             return task
 
-        def printing(*content, **kwargs):
+        def printing(*content, now=False, channel=ctx, reply=True, mention=False, **kwargs):
             async def sending(cont):
-                nonlocal kwargs
-                channel = kwargs.pop("channel", ctx)
-                reply = kwargs.pop("reply", True)
-                mention = kwargs.pop("mention", False)
+                nonlocal channel, reply, mention
                 if c := channel is not ctx:
                     channel = await commands.TextChannelConverter().convert(ctx, str(channel))
 
                 attr = ("send", "reply")[reply is not c]
                 sent = getattr(channel, attr)
-                kwargs = {"content": cont}
-                if attr == "reply":
-                    kwargs.update({"mention_author": mention})
+                text = textwrap.wrap(cont, 1000, replace_whitespace=False)
                 ctx.channel_used = channel if channel is not ctx else ctx.channel
-                await sent(**kwargs)
+                if len(text) == 1:
+                    kwargs = {"content": cont}
+                    if attr == "reply":
+                        kwargs.update({"mention_author": mention})
+                    await sent(**kwargs)
+                else:
+                    menu = MenuBase(empty_page_format([*map("```{}```".format, text)]))
+                    await menu.start(ctx)
 
-            showing = " ".join(map(lambda x: (str(x), '\u200b')[x == ''], content if content else ('\u200b',)))
-            run_async(sending(showing))
+            if now:
+                showing = " ".join(map(lambda x: (str(x), '\u200b')[x == ''], content if content else ('\u200b',)))
+                run_async(sending(showing), wait_for_value=False)
+            else:
+                print(*content, **kwargs)
 
         def inputting(*content, channel=ctx, target=(ctx.author.id,), **kwargs):
             target = discord.utils.SnowflakeList(target, is_sorted=True)
 
             async def waiting_respond():
-                if content:
-                    printing(*content, channel=channel, **kwargs)
                 return await ctx.bot.wait_for("message", check=waiting, timeout=60)
 
             def waiting(m):
                 return target.has(m.author.id) and m.channel == ctx.channel_used
 
-            if result := run_async(waiting_respond(), wait_for_value=True):
+            printing(*content, channel=channel, **kwargs)
+            if result := run_async(waiting_respond()):
                 return result.content
 
         async def giving_emote(e):
@@ -192,7 +210,9 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
             "_ctx": ctx,
             "print": printing,
             "input": inputting,
-            "_message": ctx.message
+            "_message": ctx.message,
+            "_author": ctx.author,
+            "_await": run_async
         }
 
         values = code.content.splitlines()
@@ -206,13 +226,15 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
             yield (yield from variables['_to_run']())
 
         def in_exec():
-            ctx.bot.loop.create_task(starting(datetime.datetime.utcnow()))
-            for result in running():
-                if result is not None:
-                    ctx.bot.loop.create_task(ctx.send(result))
+            loop.create_task(starting(datetime.datetime.utcnow()))
+            with contextlib.redirect_stdout(stdout):
+                for result in running():
+                    sending_print()
+                    if result is not None:
+                        loop.create_task(ctx.send(result))
         try:
             exec("\n".join(values), variables)
-            await ctx.bot.loop.run_in_executor(None, in_exec)
+            await loop.run_in_executor(None, in_exec)
             if ctx.failed:
                 raise ctx.failed from None
         except Exception as e:
@@ -220,7 +242,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
             await giving_emote("<:crossmark:753620331851284480>")
             lines = traceback.format_exception(type(e), e, e.__traceback__)
             error_trace = f"Evaluation failed:\n{''.join(lines)}"
-            await ctx.reply(f"```py\n{error_trace}```", delete_after=60)
+            await ctx.reply(f"{stdout.getvalue()}```py\n{error_trace}```", delete_after=60)
         else:
             ctx.running = False
             await giving_emote("<:checkmark:753619798021373974>")

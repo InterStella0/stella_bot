@@ -8,7 +8,7 @@ import datetime
 import textwrap
 import more_itertools
 from discord.ext import commands, menus
-from utils.useful import BaseEmbed, MenuBase, plural
+from utils.useful import BaseEmbed, MenuBase, plural, empty_page_format
 from utils.decorators import pages
 from utils.errors import CantRun
 from utils import flags as flg
@@ -124,12 +124,6 @@ async def help_source_format(self, menu: HelpMenu, entry):
                           color=menu.bot.color)
     author = menu.ctx.author
     return embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar_url)
-
-
-@pages()
-def empty_page_format(_, __, entry):
-    """This is for Code Block ListPageSource and for help Cog ListPageSource"""
-    return entry
 
 
 class StellaBotHelp(commands.DefaultHelpCommand):
@@ -252,19 +246,16 @@ class Helpful(commands.Cog):
     @commands.command(aliases=["ping", "p"],
                       help="Shows the bot latency from the discord websocket.")
     async def pping(self, ctx):
-        await ctx.maybe_reply(embed=BaseEmbed.default(
-            ctx,
-            title="PP",
-            description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`"))
+        await ctx.embed(title="PP",
+                        description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`")
 
     @commands.command(aliases=["up"],
                       help="Shows the bot uptime from when it was started.")
     async def uptime(self, ctx):
         c_uptime = datetime.datetime.utcnow() - self.bot.uptime
-        await ctx.maybe_reply(embed=BaseEmbed.default(
-            ctx,
+        await ctx.embed(
             title="Uptime",
-            description=f"Current uptime: `{humanize.precisedelta(c_uptime)}`")
+            description=f"Current uptime: `{humanize.precisedelta(c_uptime)}`"
         )
 
     @commands.command(aliases=["src", "sources"],
@@ -279,7 +270,7 @@ class Helpful(commands.Cog):
     async def source(self, ctx, content=None, **flags):
         source_url = 'https://github.com/InterStella0/stella_bot'
         if not content:
-            return await ctx.maybe_reply(f"<{source_url}>")
+            return await ctx.embed(title="here's the entire repo", description=source_url)
         src, module = None, None
 
         def command_check(command):
@@ -318,8 +309,8 @@ class Helpful(commands.Cog):
         else:
             lines, firstlineno = inspect.getsourcelines(src)
             location = module.replace('.', '/') + '.py'
-            content = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
-            await ctx.maybe_reply(content)
+            url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
+            await ctx.embed(title=f"Here's uh, {content}", description=f"[Click Here]({url})")
 
     def cog_unload(self):
         self.bot.help_command = self._default_help_command

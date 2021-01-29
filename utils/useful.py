@@ -6,6 +6,7 @@ import traceback
 import sys
 import asyncio
 import contextlib
+from utils.decorators import pages
 from collections import namedtuple
 from discord.ext.menus import First, Last, Button
 from discord.utils import maybe_coroutine
@@ -216,16 +217,13 @@ class StellaContext(commands.Context):
                 return await self.reply(content, mention_author=mention_author, **kwargs)
         return await self.send(content, **kwargs)
 
-    async def embed(self, content=None, *, reply=True, mention_author=False, embed=None, fields=(), **kwargs):
+    async def embed(self, content=None, *, reply=True, mention_author=False, embed=None, **kwargs):
         ori_embed = BaseEmbed.default(self, **kwargs)
         if embed:
             new_embed = embed.to_dict()
             new_embed.update(ori_embed.to_dict())
             ori_embed = discord.Embed.from_dict(new_embed)
-        for name, value in fields:
-            if value:
-                ori_embed.add_field(name=name, value=value, inline=False)
-        to_send = self.maybe_reply if reply else self.send
+        to_send = (self.send, self.maybe_reply)[reply]
         if not self.me.permissions_in(self.channel).embed_links:
             raise commands.BotMissingPermissions(["embed_links"])
         return await to_send(content, mention_author=mention_author, embed=ori_embed)
@@ -236,6 +234,12 @@ async def maybe_method(func, cls=None, *args, **kwargs):
     if not inspect.ismethod(func):
         return await maybe_coroutine(func, cls, *args, **kwargs)
     return await maybe_coroutine(func, *args, **kwargs)
+
+
+@pages()
+def empty_page_format(_, __, entry):
+    """This is for Code Block ListPageSource and for help Cog ListPageSource"""
+    return entry
 
 
 class ListCall(list):
