@@ -1,3 +1,8 @@
+"""
+Copyright (C) lmao this is just weird just take it i dont give a shit
+if you copy this but make your repository private, ur weird
+"""
+
 import contextlib
 import io
 import jishaku.paginators
