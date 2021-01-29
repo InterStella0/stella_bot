@@ -1,8 +1,12 @@
 import contextlib
+import io
 import jishaku.paginators
 import jishaku.exception_handling
+import jishaku.repl.compilation
 import discord
 import re
+import inspect
+from jishaku.functools import AsyncSender
 from typing import Union
 from collections import namedtuple
 
@@ -49,3 +53,19 @@ async def attempt_add_reaction(msg: discord.Message, reaction: Union[str, discor
 
 
 jishaku.exception_handling.attempt_add_reaction = attempt_add_reaction
+
+
+async def traverse(self, func):
+    std = io.StringIO()
+    with contextlib.redirect_stdout(std):
+        if inspect.isasyncgenfunction(func):
+            async for send, result in AsyncSender(func(*self.args)):
+                if content := std.getvalue():
+                    std.seek(0)
+                    std.truncate(0)
+                    yield content
+                send((yield result))
+        else:
+            yield await func(*self.args)
+            yield std.getvalue()
+jishaku.repl.compilation.AsyncCodeExecutor.traverse = traverse
