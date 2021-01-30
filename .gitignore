@@ -6,3 +6,5 @@ venv
 .idea
 nppBackup
 eros.py
+command_search.c
+.vscode

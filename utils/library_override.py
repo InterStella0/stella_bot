@@ -72,5 +72,6 @@ async def traverse(self, func):
                 send((yield result))
         else:
             yield await func(*self.args)
-            yield std.getvalue()
+            if content := std.getvalue():
+                yield content
 jishaku.repl.compilation.AsyncCodeExecutor.traverse = traverse
