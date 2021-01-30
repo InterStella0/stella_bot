@@ -147,36 +147,49 @@ find_prefix = lib.find_prefix
 freeing = lib.free_result
 multi_find_prefix.restype = ctypes.c_void_p
 find_prefix.restype = ctypes.c_char_p
+find_commands = lib.find_commands
+find_commands.restype = ctypes.c_void_p
 
 
 class RESULT(ctypes.Structure):
-    _fields_ = [('found_prefixes', ctypes.POINTER(ctypes.c_char_p)),
+    _fields_ = [('found_array', ctypes.POINTER(ctypes.c_char_p)),
                 ('size', ctypes.c_int)]
 
 
-def compile_prefix(prefixes):
+def compile_array(string_list):
     """Converts a list of strings that are sorted into binary that will be accepted by C code."""
-    ArrString = ctypes.c_char_p * len(prefixes)
-    pre = (x.encode('utf-8') for x in prefixes)
-    array_string = ArrString(*pre)
-    return array_string, len(prefixes)
+    ArrString = ctypes.c_char_p * len(string_list)
+    binary_array = (x.encode('utf-8') for x in string_list)
+    array_string = ArrString(*binary_array)
+    return array_string, len(string_list)
+
+def decode_result(return_result):
+    """Creates a RESULT structure from address given and return a list of the address"""
+    result = RESULT.from_address(return_result)
+    to_return = [x.decode("utf-8") for x in result.found_array[:result.size]]
+    freeing(ctypes.byref(result))
+    return to_return
 
 
-def search_prefix(array_result, content_buffer, multi=True):
-    """Calls a function called find_prefix from C."""
+def search_prefixes(array_result, content_buffer, multi=True):
+    """Calls a function called multi_find_prefix or find_prefix from C."""
     array_string, size = array_result
     func = (find_prefix, multi_find_prefix)[multi]
     func.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
     return_result = func(array_string, content_buffer, size)
     if multi:
-        result = RESULT.from_address(return_result)
-        to_return = [x.decode("utf-8") for x in result.found_prefixes[:result.size-1]]
-        freeing(ctypes.byref(result))
+        to_return = decode_result(return_result)
     else:
         strresult = ctypes.c_char_p(return_result).value
         to_return = strresult.decode("utf-8")
     return to_return
 
+def search_commands(array_result, content_buffer):
+    """Calls a function called find_commands from C."""
+    array_string, size = array_result
+    find_commands.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
+    return_result = find_commands(array_string, content_buffer, size)
+    return decode_result(return_result)
 
 def print_exception(text, error):
     """Prints the exception with proper traceback."""
