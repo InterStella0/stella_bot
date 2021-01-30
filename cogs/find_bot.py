@@ -14,7 +14,7 @@ from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
 from utils import flags as flg
 from utils.new_converters import BotPrefix, BotUsage, IsBot, BotCommand
-from utils.useful import try_call, BaseEmbed, compile_prefix, search_prefix, MenuBase, default_date, plural, realign
+from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, MenuBase, default_date, plural, realign, search_commands
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages
 
@@ -142,22 +142,30 @@ class FindBot(commands.Cog, name="Bots"):
         self.re_addbot = re_command + re_bot + re_reason
         self.cached_bots = {}
         self.compiled_pref = None
+        self.compiled_cmd = None
         self.all_bot_prefixes = {}
+        self.all_bot_commands = {}
         bot.loop.create_task(self.loading_all_prefixes())
 
     async def loading_all_prefixes(self):
         """Loads all unique prefix when it loads and set compiled_pref for C code."""
         await self.bot.wait_until_ready()
-        datas = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix_list")
-        for data in datas:
-            prefixes = self.all_bot_prefixes.setdefault(data["bot_id"], {})
-            prefixes.update({data["prefix"]: data["usage"]})
+        prefix_data = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix_list")
+        commands_data = await self.bot.pool_pg.fetch("SELECT * FROM bot_commands_list")
+        for prefix, command in itertools.zip_longest(prefix_data, commands_data):
+            if prefix:
+                prefixes = self.all_bot_prefixes.setdefault(prefix["bot_id"], {})
+                prefixes.update({prefix["prefix"]: prefix["usage"]})
+            if command:
+                commands = self.all_bot_commands.setdefault(command["bot_id"], {})
+                commands.update({command["command"]: command["usage"]})
         self.update_compile()
 
     def update_compile(self):
         temp = [*{prefix for prefixes in self.all_bot_prefixes.values() for prefix in prefixes}]
-        self.compiled_pref = compile_prefix(sorted(temp))
-
+        cmds = [*{command for commands in self.all_bot_commands.values() for command in commands}]
+        self.compiled_pref = compile_array(sorted(temp))
+        self.compiled_cmd = compile_array(cmds)
     @commands.Cog.listener("on_member_join")
     @wait_ready()
     @dpy_bot()
@@ -216,7 +224,7 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.Cog.listener("on_message")
     @wait_ready()
     @is_user()
-    async def find_bot_prefix(self, message):
+    async def find_bot_prefixes(self, message):
         """Responsible for checking if a message has a prefix for a bot or not by checking if it's a jishaku or help command."""
         def check_jsk(m):
             possible_text = ("Jishaku", "discord.py", "Python ", "Module ", "guild(s)", "user(s).")
@@ -237,22 +245,10 @@ class FindBot(commands.Cog, name="Bots"):
                         self.help_trigger.update({message.channel.id: message})
                     return await self.update_prefix_bot(message, locals()[f"check_{x}"], match["prefix"])
 
-    @commands.Cog.listener("on_message")
-    @wait_ready()
-    @event_check(command_count_check)
-    async def command_count(self, message):
-        """
-        Checks if the message contains a valid prefix, which will wait for the bot to respond to count that message
-        as a command.
-        """
-        limit = min(len(message.content), 31)
-        content_compiled = ctypes.create_string_buffer(message.content[:limit].encode("utf-8"))
-        if not (result := search_prefix(self.compiled_pref, content_compiled)):
+    async def search_respond(self, callback, message, word):
+        content_compiled = ctypes.create_string_buffer(word.encode("utf-8"))
+        if not (result := callback(self.compiled_cmd, content_compiled)):
             return
-
-        query = f"SELECT * FROM bot_prefix_list WHERE {' OR '.join(map('prefix=${}'.format, range(1, len(result) + 1)))}"
-        bots = await self.bot.pool_pg.fetch(query, *result)
-        match_bot = {bot["bot_id"] for bot in bots if message.guild.get_member(bot["bot_id"])}
 
         def check(msg):
             return msg.channel == message.channel
@@ -263,21 +259,61 @@ class FindBot(commands.Cog, name="Bots"):
                 if m := await self.bot.wait_for("message", check=check, timeout=1):
                     if not m.author.bot:
                         break
-                    if m.author.id in match_bot:
-                        bot_found.append(m.author.id)
-                if len(bot_found) == len(match_bot):
-                    break
+                    bot_found.append(m.author.id)
         if not bot_found:
             return
+        
+        query = "SELECT * FROM bot_commands_list WHERE bot_id=ANY($1::BIGINT[]) AND command=ANY($2::VARCHAR[])"
+        bots = await self.bot.pool_pg.fetch(query, bot_found, result)
+        responded = filter(lambda x: x["bot_id"] in bot_found, bots)
+        return responded, result
 
+    async def update_bot_commands(self, prefix_values, commands_values):
         commands_query = "INSERT INTO bot_commands_list VALUES($1, $2, $3) " \
                          "ON CONFLICT (bot_id, command) DO " \
                          "UPDATE SET usage=bot_commands_list.usage + 1"
         prefix_query = "INSERT INTO bot_prefix_list VALUES($1, $2, $3) " \
                        "ON CONFLICT (bot_id, prefix) DO " \
                        "UPDATE SET usage=bot_prefix_list.usage + 1"
+        for x in ("commands", "prefix"):
+            await self.bot.pool_pg.executemany(locals()[f"{x}_query"], locals()[f"{x}_values"])
 
-        responded = filter(lambda x: x["bot_id"] in bot_found, bots)
+    @commands.Cog.listener("on_message")
+    @wait_ready()
+    @is_user()
+    async def find_bot_commands(self, message):
+        word, _, _ = message.content.partition("\n")
+        limit = min(len(word), 101)
+        if not (received := await self.search_respond(search_commands, message, word[:limit])):
+            return
+        responded, result = received
+        commands_values = []
+        prefix_values = []
+        for command, bot in itertools.product(result, responded):
+            if bot["command"] == command:
+                commands_values.append((bot["bot_id"], bot["command"], 1))
+                if match := re.match("(?P<prefix>^.{{1,100}}?(?={}))".format(command), word):
+                    prefix_values.append((bot["bot_id"], match["prefix"], 1))
+
+        for x, prefix, _ in prefix_values:
+            prefixes = self.all_bot_prefixes.setdefault(x, {})
+            prefixes[prefix] = prefixes.get(prefix, 0) + 1
+        self.update_compile()
+        await self.update_bot_commands(prefix_values, commands_values)
+
+    @commands.Cog.listener("on_message")
+    @wait_ready()
+    @event_check(command_count_check)
+    async def command_count(self, message):
+        """
+        Checks if the message contains a valid prefix, which will wait for the bot to respond to count that message
+        as a command.
+        """
+        limit = min(len(message.content), 31)
+        if not (received := await self.search_respond(search_prefixes, message, message.content[:limit])):
+            return
+
+        responded, result = received
         commands_values = []
         prefix_values = []
         for prefix, bot in itertools.product(result, responded):
@@ -285,12 +321,14 @@ class FindBot(commands.Cog, name="Bots"):
                 prefix_values.append((bot["bot_id"], bot["prefix"], 1))
                 command = message.content[len(prefix):]
                 word, _, _ = command.partition("\n")
-                word, _, _ = word.partition(" ")
-                if word:
+                if (word, _, _ := word.partition(" ")):
                     commands_values.append((bot["bot_id"], word, 1))
-
-        for x in ("commands", "prefix"):
-            await self.bot.pool_pg.executemany(locals()[f"{x}_query"], locals()[f"{x}_values"])
+                    
+        for x, command, _ in commands_values:
+            commands = self.all_bot_commands.setdefault(x, {})
+            commands[command] = commands.get(command, 0) + 1
+        self.update_compile()
+        await self.update_bot_commands(prefix_values, commands_values)
 
     @commands.Cog.listener("on_message")
     @wait_ready()
