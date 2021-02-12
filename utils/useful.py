@@ -262,3 +262,6 @@ class ListCall(list):
 
     def call(self, *args, **kwargs):
         return asyncio.gather(*(maybe_coroutine(func, *args, **kwargs) for func in self))
+
+def in_local(func, target):
+    return func()[target]

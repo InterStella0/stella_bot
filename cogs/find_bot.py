@@ -121,9 +121,11 @@ def is_user():
     return event_check(lambda _, m: not m.author.bot)
 
 
-async def command_count_check(self, message):
+def prefix_cache_ready():
     """Event check for command_count"""
-    return self.compiled_pref and not message.author.bot and message.guild
+    def predicate(self, message):
+        return self.compiled_prefixes and self.compiled_commands and not message.author.bot and message.guild
+    return commands.check(predicate)
 
 
 def dpy_bot():
@@ -141,8 +143,8 @@ class FindBot(commands.Cog, name="Bots"):
         re_reason = "+(?P<reason>.[\s\S\r]+)"
         self.re_addbot = re_command + re_bot + re_reason
         self.cached_bots = {}
-        self.compiled_pref = None
-        self.compiled_cmd = None
+        self.compiled_prefixes = None
+        self.compiled_commands = None
         self.all_bot_prefixes = {}
         self.all_bot_commands = {}
         bot.loop.create_task(self.loading_all_prefixes())
@@ -164,8 +166,9 @@ class FindBot(commands.Cog, name="Bots"):
     def update_compile(self):
         temp = [*{prefix for prefixes in self.all_bot_prefixes.values() for prefix in prefixes}]
         cmds = [*{command for commands in self.all_bot_commands.values() for command in commands}]
-        self.compiled_pref = compile_array(sorted(temp))
-        self.compiled_cmd = compile_array(cmds)
+        self.compiled_prefixes = compile_array(sorted(temp))
+        self.compiled_commands = compile_array(sorted(x[::-1] for x in cmds))
+
     @commands.Cog.listener("on_member_join")
     @wait_ready()
     @dpy_bot()
@@ -245,11 +248,11 @@ class FindBot(commands.Cog, name="Bots"):
                         self.help_trigger.update({message.channel.id: message})
                     return await self.update_prefix_bot(message, locals()[f"check_{x}"], match["prefix"])
 
-    async def search_respond(self, callback, message, word):
+    async def search_respond(self, callback, message, word, type):
         content_compiled = ctypes.create_string_buffer(word.encode("utf-8"))
-        if not (result := callback(self.compiled_cmd, content_compiled)):
+        if not (result := callback(getattr(self, f"compiled_{type}"), content_compiled)):
             return
-
+        singular = type[:len(type) - ((type != "commands") + 1)]
         def check(msg):
             return msg.channel == message.channel
 
@@ -263,7 +266,8 @@ class FindBot(commands.Cog, name="Bots"):
         if not bot_found:
             return
         
-        query = "SELECT * FROM bot_commands_list WHERE bot_id=ANY($1::BIGINT[]) AND command=ANY($2::VARCHAR[])"
+        table = (singular, type)[type == "commands"]
+        query = f"SELECT * FROM bot_{table}_list WHERE bot_id=ANY($1::BIGINT[]) AND {singular}=ANY($2::VARCHAR[])"
         bots = await self.bot.pool_pg.fetch(query, bot_found, result)
         responded = filter(lambda x: x["bot_id"] in bot_found, bots)
         return responded, result
@@ -280,18 +284,18 @@ class FindBot(commands.Cog, name="Bots"):
 
     @commands.Cog.listener("on_message")
     @wait_ready()
+    @prefix_cache_ready()
     @is_user()
     async def find_bot_commands(self, message):
         word, _, _ = message.content.partition("\n")
         limit = min(len(word), 101)
-        if not (received := await self.search_respond(search_commands, message, word[:limit])):
+        if not (received := await self.search_respond(search_commands, message, word[:limit], "commands")):
             return
         responded, result = received
         commands_values = []
         prefix_values = []
         for command, bot in itertools.product(result, responded):
             if bot["command"] == command:
-                commands_values.append((bot["bot_id"], bot["command"], 1))
                 if match := re.match("(?P<prefix>^.{{1,100}}?(?={}))".format(command), word):
                     prefix_values.append((bot["bot_id"], match["prefix"], 1))
 
@@ -303,14 +307,14 @@ class FindBot(commands.Cog, name="Bots"):
 
     @commands.Cog.listener("on_message")
     @wait_ready()
-    @event_check(command_count_check)
+    @prefix_cache_ready()
     async def command_count(self, message):
         """
         Checks if the message contains a valid prefix, which will wait for the bot to respond to count that message
         as a command.
         """
         limit = min(len(message.content), 31)
-        if not (received := await self.search_respond(search_prefixes, message, message.content[:limit])):
+        if not (received := await self.search_respond(search_prefixes, message, message.content[:limit], "prefixes")):
             return
 
         responded, result = received
@@ -318,11 +322,11 @@ class FindBot(commands.Cog, name="Bots"):
         prefix_values = []
         for prefix, bot in itertools.product(result, responded):
             if bot["prefix"] == prefix:
-                prefix_values.append((bot["bot_id"], bot["prefix"], 1))
                 command = message.content[len(prefix):]
                 word, _, _ = command.partition("\n")
-                if (word, _, _ := word.partition(" ")):
-                    commands_values.append((bot["bot_id"], word, 1))
+                got_command, _, _ = word.partition(" ")
+                if got_command:
+                    commands_values.append((bot["bot_id"], got_command, 1))
                     
         for x, command, _ in commands_values:
             commands = self.all_bot_commands.setdefault(x, {})

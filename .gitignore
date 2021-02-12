@@ -8,3 +8,4 @@ nppBackup
 eros.py
 command_search.c
 .vscode
+*.exe

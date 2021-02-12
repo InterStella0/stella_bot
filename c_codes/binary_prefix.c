@@ -18,13 +18,6 @@ Result* find_commands(char** commands, char* string, int n){
     // Returns 2D char array of commands that it found from given string
     size_t found = 1;
     char** found_cmd = calloc(sizeof(char*), found);
-    char** reverse_cmd =  calloc(sizeof(char*), n);
-    int* pos =  calloc(sizeof(int), n);
-    for(int i = 0; i < n; i++){
-        pos[i] = i;
-        reverse_cmd[i] = reverse(commands[i]);
-    }
-    sorting(reverse_cmd, pos, n);
     // Remember stella, this iterate each word it founds.
     char* word = strtok(string, " ");
     while(word != NULL) {
@@ -32,15 +25,15 @@ Result* find_commands(char** commands, char* string, int n){
         int view = strlen(word);
         while (view > 0){
             target[view--] = '\0';
-            int index = search(reverse_cmd, target, n);
-            if (index != -1)
-                found_cmd = append(found_cmd, &found, commands[pos[index]]);
+            int index = search(commands, target, n);
+            if (index != -1){
+                char* command = reverse(commands[index]);
+                found_cmd = append(found_cmd, &found, command);
+            }
         }
         free(target);
         word = strtok(NULL, " ");
     }
-    free(reverse_cmd);
-    free(pos);
     return compile_result(found_cmd, found);
 }
 
@@ -119,9 +112,9 @@ void free_result(Result* pointer_result){
 }
 
 char* reverse(char* word){
-    // Reverse an array of character, make sure to free the memory allocated.
+    // Reverse an array of character.
     int n = strlen(word);
-    char* reverse_word = calloc(sizeof(char), n);
+    char* reverse_word = strdup(word);
     for(int i = 0; i < n; i++){
         reverse_word[i] = word[(n - 1) - i];
     }
