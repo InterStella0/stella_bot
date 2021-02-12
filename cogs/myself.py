@@ -11,25 +11,9 @@ from discord.ext import commands
 from discord.ext.commands import Greedy
 from utils.decorators import event_check
 from utils.useful import call, AfterGreedy, empty_page_format, MenuBase
-from utils.new_converters import ValidCog, IsBot
+from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
 from utils import flags as flg
 from jishaku.codeblocks import codeblock_converter
-
-
-class DatetimeConverter(commands.Converter):
-    async def convert(self, ctx, argument):
-        for _format in "%d/%m/%y %H:%M", "%d/%m/%y %H:%M:%S", "%d/%m/%y":
-            with contextlib.suppress(ValueError):
-                return datetime.datetime.strptime(argument, _format)
-        raise commands.CommandError(f"I couldn't convert {argument} into a valid datetime.")
-
-
-class JumpValidator(commands.Converter):
-    async def convert(self, ctx, argument):
-        with contextlib.suppress(commands.MessageNotFound):
-            message = await commands.MessageConverter().convert(ctx, argument)
-            return message.jump_url
-        raise commands.CommandError(f"I can't find {argument}. Is this even a real message?")
 
 
 class Myself(commands.Cog, command_attrs=dict(hidden=True)):

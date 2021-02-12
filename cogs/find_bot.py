@@ -13,7 +13,7 @@ from discord.ext import commands
 from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
 from utils import flags as flg
-from utils.new_converters import BotPrefix, BotUsage, IsBot, BotCommand
+from utils.new_converters import BotPrefix, BotUsage, IsBot, BotCommand, JumpValidator, DatetimeConverter
 from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, MenuBase, default_date, plural, realign, search_commands
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages
@@ -57,6 +57,32 @@ class BotAdded:
     def __str__(self):
         return str(self.bot or "")
 
+
+class BotOwner(BotAdded):
+    """Raises an error if the bot does not belong to the context author"""
+    @classmethod
+    async def convert(cls, ctx, argument):
+        botdata = await super().convert(ctx, argument)
+        if botdata.author != ctx.author:
+            raise commands.CommandError(f"Sorry you can only change your own bot's information. This bot belongs to {botdata.author}.")
+        
+        if not ctx.guild.get_member(botdata.bot.id):
+            raise commands.CommandError("This bot must be in the server.")
+        return botdata
+
+class AuthorMessage(commands.MessageConverter):
+    """Only allows messages that belong to the context author"""
+    async def convert(self, ctx, argument):
+        message = await super().convert(ctx, argument)
+        if message.author != ctx.author:
+            raise commands.CommandError("The author of this message must be your own message.")
+        return message
+
+class AuthorJump_url(JumpValidator):
+    """Yes i fetch message twice, I'm lazy to copy paste."""
+    async def convert(self, ctx, argument):
+        message = await AuthorMessage().convert(ctx, await super().convert(ctx, argument))
+        return message.jump_url
 
 def pprefix(bot_guild, prefix):
     if content := re.search("<@(!?)(?P<id>[0-9]*)>", prefix):
@@ -296,7 +322,7 @@ class FindBot(commands.Cog, name="Bots"):
         prefix_values = []
         for command, bot in itertools.product(result, responded):
             if bot["command"] == command:
-                if match := re.match("(?P<prefix>^.{{1,100}}?(?={}))".format(command), word):
+                if (match := re.match("(?P<prefix>^.{{1,100}}?(?={}))".format(command), word)) and len(match["prefix"]) < 31:
                     prefix_values.append((bot["bot_id"], match["prefix"], 1))
 
         for x, prefix, _ in prefix_values:
@@ -722,6 +748,56 @@ class FindBot(commands.Cog, name="Bots"):
         menu = MenuBase(each_page(bot.commands))
         await menu.start(ctx)
 
+    @commands.command(cls=flg.SFlagCommand, aliases=["botchange", "cb", "botchanges"],
+                      brief="Allows you to change your own bot's information in whoadd/whatadd command.",
+                      help="Allows you to change your own bot's information  in whoadd/whatadd command, "\
+                           "only applicable for discord.py server. The user is only allowed to change their own bot, "\
+                           "which they are able to change 'requested', 'reason' and 'jump url' values.")
+    @is_discordpy()
+    @flg.add_flag("--jump_url", type=AuthorJump_url, help="The jump url that will be displayed under 'Message Request'.")
+    @flg.add_flag("--requested_at", type=DatetimeConverter, help="The date that is displayed under 'Requested'.")
+    @flg.add_flag("--reason", help="The text that are displayed under 'Reason'.")
+    @flg.add_flag("--message", type=AuthorMessage, 
+                  help="This flag will override 'reason', 'requested' and 'jump url' according to the target message.")
+    async def changebot(self, ctx, bot: BotOwner, **flags):
+        bot = bot.bot
+        if not any(flags.values()):
+            raise commands.CommandError("No value were passed, at least put a flag." \
+                                        f" Type {ctx.prefix}help {ctx.invoked_with} for more infomation")
+        new_data = {'bot_id': bot.id}
+        if message := flags.pop('message'):
+            new_data['reason'] = message.content
+            new_data['requested_at'] = message.created_at
+            new_data['jump_url'] = message.jump_url
+
+        if len(new_data.get('reason', "")) > 1000:
+            raise commands.CommandError("Reason cannot exceed 1000 character, because I'm lazy.")
+        for flag, item in flags.items():
+            if item:
+                new_data.update({flag: item})
+
+        bot_exist = await self.bot.pool_pg.fetchrow("SELECT * FROM confirmed_bots WHERE bot_id=$1", bot.id)
+        existing_data = dict(bot_exist)
+        new_changes = set()
+        for key, before in existing_data.items():
+            if (now := new_data.get(key)) and now != before:
+                new_changes.add(key)
+
+        if not new_changes:
+            raise commands.CommandError("No data changes, wth")
+
+        existing_data.update(new_data)
+        query = "UPDATE confirmed_bots SET "
+        queries = [f"{k}=${i}" for i, k in enumerate(list(existing_data)[1:], start=2)]
+        query += ", ".join(queries)
+        query += " WHERE bot_id=$1"
+        values = [*existing_data.values()]
+        await self.bot.pool_pg.execute(query, *values)
+        changes = []
+        for topic, value in new_data.items():
+            if value and topic in new_changes:
+                changes.append((topic, f"**Before:**\n{bot_exist.get(topic)}\n**After**:\n {value}"))
+        await ctx.embed(title=f"{bot} Information Changes", fields=changes)
 
 def setup(bot):
     bot.add_cog(FindBot(bot))

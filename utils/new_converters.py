@@ -2,6 +2,7 @@ import discord
 import os
 import re
 import contextlib
+import datetime
 from collections import namedtuple
 from fuzzywuzzy import fuzz
 from discord.ext import commands
@@ -159,3 +160,30 @@ class BotCommand(BotData):
     @property
     def highest_command(self):
         return max(self._commands, key=lambda x: self._commands[x])
+
+class DatetimeConverter(commands.Converter):
+    """Will try to convert into a valid datetime object based on a specific format"""
+    async def convert(self, ctx, argument):
+        def valid_replace(argument):
+            multiple = {x: 1 for x in (" ", ":", "/")}
+            multiple.update({"Y": 4})
+            for x in argument.replace("%", ""):
+                yield x * multiple.get(x, 2)
+        valid_conversion = ("%d/%m/%Y %H", "%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%Y/%m/%d", "%Y/%d/%m", "%m/%d/%Y")
+        for _format in valid_conversion:
+            with contextlib.suppress(ValueError):
+                return datetime.datetime.strptime(argument, _format)
+        newline = "\n"
+        raise commands.CommandError(
+            f"I couldn't convert {argument} into a valid date time. Here's a list of valid format for date: \n"\
+            f"{newline.join(''.join(valid_replace(x)) for x in valid_conversion)}"
+        )
+
+
+class JumpValidator(commands.Converter):
+    """Will get the jump_url of a message"""
+    async def convert(self, ctx, argument):
+        with contextlib.suppress(commands.MessageNotFound):
+            message = await commands.MessageConverter().convert(ctx, argument)
+            return message.jump_url
+        raise commands.CommandError(f"I can't find {argument}. Is this even a real message?")
