@@ -162,7 +162,6 @@ def dpy_bot():
 class FindBot(commands.Cog, name="Bots"):
     def __init__(self, bot):
         self.bot = bot
-        self.help_trigger = {}
         valid_prefix = ("!", "?", "？", "<@(!?)80528701850124288> ")
         re_command = "(\{}|\{}|\{}|({}))addbot".format(*valid_prefix)
         re_bot = "[\s|\n]+(?P<id>[0-9]{17,19})[\s|\n]"
@@ -222,15 +221,16 @@ class FindBot(commands.Cog, name="Bots"):
                 return msg.channel == message.channel and not msg.author.bot or inner(msg)
             return check
 
-        bots = []
+        bots = set()
         while message.created_at + datetime.timedelta(seconds=5) > datetime.datetime.utcnow():
             with contextlib.suppress(asyncio.TimeoutError):
                 if m := await self.bot.wait_for("message", check=setting(func), timeout=1):
                     if not m.author.bot:
                         break
-                    bots.append(m.author.id)
+                    bots.add(m.author.id)
         if not bots:
             return
+        bots = list(bots)
         # Possibility of duplication removal
         exist_query = "SELECT * FROM bot_prefix_list WHERE bot_id=ANY($1::BIGINT[])"
         existing = await self.bot.pool_pg.fetch(exist_query, bots)
@@ -254,25 +254,34 @@ class FindBot(commands.Cog, name="Bots"):
     @wait_ready()
     @is_user()
     async def find_bot_prefixes(self, message):
-        """Responsible for checking if a message has a prefix for a bot or not by checking if it's a jishaku or help command."""
+        """This function is responsible for point of entry of the bot detection. All bot must went into here
+           in order to be detected."""
         def check_jsk(m):
             possible_text = ("Jishaku", "discord.py", "Python ", "Module ", "guild(s)", "user(s).")
             return all(text in m.content for text in possible_text)
 
+        def search(*text_list):
+            def actual_search(search_text):
+                return any(f"{t}" in search_text.lower() for t in text_list)
+            return actual_search
+
         def check_help(m):
-            def search(search_text):
-                possible_text = ("command", "help", "category", "categories")
-                return any(f"{t}" in search_text.lower() for t in possible_text)
-            content = search(m.content)
-            embeds = any(search(str(e.to_dict())) for e in m.embeds)
+            target = search("command", "help", "category", "categories")
+            content = target(m.content)
+            embeds = any(target(str(e.to_dict())) for e in m.embeds)
             return content or embeds
 
-        for x in "jsk", "help":
-            if match := re.match("(?P<prefix>^.{{1,30}}?(?={}$))".format(x), message.content):
-                if x not in match["prefix"]:
-                    if x == "help":
-                        self.help_trigger.update({message.channel.id: message})
-                    return await self.update_prefix_bot(message, locals()[f"check_{x}"], match["prefix"])
+        def check_ping(m):
+            target = search("ping", "ms", "pong", "latency", "websocket", "bot", "database")
+            content = target(m.content)
+            embeds = any(target(str(e.to_dict())) for e in m.embeds)
+            return content or embeds
+
+        for func in filter(lambda x: getattr(x, "__name__", "").startswith("check"), locals().values()):
+            name = func.__name__.replace("check_", "")
+            if match := re.match("(?P<prefix>^.{{1,30}}?(?={}$))".format(name), message.content):
+                if name not in match["prefix"]:
+                    return await self.update_prefix_bot(message, func, match["prefix"])
 
     async def search_respond(self, callback, message, word, type):
         content_compiled = ctypes.create_string_buffer(word.encode("utf-8"))
@@ -282,16 +291,16 @@ class FindBot(commands.Cog, name="Bots"):
         def check(msg):
             return msg.channel == message.channel
 
-        bot_found = []
+        bot_found = set()
         while message.created_at + datetime.timedelta(seconds=5) > datetime.datetime.utcnow():
             with contextlib.suppress(asyncio.TimeoutError):
                 if m := await self.bot.wait_for("message", check=check, timeout=1):
                     if not m.author.bot:
                         break
-                    bot_found.append(m.author.id)
+                    bot_found.add(m.author.id)
         if not bot_found:
             return
-        
+        bot_found = list(bot_found)
         table = (singular, type)[type == "commands"]
         query = f"SELECT * FROM bot_{table}_list WHERE bot_id=ANY($1::BIGINT[]) AND {singular}=ANY($2::VARCHAR[])"
         bots = await self.bot.pool_pg.fetch(query, bot_found, result)
@@ -320,10 +329,17 @@ class FindBot(commands.Cog, name="Bots"):
         responded, result = received
         commands_values = []
         prefix_values = []
+
+        exist_query = "SELECT * FROM bot_prefix_list WHERE bot_id=$1"
         for command, bot in itertools.product(result, responded):
             if bot["command"] == command:
                 if (match := re.match("(?P<prefix>^.{{1,100}}?(?={}))".format(command), word)) and len(match["prefix"]) < 31:
-                    prefix_values.append((bot["bot_id"], match["prefix"], 1))
+                    bot_id = bot['bot_id']
+                    existing = await self.bot.pool_pg.fetch(exist_query, bot_id)
+                    prefix = match["prefix"]
+                    if any(x['prefix'] != prefix and prefix.startswith(x["prefix"]) for x in existing):
+                        continue
+                    prefix_values.append((bot_id, prefix, 1))
 
         for x, prefix, _ in prefix_values:
             prefixes = self.all_bot_prefixes.setdefault(x, {})
@@ -681,25 +697,6 @@ class FindBot(commands.Cog, name="Bots"):
         menu = MenuBase(source=bot_added_list(member_data))
         await menu.start(ctx)
 
-    @commands.command(aliases=["rht", "recenthelptrip", "recenttrigger"],
-                      brief="Shows the last message that triggers a help command in a channel.",
-                      help="Shows the last message that triggers a help command in a channel that it was called from. "
-                           "Useful for finding out who's the annoying person that uses common prefix help command.")
-    async def recenthelptrigger(self, ctx):
-        if message := self.help_trigger.get(ctx.channel.id):
-            embed_dict = {
-                "title": "Recent Help Trigger",
-                "description": f"**Author:** `{message.author}`\n"
-                               f"**Message ID:** `{message.id}`\n"
-                               f"**Command:** `{message.content}`\n"
-                               f"**Message Link:** [`jump`]({message.jump_url})",
-            }
-        else:
-            embed_dict = {
-                "title": "Recent Help Trigger",
-                "description": "There is no help command triggered recently."
-            }
-        await ctx.embed(**embed_dict)
 
     @commands.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
                       help="Shows all bot's command usage in the server on a sorted list.",
