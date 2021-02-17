@@ -22,7 +22,7 @@ class SFlagCommand(FlagCommand):
         namespace = self.callback._def_parser.parse_args(arguments, ctx=ctx)
         flags = vars(namespace)
 
-        async def do_convertion(value):
+        async def do_conversion(value):
             # Would only call if a value is from _get_value else it is already a value.
             if type(value) is _parser.ParserResult:
                 try:
@@ -44,10 +44,10 @@ class SFlagCommand(FlagCommand):
         for flag, value in flags.items():
             # iterate if value is a list, this happens when nargs = '+'
             if type(value) is list:
-                values = [await do_convertion(v) for v in value]
+                values = [await do_conversion(v) for v in value]
                 value = " ".join(values) if all(isinstance(v, str) for v in values) else values
             else:
-                value = await do_convertion(value)
+                value = await do_conversion(value)
             flags.update({flag: value})
 
         for x in flags.copy():

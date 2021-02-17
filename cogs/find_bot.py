@@ -753,7 +753,7 @@ class FindBot(commands.Cog, name="Bots"):
     @is_discordpy()
     @flg.add_flag("--jump_url", type=AuthorJump_url, help="The jump url that will be displayed under 'Message Request'.")
     @flg.add_flag("--requested_at", type=DatetimeConverter, help="The date that is displayed under 'Requested'.")
-    @flg.add_flag("--reason", help="The text that are displayed under 'Reason'.")
+    @flg.add_flag("--reason", nargs="+", help="The text that are displayed under 'Reason'.")
     @flg.add_flag("--message", type=AuthorMessage, 
                   help="This flag will override 'reason', 'requested' and 'jump url' according to the target message.")
     async def changebot(self, ctx, bot: BotOwner, **flags):

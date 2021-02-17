@@ -141,12 +141,10 @@ def default_date(datetime_var):
     return datetime_var.strftime('%d %b %Y %I:%M %p %Z')
 
 
-lib = ctypes.CDLL("./c_codes/binary_prefix.so")
+lib = ctypes.CDLL("./c_codes/parse_find.so")
 multi_find_prefix = lib.multi_find_prefix
-find_prefix = lib.find_prefix
 freeing = lib.free_result
 multi_find_prefix.restype = ctypes.c_void_p
-find_prefix.restype = ctypes.c_char_p
 find_commands = lib.find_commands
 find_commands.restype = ctypes.c_void_p
 
@@ -170,26 +168,22 @@ def decode_result(return_result):
     freeing(ctypes.byref(result))
     return to_return
 
+def actually_calls(param, callback):
+    """Handles C functions and return value."""
+    array_stuff, content_buffer = param
+    if array_stuff:
+        array_string, size = array_stuff
+        callback.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
+        return_result = callback(array_string, content_buffer, size)
+        return decode_result(return_result)
 
-def search_prefixes(array_result, content_buffer, multi=True):
-    """Calls a function called multi_find_prefix or find_prefix from C."""
-    array_string, size = array_result
-    func = (find_prefix, multi_find_prefix)[multi]
-    func.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
-    return_result = func(array_string, content_buffer, size)
-    if multi:
-        to_return = decode_result(return_result)
-    else:
-        strresult = ctypes.c_char_p(return_result).value
-        to_return = strresult.decode("utf-8")
-    return to_return
+def search_prefixes(*args):
+    """Pass multi_find_prefix function from C."""
+    return actually_calls(args, multi_find_prefix)
 
-def search_commands(array_result, content_buffer):
-    """Calls a function called find_commands from C."""
-    array_string, size = array_result
-    find_commands.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
-    return_result = find_commands(array_string, content_buffer, size)
-    return decode_result(return_result)
+def search_commands(*args):
+    """Pass find_commands function from C."""
+    return actually_calls(args, find_commands)
 
 def print_exception(text, error):
     """Prints the exception with proper traceback."""

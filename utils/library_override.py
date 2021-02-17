@@ -5,10 +5,16 @@ if you copy this but make your repository private, ur weird
 
 import contextlib
 import io
+import os
+import jishaku.shell
 import jishaku.paginators
 import jishaku.exception_handling
 import jishaku.repl.compilation
 import discord
+import pathlib
+import sys
+import asyncio
+import subprocess
 import re
 import inspect
 from jishaku.functools import AsyncSender
@@ -75,3 +81,34 @@ async def traverse(self, func):
             if content := std.getvalue():
                 yield content
 jishaku.repl.compilation.AsyncCodeExecutor.traverse = traverse
+
+WINDOWS = sys.platform == "win32"
+SHELL = os.getenv("SHELL") or "/bin/bash"
+def shell_init(self, code: str, timeout: int = 90, loop: asyncio.AbstractEventLoop = None):
+        if WINDOWS:
+            if pathlib.Path(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe").exists():
+                sequence = [r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", code]
+                self.ps1 = "PS >"
+                self.highlight = "powershell"
+            else:
+                sequence = ['cmd', '/c', code]
+                self.ps1 = "cmd >"
+                self.highlight = "cmd"
+        else:
+            sequence = [SHELL, '-c', code]
+            self.ps1 = "$"
+            self.highlight = "sh"
+
+        self.process = subprocess.Popen(sequence, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.close_code = None
+
+        self.loop = loop or asyncio.get_event_loop()
+        self.timeout = timeout
+
+        self.stdout_task = self.make_reader_task(self.process.stdout, self.stdout_handler)
+        self.stderr_task = self.make_reader_task(self.process.stderr, self.stderr_handler)
+
+        self.queue = asyncio.Queue(maxsize=250)
+
+# This override is to fix ShellReader.__init__ unable to find powershell path.
+jishaku.shell.ShellReader.__init__ = shell_init

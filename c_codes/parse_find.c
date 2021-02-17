@@ -10,8 +10,6 @@ typedef struct ResultStruct{
 char** append(char**, size_t*, const char*);
 int search(char**, char[], int);
 char* reverse(char*);
-void sorting(char**, int*, size_t);
-char* formatting(char* strvalue);
 Result* compile_result(char** array, int size);
 
 Result* find_commands(char** commands, char* string, int n){
@@ -29,6 +27,7 @@ Result* find_commands(char** commands, char* string, int n){
             if (index != -1){
                 char* command = reverse(commands[index]);
                 found_cmd = append(found_cmd, &found, command);
+                free(command);
             }
         }
         free(target);
@@ -52,33 +51,17 @@ Result* multi_find_prefix(char** prefixes, char content[], int n){
     char** found_prefixes = malloc(sizeof(char*)*found);
     while(start > 0){
         int result = search(prefixes, content, n);
-        if (result != -1){
+        if (result != -1)
             found_prefixes = append(found_prefixes, &found, content);
-        }
         content[start-=1] = '\0';
     }
     return compile_result(found_prefixes, found);
 }
 
-char* find_prefix(char** prefixes, char content[], int n){
-    // Finds a single prefix from 2D char array of prefixes
-    int start = strlen(content);
-    while(start > 0){
-        int result = search(prefixes, content, n);
-        if (result == -1){
-            start--;
-            content[start] = '\0';
-        }else{
-            return formatting(prefixes[result]);
-        }
-    }
-    return formatting("");
-}
-
 char** append(char** arr, size_t* size, const char* target){
     // Append new char array into a 2D char array
     arr[*size - 1] = strdup(target);
-    return realloc(arr, (*size+=1) * sizeof(char *));
+    return realloc(arr, (*size+=1) * sizeof(char*));
 }
 
 int search(char** arr, char target[], int n){
@@ -98,16 +81,12 @@ int search(char** arr, char target[], int n){
     return -1;
 }
 
-char* formatting(char* strvalue){
-    // Allocate memory for strvalue that was being passed to be return to Python
-    char* content = malloc(sizeof(char) * (strlen(strvalue) + 1));
-    strcpy(content, strvalue);
-    return content;
-}
-
 void free_result(Result* pointer_result){
     // Free the allocated memory of Result pointer
-    free((*pointer_result).found_array);
+    char** array = (*pointer_result).found_array;
+    int size = (*pointer_result).size;
+    for(int i = size - 1; i >= 0; i--)
+        free((*pointer_result).found_array[i]);
     free(pointer_result);
 }
 
@@ -119,21 +98,4 @@ char* reverse(char* word){
         reverse_word[i] = word[(n - 1) - i];
     }
     return reverse_word;
-}
-
-void sorting(char** current, int* pos, size_t n){
-    // Uses Insertion sort for 2D char array
-    for (size_t i = 1; i < n; i++){
-        char* key = strdup(current[i]);
-        int new_post = pos[i];
-        int j = i - 1;
-        while (j >= 0 && (strcmp(current[j], key) > 0)){
-            current[j + 1] = strdup(current[j]);  
-            pos[j + 1] = pos[j];
-            j--;
-        }
-        current[j + 1] = strdup(key);
-        pos[j + 1] = new_post;
-    }  
-    return;
 }

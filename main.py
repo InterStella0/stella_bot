@@ -3,7 +3,6 @@ import re
 import discord
 import asyncpg
 import datetime
-import utils.library_override
 from utils.useful import StellaContext, ListCall
 from utils.decorators import event_check, wait_ready
 from discord.ext import commands
@@ -13,6 +12,8 @@ from utils.useful import call, print_exception
 from os import environ
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
+
+import utils.library_override
 to_call = ListCall()
 
 
@@ -133,7 +134,6 @@ class StellaBot(commands.Bot):
             self.loop.run_until_complete(self.after_db())
             self.run(self.token)
 
-
 intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions')}
 intents = discord.Intents(**intent_data)
 bot_data = {"token": environ.get("TOKEN"),
@@ -144,7 +144,8 @@ bot_data = {"token": environ.get("TOKEN"),
             "tester": bool(environ.get("TEST")),
             "help_src": environ.get("HELP_SRC"),
             "intents": intents,
-            "owner_id": 591135329117798400}
+            "owner_id": 591135329117798400
+        }
 
 bot = StellaBot(**bot_data)
 
@@ -155,8 +156,17 @@ async def on_ready():
 
 
 @bot.event
+async def on_disconnect():
+    print("bot disconnected")
+
+@bot.event
+async def on_connect():
+    print("bot connected")
+
+
+@bot.event
 @wait_ready(bot=bot)
-@event_check(lambda x: not bot.tester or x.author == bot.stella)
+@event_check(lambda m: not bot.tester or m.author == bot.stella)
 async def on_message(message):
     if re.fullmatch("<@(!)?661466532605460530>", message.content):
         await message.channel.send(f"My prefix is `{await bot.get_prefix(message)}`")

@@ -27,7 +27,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
     @flg.add_flag("--joined_at", type=DatetimeConverter)
     @flg.add_flag("--jump_url", type=JumpValidator)
     @flg.add_flag("--requested_at", type=DatetimeConverter)
-    @flg.add_flag("--reason")
+    @flg.add_flag("--reason", nargs="+")
     @flg.add_flag("--message", type=discord.Message)
     @flg.add_flag("--author", type=discord.Member)
     async def addbot(self, ctx, bot: IsBot, **flags):
