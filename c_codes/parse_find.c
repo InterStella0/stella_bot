@@ -20,15 +20,18 @@ Result* find_commands(char** commands, char* string, int n){
     char* word = strtok(string, " ");
     while(word != NULL) {
         char* target = reverse(word);
-        int view = strlen(word);
+        int view = strlen(word) - 1;
         while (view > 0){
-            target[view--] = '\0';
+            char temporary = target[view];
+            target[view] = '\0';
             int index = search(commands, target, n);
             if (index != -1){
                 char* command = reverse(commands[index]);
                 found_cmd = append(found_cmd, &found, command);
                 free(command);
             }
+            target[view] = temporary;
+            view--;
         }
         free(target);
         word = strtok(NULL, " ");
@@ -48,7 +51,7 @@ Result* multi_find_prefix(char** prefixes, char content[], int n){
     // Creates a 2D char array of prefixes it found from content
     int start = strlen(content);
     size_t found = 1;
-    char** found_prefixes = malloc(sizeof(char*)*found);
+    char** found_prefixes = calloc(sizeof(char*), found);
     while(start > 0){
         int result = search(prefixes, content, n);
         if (result != -1)
@@ -85,8 +88,11 @@ void free_result(Result* pointer_result){
     // Free the allocated memory of Result pointer
     char** array = (*pointer_result).found_array;
     int size = (*pointer_result).size;
+    // Due to strdup stored in the array, it is required to free from the heap for each element
     for(int i = size - 1; i >= 0; i--)
         free((*pointer_result).found_array[i]);
+    // Now we can release the array
+    free((*pointer_result).found_array);
     free(pointer_result);
 }
 

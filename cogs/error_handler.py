@@ -47,7 +47,8 @@ class ErrorHandler(commands.Cog):
                 return await ctx.reinvoke()
             await send_del(embed=BaseEmbed.to_error(
                 title="Cooldown Error",
-                description=f"You're on cooldown. Retry after `{error.retry_after:.2f}` seconds"))
+                description=f"You're on cooldown. Retry after `{error.retry_after:.2f}` seconds")
+            )
         elif isinstance(error, default_error):
             await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
         else:

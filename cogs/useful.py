@@ -51,12 +51,14 @@ class Useful(commands.Cog):
             return await ctx.maybe_reply("Invalid user")
         timestamp = call(self.parse_date, token_part[1]) or "Invalid date"
 
-        embed = discord.Embed(title=f"{member.display_name}'s token",
-                              description=f"**User:** `{member}`\n"
-                                          f"**ID:** `{member.id}`\n"
-                                          f"**Bot:** `{member.bot}`\n"
-                                          f"**Created:** `{member.created_at}`\n"
-                                          f"**Token Created:** `{timestamp}`")
+        embed = discord.Embed(
+            title=f"{member.display_name}'s token",
+            description=f"**User:** `{member}`\n"
+                        f"**ID:** `{member.id}`\n"
+                        f"**Bot:** `{member.bot}`\n"
+                        f"**Created:** `{member.created_at}`\n"
+                        f"**Token Created:** `{timestamp}`"
+        )
         embed.set_thumbnail(url=member.avatar_url)
         await ctx.embed(embed=embed)
 
@@ -92,10 +94,12 @@ class Useful(commands.Cog):
         fields = (("Token created:", f"`{time_rn}`"),
                   ("Generated Token:", f"`{complete}`"))
 
-        embed = discord.Embed(title=f"{member.display_name}'s token",
-                              description=f"**User:** `{member}`\n"
-                                          f"**ID:** `{member.id}`\n"
-                                          f"**Bot:** `{member.bot}`")
+        embed = discord.Embed(
+            title=f"{member.display_name}'s token",
+            description=f"**User:** `{member}`\n"
+                        f"**ID:** `{member.id}`\n"
+                        f"**Bot:** `{member.bot}`"
+        )
         embed.set_thumbnail(url=member.avatar_url)
         await ctx.embed(embed=embed, fields=fields)
 

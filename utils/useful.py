@@ -235,6 +235,10 @@ class StellaContext(commands.Context):
             raise commands.BotMissingPermissions(["embed_links"])
         return await to_send(content, mention_author=mention_author, embed=ori_embed)
 
+    def confirmed(self, message_id=None):
+        message = self.message if not message_id else self.get_partial_message(message_id)
+        return message.add_reaction("<:checkmark:753619798021373974>")
+
 
 async def maybe_method(func, cls=None, *args, **kwargs):
     """Pass the class if func is not a method."""

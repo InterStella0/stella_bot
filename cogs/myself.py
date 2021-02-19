@@ -6,6 +6,7 @@ import asyncio
 import traceback
 import io
 import textwrap
+import more_itertools
 from typing import Union
 from discord.ext import commands
 from discord.ext.commands import Greedy
@@ -69,6 +70,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         message.author = member
         message.content = ctx.prefix + content
         self.bot.dispatch("message", message)
+        await ctx.confirmed()
 
     @commands.command(cls=flg.SFlagCommand)
     @flg.add_flag("--uses", type=int, default=1)
@@ -95,7 +97,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         while c := await self.bot.wait_for("command_completion", check=check):
             uses -= 1
             if uses <= 0:
-                await ctx.message.add_reaction("<:checkmark:753619798021373974>")
+                await ctx.confirmed()
                 return self.bot.remove_command(c.command.qualified_name)
 
     @commands.command(name="eval", help="Eval for input/print feature", aliases=["e", "ev", "eva"])
@@ -229,7 +231,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
             await ctx.reply(f"{stdout.getvalue()}```py\n{error_trace}```", delete_after=60)
         else:
             ctx.running = False
-            await giving_emote("<:checkmark:753619798021373974>")
+            await ctx.confirmed()
 
     @commands.Cog.listener()
     @event_check(lambda s, b, a: (b.content and a.content) or b.author.bot)
@@ -237,10 +239,44 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         if await self.bot.is_owner(before.author) and not before.embeds and not after.embeds:
             await self.bot.process_commands(after)
 
+    @commands.command(cls=flg.SFlagCommand)
+    @flg.add_flag("--must", type=bool, action="store_true", default=False)
+    @commands.bot_has_permissions(read_message_history=True)
+    async def clear(self, ctx, amount=50, **flag):
+        def check(m):
+            return m.author == ctx.me
+
+        def less_two_weeks(message):
+            return message.created_at > datetime.datetime.utcnow() - datetime.timedelta(days=14)
+
+        must = flag["must"]
+        purge_enable = ctx.me.permissions_in(ctx.channel).manage_messages
+        if not must and purge_enable:
+            await ctx.channel.purge(limit=amount, check=check)
+        else:
+            counter = 0
+            to_delete = []
+            async for m in ctx.history(limit=(None, amount)[not must]):
+                if check(m):
+                    counter += 1
+                    if purge_enable and less_two_weeks(m):
+                        to_delete.append(m)
+                    else:
+                        await m.delete()
+
+                if counter == amount:
+                    break
+            if purge_enable and to_delete:
+                for bulk in more_itertools.chunked(to_delete, 100):
+                    await ctx.channel.delete_messages(bulk)
+        
+        await ctx.confirmed()
+
+
     @commands.command()
     async def dispatch(self, ctx, message: discord.Message):
         self.bot.dispatch('message', message)
-        await ctx.message.add_reaction("<:checkmark:753619798021373974>")
+        await ctx.confirmed()
 
     async def cogs_handler(self, ctx, extensions):
         method = ctx.command.name

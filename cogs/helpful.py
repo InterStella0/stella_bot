@@ -195,7 +195,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         pages = HelpMenu(source=help_source_format(command_data))
         with contextlib.suppress(discord.NotFound, discord.Forbidden):
             await pages.start(self.context, wait=True)
-            await self.context.message.add_reaction("<:checkmark:753619798021373974>")
+            await self.context.confirmed()
 
     def get_command_help(self, command):
         """Returns an Embed version of the command object given."""
@@ -233,7 +233,9 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         """Gets invoke when `uwu help <cog>` is invoked."""
         cog_commands = [self.get_command_help(c) for c in await self.filter_commands(cog.walk_commands(), sort=True)]
         pages = CogMenu(source=empty_page_format(cog_commands))
-        await pages.start(self.context)
+        with contextlib.suppress(discord.NotFound, discord.Forbidden):
+            await pages.start(self.context, wait=True)
+            await self.context.confirmed()
 
 
 class Helpful(commands.Cog):
@@ -246,8 +248,10 @@ class Helpful(commands.Cog):
     @commands.command(aliases=["ping", "p"],
                       help="Shows the bot latency from the discord websocket.")
     async def pping(self, ctx):
-        await ctx.embed(title="PP",
-                        description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`")
+        await ctx.embed(
+            title="PP",
+            description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`"
+        )
 
     @commands.command(aliases=["up"],
                       help="Shows the bot uptime from when it was started.")
