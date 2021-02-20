@@ -380,7 +380,6 @@ class FindBot(commands.Cog, name="Bots"):
         commands_values = []
         exist_query = "SELECT * FROM prefixes_list WHERE guild_id=$1 AND bot_id=$2"
         for command, bot in itertools.product(result, responded):
-            print(command, bot, "here")
             if bot["command"] == command:
                 bot_id = bot['bot_id']
                 message_respond = message_sent[bot_id].created_at
@@ -392,7 +391,6 @@ class FindBot(commands.Cog, name="Bots"):
                     prefixes_values.append((message.guild.id, bot_id, prefix, 1, message_respond))
                 
                 if message.content.casefold().startswith(command):
-                    print(message.author, "Prefixless", command)
                     commands_values.append((message.guild.id, bot_id, command, message_respond))
 
         for _, bot, prefix, _, _ in prefixes_values:
