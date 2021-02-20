@@ -630,7 +630,9 @@ class FindBot(commands.Cog, name="Bots"):
     @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
                   help="Reverses the list. This flag accepts True or False, default to False if not stated.")
     async def allprefix(self, ctx, **flags):
-        bots = await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE guild_id=$1", ctx.guild.id)
+        if not (bots := await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE guild_id=$1", ctx.guild.id)):
+            return await ctx.embed(description="Looks like I don't have any data in this server on bot prefixes.")
+
         attr = "count" if (count_mode := flags.pop("count", False)) else "prefix"
         reverse = flags.pop("reverse", False)
 
