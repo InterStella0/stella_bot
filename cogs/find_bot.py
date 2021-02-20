@@ -19,6 +19,8 @@ from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
 
 
+DISCORD_PY = 336642139381301249
+
 @dataclass
 class BotAdded:
     """BotAdded information for discord.py that is used in whoadd and whatadd command."""
@@ -156,7 +158,7 @@ def prefix_cache_ready():
 
 def dpy_bot():
     """Event check for dpy_bots"""
-    return event_check(lambda _, member: member.bot and member.guild.id == 336642139381301249)
+    return event_check(lambda _, member: member.bot and member.guild.id == DISCORD_PY)
 
 
 class FindBot(commands.Cog, name="Bots"):
@@ -767,12 +769,20 @@ class FindBot(commands.Cog, name="Bots"):
 
     @commands.command(aliases=["botcommand", "bc", "bcs"],
                       help="Predicting the bot's command based on the message history.")
+    @commands.guild_only()
     async def botcommands(self, ctx, bot: BotCommands):
+        owner_info = None
+        if ctx.guild.id == DISCORD_PY:
+            owner_info = await try_call(BotAdded.convert, ctx, str(int(bot)))
+
         @pages(per_page=6)
         def each_page(self, menu, entries):
             number = menu.current_page * self.per_page + 1
-            list_commands = "\n".join(f"{x}. {c}" for x, c in enumerate(entries, start=number))
-            embed = BaseEmbed.default(ctx, title=f"{bot} Commands", description=list_commands)
+            list_commands = "\n".join(f"{x}. {c}[`{bot.get_command(c)}`]" for x, c in enumerate(entries, start=number))
+            embed = BaseEmbed.default(ctx, title=f"{bot} Commands[`{bot.total_usage}`]", description=list_commands)
+            if owner_info and owner_info.author:
+                embed.set_author(icon_url=owner_info.author.avatar_url, name=f"Owner {owner_info.author}")
+
             return embed.set_thumbnail(url=bot.bot.avatar_url)
         menu = MenuBase(each_page(bot.commands))
         await menu.start(ctx)

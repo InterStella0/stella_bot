@@ -125,6 +125,9 @@ class MenuBase(menus.MenuPages):
         if maximum > 1:
             page = f"Page {self.current_page + 1}/{maximum}"
             if isinstance(content, discord.Embed):
+                if embed_dict := getattr(content, "_author", None):
+                    embed_dict["name"] += f"[{page.replace('Page ', '')}]"
+                    return content
                 return content.set_author(name=page)
             elif isinstance(content, str):
                 return f"{page}\n{content}"
