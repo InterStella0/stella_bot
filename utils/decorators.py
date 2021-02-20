@@ -58,3 +58,11 @@ def pages(per_page=1, show_page=True):
         }
         return type(coro.__name__, (menus.ListPageSource,), kwargs)
     return page_source
+
+
+def listen_for_guilds():
+    def predicate(*args):
+        """Only allow message event to be called in guilds"""
+        message = args[len(args) != 1]
+        return message.guild is not None
+    return event_check(predicate)
