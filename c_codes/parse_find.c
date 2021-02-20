@@ -20,7 +20,7 @@ Result* find_commands(char** commands, char* string, int n){
     char* word = strtok(string, " ");
     while(word != NULL) {
         char* target = reverse(word);
-        int view = strlen(word) - 1;
+        int view = strlen(word);
         while (view > 0){
             char temporary = target[view];
             target[view] = '\0';

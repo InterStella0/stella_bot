@@ -106,9 +106,11 @@ class StellaBot(commands.Bot):
         return self._connection._get_message(message_id)
 
     async def get_context(self, message, *, cls=None):
+        """Override get_context to use a custom Context"""
         return await super().get_context(message, cls=StellaContext)
 
     async def process_commands(self, message):
+        """Override process_commands to call typing every invoke"""
         if message.author.bot:
             return
 
@@ -158,6 +160,7 @@ async def on_ready():
 @bot.event
 async def on_disconnect():
     print("bot disconnected")
+
 
 @bot.event
 async def on_connect():
