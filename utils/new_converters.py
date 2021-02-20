@@ -3,7 +3,7 @@ import os
 import re
 import contextlib
 import datetime
-from collections import namedtuple
+from collections import namedtuple, Counter
 from fuzzywuzzy import fuzz
 from discord.ext import commands
 from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound, MustMember
@@ -62,9 +62,6 @@ class IsBot(commands.Converter):
 class BotData:
     """BotData Base for Bot data that was fetch from the database. It checks if it's a member and gets it's data."""
     __slots__ = ("bot",)
-    name = None
-    use = None
-    method = None
 
     def __init__(self, member):
         self.bot = member
@@ -75,8 +72,9 @@ class BotData:
     @classmethod
     async def convert(cls, ctx, argument):
         member = await IsBot().convert(ctx, argument, cls=cls)
-        method = getattr(ctx.bot.pool_pg, cls.method)
-        if data := await method(f"SELECT * FROM {cls.name} WHERE bot_id=$1", member.id):
+        table = cls.__name__.replace("Bot", "").lower()
+        query = f"SELECT * FROM {table}_list WHERE guild_id=$1 AND bot_id=$2"
+        if data := await ctx.bot.pool_pg.fetch(query, ctx.guild.id, member.id):
             return member, data
         raise NotInDatabase(member, converter=cls)
 
@@ -84,11 +82,8 @@ class BotData:
         return self.bot.id
 
 
-class BotPrefix(BotData):
+class BotPrefixes(BotData):
     """Bot data for prefix"""
-    name = "bot_prefix_list"
-    use = "prefixes"
-    method = "fetch"
     __slots__ = ("prefixes",)
 
     def __init__(self, member, prefixes):
@@ -117,39 +112,33 @@ class BotPrefix(BotData):
         return ", ".join(map("`{0}`".format, [self.prefix, *self.aliases]))
 
 
-class BotUsage(BotData):
+class BotCommands(BotData):
     """Bot data for command counts"""
-    __slots__ = ("count",)
-    name = "bot_usage_count"
-    use = "count"
-    method = "fetchrow"
+    __slots__ = ("_commands", "total_usage", "command_usages")
 
-    def __init__(self, member, count):
-        super().__init__(member)
-        self.count = count
-
-    @classmethod
-    async def convert(cls, ctx, argument):
-        member, data = await super().convert(ctx, argument)
-        return cls(member, data[cls.use])
-
-
-class BotCommand(BotData):
-    """Bot data for command counts"""
-    __slots__ = ("_commands",)
-    name = "bot_commands_list"
-    use = "commands"
-    method = "fetch"
-
-    def __init__(self, member, commands):
+    def __init__(self, member, commands, command_usages, total_usage):
         super().__init__(member)
         self._commands = commands
+        self.command_usages = command_usages
+        self.total_usage = total_usage
 
     @classmethod
     async def convert(cls, ctx, argument):
         member, data = await super().convert(ctx, argument)
-        commands = {payload['command']: payload['usage'] for payload in data}
-        return cls(member, commands)
+        command_usages = {}
+        for payload in data:
+            command = command_usages.setdefault(payload["command"], [])
+            command.append(payload["time_used"])
+
+        for command in command_usages.values():
+            command.sort(reverse=True)
+
+        commands = Counter(payload["command"] for payload in data)
+        total_usage = sum(v for v in commands.values())
+        return cls(member, commands, command_usages, total_usage)
+
+    def get_command(self, command):
+        return self._commands.get(command)
 
     @property
     def commands(self):

@@ -13,10 +13,10 @@ from discord.ext import commands
 from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
 from utils import flags as flg
-from utils.new_converters import BotPrefix, BotUsage, IsBot, BotCommand, JumpValidator, DatetimeConverter
+from utils.new_converters import BotPrefixes, IsBot, BotCommands, JumpValidator, DatetimeConverter
 from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, MenuBase, default_date, plural, realign, search_commands
 from utils.errors import NotInDatabase, BotNotFound
-from utils.decorators import is_discordpy, event_check, wait_ready, pages
+from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
 
 
 @dataclass
@@ -113,7 +113,7 @@ async def all_bot_count(self, menu: MenuBase, entries):
     """Menu for botrank command."""
     key = "(\u200b|\u200b)"
     offset = menu.current_page * self.per_page
-    content = "`{no}. {b} {key} {b.count}`"
+    content = "`{no}. {b} {key} {b.total_usage}`"
     contents = [content.format(no=i+1, b=b, key=key) for i, b in enumerate(entries, start=offset)]
     return BaseEmbed(title="Bot Command Rank",
                      description="\n".join(realign(contents, key)))
@@ -150,8 +150,8 @@ def is_user():
 def prefix_cache_ready():
     """Event check for command_count"""
     def predicate(self, message):
-        return self.compiled_prefixes and self.compiled_commands and not message.author.bot and message.guild
-    return commands.check(predicate)
+        return self.compiled_prefixes and self.compiled_commands and not message.author.bot
+    return event_check(predicate)
 
 
 def dpy_bot():
@@ -177,15 +177,15 @@ class FindBot(commands.Cog, name="Bots"):
     async def loading_all_prefixes(self):
         """Loads all unique prefix when it loads and set compiled_pref for C code."""
         await self.bot.wait_until_ready()
-        prefix_data = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix_list")
-        commands_data = await self.bot.pool_pg.fetch("SELECT * FROM bot_commands_list")
+        prefix_data = await self.bot.pool_pg.fetch("SELECT DISTINCT bot_id, prefix FROM prefixes_list")
+        commands_data = await self.bot.pool_pg.fetch("SELECT DISTINCT bot_id, command FROM commands_list")
         for prefix, command in itertools.zip_longest(prefix_data, commands_data):
             if prefix:
-                prefixes = self.all_bot_prefixes.setdefault(prefix["bot_id"], {})
-                prefixes.update({prefix["prefix"]: prefix["usage"]})
+                prefixes = self.all_bot_prefixes.setdefault(prefix["bot_id"], set())
+                prefixes.add(prefix["prefix"])
             if command:
-                commands = self.all_bot_commands.setdefault(command["bot_id"], {})
-                commands.update({command["command"]: command["usage"]})
+                commands = self.all_bot_commands.setdefault(command["bot_id"], set())
+                commands.add(command["command"])
         self.update_compile()
 
     def update_compile(self):
@@ -206,52 +206,74 @@ class FindBot(commands.Cog, name="Bots"):
         else:
             await self.update_confirm(BotAdded.from_json(member, joined_at=member.joined_at))
 
+    async def listen_for_bots_at(self, message, check):
+        """Listens for bots responding and terminating when a user respond"""
+        bots = {}
+        time_to_listen = message.created_at + datetime.timedelta(seconds=5)
+        with contextlib.suppress(asyncio.TimeoutError):
+            while time_to_listen > datetime.datetime.utcnow():
+                time_left = (time_to_listen - datetime.datetime.utcnow()).total_seconds()
+                if m := await self.bot.wait_for("message", check=check, timeout=time_left):
+                    if not m.author.bot:
+                        break
+                    bots.update({m.author.id: m})
+        
+        return bots
+
     @commands.Cog.listener("on_member_remove")
     @wait_ready()
     @dpy_bot()
     async def remove_bot_tracker(self, member):
+        """Since there is no reason to store these bots after they left, best to delete them"""
         if member.id in self.bot.confirmed_bots:
             await self.bot.pool_pg.execute("DELETE FROM confirmed_bots WHERE bot_id=$1", member.id)
             self.bot.confirmed_bots.remove(member.id)
 
-    async def update_prefix_bot(self, message, func, prefix):
+    async def update_prefix_bot(self, message, func, prefix, command):
         """Updates the prefix of a bot, or multiple bot where it waits for the bot to respond. It updates in the database."""
         def setting(inner):
             def check(msg):
                 return msg.channel == message.channel and not msg.author.bot or inner(msg)
             return check
 
-        bots = set()
-        while message.created_at + datetime.timedelta(seconds=5) > datetime.datetime.utcnow():
-            with contextlib.suppress(asyncio.TimeoutError):
-                if m := await self.bot.wait_for("message", check=setting(func), timeout=1):
-                    if not m.author.bot:
-                        break
-                    bots.add(m.author.id)
-        if not bots:
+        if not (message_sent := await self.listen_for_bots_at(message, setting(func))):
             return
-        bots = list(bots)
+
+        bots_responded = list(message_sent)
         # Possibility of duplication removal
-        exist_query = "SELECT * FROM bot_prefix_list WHERE bot_id=ANY($1::BIGINT[])"
-        existing = await self.bot.pool_pg.fetch(exist_query, bots)
+        exist_query = "SELECT * FROM prefixes_list WHERE guild_id=$1 AND bot_id=ANY($2::BIGINT[])"
+        existing = await self.bot.pool_pg.fetch(exist_query, message.guild.id, bots_responded)
         for x in existing:
-            if prefix.startswith(x["prefix"]) and x["bot_id"] in bots:
-                bots.remove(x["bot_id"])
-        if not bots:
+            if prefix.startswith(x["prefix"]) and x["bot_id"] in bots_responded:
+                message_sent.pop(x["bot_id"])
+
+        if not message_sent:
             return
-        query = "INSERT INTO bot_prefix_list VALUES($1, $2, $3) " \
-                "ON CONFLICT (bot_id, prefix) DO " \
-                "UPDATE SET usage=bot_prefix_list.usage+1"
-        values = [(x, prefix, 1) for x in bots]
+
+        query = "INSERT INTO prefixes_list VALUES($1, $2, $3, $4, $5) " \
+                "ON CONFLICT (guild_id, bot_id, prefix) DO " \
+                "UPDATE SET usage=prefixes_list.usage + 1, last_usage=$5"
+        values = [(message.guild.id, x, prefix, 1, m.created_at) for x, m in message_sent.items()]
 
         await self.bot.pool_pg.executemany(query, values)
-        for x, prefix, _ in values:
-            prefixes = self.all_bot_prefixes.setdefault(x, {})
-            prefixes[prefix] = prefixes.get(prefix, 0) + 1
+
+        for _, x, prefix, _, _ in values:
+            prefixes = self.all_bot_prefixes.setdefault(x, set())
+            prefixes.add(prefix)
+
+        query = "INSERT INTO commands_list VALUES($1, $2, $3, $4)"
+        values = [(message.guild.id, x, command, m.created_at) for x, m in message_sent.items()]
+
+        await self.bot.pool_pg.executemany(query, values)
+
+        for _, bot, command, _ in values:
+            commands = self.all_bot_commands.setdefault(bot, set())
+            commands.add(command)
         self.update_compile()
 
     @commands.Cog.listener("on_message")
     @wait_ready()
+    @listen_for_guilds()
     @is_user()
     async def find_bot_prefixes(self, message):
         """This function is responsible for point of entry of the bot detection. All bot must went into here
@@ -281,74 +303,66 @@ class FindBot(commands.Cog, name="Bots"):
             name = func.__name__.replace("check_", "")
             if match := re.match("(?P<prefix>^.{{1,30}}?(?={}$))".format(name), message.content):
                 if name not in match["prefix"]:
-                    return await self.update_prefix_bot(message, func, match["prefix"])
+                    return await self.update_prefix_bot(message, func, match["prefix"], name)
 
     async def search_respond(self, callback, message, word, type):
+        """Gets the prefix/command that are in this message, gets the bot that responded
+           and return them."""
         content_compiled = ctypes.create_string_buffer(word.encode("utf-8"))
         if not (result := callback(getattr(self, f"compiled_{type}"), content_compiled)):
             return
+
         singular = type[:len(type) - ((type != "commands") + 1)]
         def check(msg):
             return msg.channel == message.channel
 
-        bot_found = set()
-        while message.created_at + datetime.timedelta(seconds=5) > datetime.datetime.utcnow():
-            with contextlib.suppress(asyncio.TimeoutError):
-                if m := await self.bot.wait_for("message", check=check, timeout=1):
-                    if not m.author.bot:
-                        break
-                    bot_found.add(m.author.id)
-        if not bot_found:
+        if not (bot_found := await self.listen_for_bots_at(message, check)):
             return
-        bot_found = list(bot_found)
-        table = (singular, type)[type == "commands"]
-        query = f"SELECT * FROM bot_{table}_list WHERE bot_id=ANY($1::BIGINT[]) AND {singular}=ANY($2::VARCHAR[])"
-        bots = await self.bot.pool_pg.fetch(query, bot_found, result)
-        responded = filter(lambda x: x["bot_id"] in bot_found, bots)
-        return responded, result
 
-    async def update_bot_commands(self, prefix_values, commands_values):
-        commands_query = "INSERT INTO bot_commands_list VALUES($1, $2, $3) " \
-                         "ON CONFLICT (bot_id, command) DO " \
-                         "UPDATE SET usage=bot_commands_list.usage + 1"
-        prefix_query = "INSERT INTO bot_prefix_list VALUES($1, $2, $3) " \
-                       "ON CONFLICT (bot_id, prefix) DO " \
-                       "UPDATE SET usage=bot_prefix_list.usage + 1"
-        for x in ("commands", "prefix"):
-            await self.bot.pool_pg.executemany(locals()[f"{x}_query"], locals()[f"{x}_values"])
+        bot_found_keys = list(bot_found)
+        query = f"SELECT DISTINCT bot_id, {singular} FROM {type}_list " \
+                f"WHERE guild_id=$1 AND bot_id=ANY($2::BIGINT[]) AND {singular}=ANY($3::VARCHAR[])"
+        bots = await self.bot.pool_pg.fetch(query, message.guild.id, bot_found_keys, result)
+        responded = filter(lambda x: x["bot_id"] in bot_found, bots)
+        return responded, result, bot_found
 
     @commands.Cog.listener("on_message")
     @wait_ready()
+    @listen_for_guilds()
     @prefix_cache_ready()
     @is_user()
     async def find_bot_commands(self, message):
+        """Get a prefix based on known command used."""
         word, _, _ = message.content.partition("\n")
         limit = min(len(word), 101)
         if not (received := await self.search_respond(search_commands, message, word[:limit], "commands")):
             return
-        responded, result = received
-        commands_values = []
+        responded, result, message_sent = received
         prefix_values = []
-
-        exist_query = "SELECT * FROM bot_prefix_list WHERE bot_id=$1"
+        exist_query = "SELECT * FROM prefixes_list WHERE guild_id=$1 AND bot_id=$2"
         for command, bot in itertools.product(result, responded):
             if bot["command"] == command:
                 if (match := re.match("(?P<prefix>^.{{1,100}}?(?={}))".format(command), word)) and len(match["prefix"]) < 31:
                     bot_id = bot['bot_id']
-                    existing = await self.bot.pool_pg.fetch(exist_query, bot_id)
+                    existing = await self.bot.pool_pg.fetch(exist_query, message.guild.id, bot_id)
                     prefix = match["prefix"]
                     if any(x['prefix'] != prefix and prefix.startswith(x["prefix"]) for x in existing):
                         continue
-                    prefix_values.append((bot_id, prefix, 1))
+                    prefix_values.append((message.guild.id, bot_id, prefix, 1, message_sent[bot_id].created_at))
 
-        for x, prefix, _ in prefix_values:
-            prefixes = self.all_bot_prefixes.setdefault(x, {})
-            prefixes[prefix] = prefixes.get(prefix, 0) + 1
+        for _, bot, prefix, _, _ in prefix_values:
+            prefixes = self.all_bot_prefixes.setdefault(bot, set())
+            prefixes.add(prefix)
         self.update_compile()
-        await self.update_bot_commands(prefix_values, commands_values)
+        
+        prefix_query = "INSERT INTO prefixes_list VALUES($1, $2, $3, $4, $5) " \
+                       "ON CONFLICT (guild_id, bot_id, prefix) DO " \
+                       "UPDATE SET usage=prefixes_list.usage + 1, last_usage=$5"
+        await self.bot.pool_pg.executemany(prefix_query, prefix_values)
 
     @commands.Cog.listener("on_message")
     @wait_ready()
+    @listen_for_guilds()
     @prefix_cache_ready()
     async def command_count(self, message):
         """
@@ -359,22 +373,33 @@ class FindBot(commands.Cog, name="Bots"):
         if not (received := await self.search_respond(search_prefixes, message, message.content[:limit], "prefixes")):
             return
 
-        responded, result = received
+        responded, result, message_sent = received
         commands_values = []
-        prefix_values = []
+        prefixes_values = []
         for prefix, bot in itertools.product(result, responded):
             if bot["prefix"] == prefix:
+                bot_id = bot['bot_id']
+                message_respond = message_sent[bot_id].created_at
+                prefixes_values.append((message.guild.id, bot_id, prefix, 1, message_respond))
                 command = message.content[len(prefix):]
                 word, _, _ = command.partition("\n")
                 got_command, _, _ = word.partition(" ")
                 if got_command:
-                    commands_values.append((bot["bot_id"], got_command, 1))
+                    commands_values.append((message.guild.id, bot_id, got_command, message_respond))
                     
-        for x, command, _ in commands_values:
-            commands = self.all_bot_commands.setdefault(x, {})
-            commands[command] = commands.get(command, 0) + 1
+        for _, bot, command, _ in commands_values:
+            commands = self.all_bot_commands.setdefault(bot, set())
+            commands.add(command)
         self.update_compile()
-        await self.update_bot_commands(prefix_values, commands_values)
+        
+        commands_query = "INSERT INTO commands_list VALUES($1, $2, $3, $4)"
+        prefixes_query = "INSERT INTO prefixes_list VALUES($1, $2, $3, $4, $5) " \
+                         "ON CONFLICT (guild_id, bot_id, prefix) DO " \
+                         "UPDATE SET usage=prefixes_list.usage + 1, last_usage=$5"
+        
+        for type in "commands", "prefixes":
+            await self.bot.pool_pg.executemany(locals()[f"{type}_query"], locals()[f"{type}_values"])
+
 
     @commands.Cog.listener("on_message")
     @wait_ready()
@@ -491,8 +516,7 @@ class FindBot(commands.Cog, name="Bots"):
                       )
     @is_discordpy()
     async def whatadd(self, ctx, author: IsBot(is_bot=False, user_check=False) = None):
-        if not author:
-            author = ctx.author
+        author = author or ctx.author
         if author.bot:
             return await ctx.maybe_reply("That's a bot lol")
         query = "SELECT * FROM {}_bots WHERE author_id=$1"
@@ -506,10 +530,12 @@ class FindBot(commands.Cog, name="Bots"):
         for dbot in list_bots:
             bot_id = dbot.bot.id
             value = ""
-            if buse := await try_call(BotUsage.convert, ctx, str(bot_id)):
-                value += f"**Usage:** `{buse.count}`\n"
-            if bprefix := await try_call(BotPrefix.convert, ctx, str(bot_id)):
-                value += f"**Prefix:** `{self.clean_prefix(ctx, bprefix.prefix)}`\n"
+            if bprefix := await try_call(BotPrefixes.convert, ctx, str(bot_id)):
+                value += f"**Most Used Prefix:** `{self.clean_prefix(ctx, bprefix.prefix)}`\n"
+            if buse := await try_call(BotCommands.convert, ctx, str(bot_id)):
+                high_use = buse.highest_command
+                value += f"**Top Command:** `{high_use}`[`{buse.get_command(high_use)}`]\n"
+                value += f"**Total Usage:** `{buse.total_usage}`\n"
 
             value += f"**Created at:** `{default_date(dbot.bot.created_at)}`"
             embed.add_field(name=dbot, value=value, inline=False)
@@ -553,7 +579,7 @@ class FindBot(commands.Cog, name="Bots"):
                       help="Shows what the bot's prefix. This is sometimes inaccurate. Don't rely on it too much. "
                            "This also does not know it's aliases prefixes.")
     @commands.guild_only()
-    async def whatprefix(self, ctx, member: BotPrefix):
+    async def whatprefix(self, ctx, member: BotPrefixes):
         show_prefix = functools.partial(self.clean_prefix, ctx)
         prefix = show_prefix(member.prefix)
         alias = '`, `'.join(map(show_prefix, member.aliases))
@@ -575,14 +601,14 @@ class FindBot(commands.Cog, name="Bots"):
 
     async def get_all_prefix(self, guild, prefix):
         """Quick function that gets the amount of bots that has the same prefix in a server."""
-        data = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix WHERE prefix=$1", prefix)
+        data = await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE guild_id=$1 AND prefix=$2", guild.id, prefix)
 
         def mem(x):
             return guild.get_member(x)
 
         return [mem(x['bot_id']) for x in data if mem(x['bot_id'])]
 
-    @commands.command(aliases=["pb", "prefixbots", "pbots"],
+    @commands.command(aliases=["prefixbots", "pbots"],
                       brief="Shows the name of bot(s) have a given prefix.",
                       help="Shows a list of bot(s) name that have a given prefix.")
     @commands.guild_only()
@@ -604,7 +630,7 @@ class FindBot(commands.Cog, name="Bots"):
     @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
                   help="Reverses the list. This flag accepts True or False, default to False if not stated.")
     async def allprefix(self, ctx, **flags):
-        bots = await self.bot.pool_pg.fetch("SELECT * FROM bot_prefix_list")
+        bots = await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE guild_id=$1", ctx.guild.id)
         attr = "count" if (count_mode := flags.pop("count", False)) else "prefix"
         reverse = flags.pop("reverse", False)
 
@@ -615,7 +641,7 @@ class FindBot(commands.Cog, name="Bots"):
         for bot in filter(lambda b: mem(b["bot_id"]), bots):
             prefixes = temp.setdefault(bot["bot_id"], {bot["prefix"]: bot["usage"]})
             prefixes.update({bot["prefix"]: bot["usage"]})
-        data = [BotPrefix(mem(b), v) for b, v in temp.items()]
+        data = [BotPrefixes(mem(b), v) for b, v in temp.items()]
 
         if count_mode:
             PrefixCount = collections.namedtuple("PrefixCount", "prefix count")
@@ -632,9 +658,11 @@ class FindBot(commands.Cog, name="Bots"):
                       help="Show's how many command calls for a given bot. This works by counting how many times "
                            "a message is considered a command for that bot where that bot has responded in less than "
                            "2 seconds.")
-    async def botuse(self, ctx, bot: BotUsage):
-        await ctx.embed(title=f"{bot}'s Usage",
-                        description=plural(f"`{bot.count}` command(s) has been called for **{bot}**.", bot.count))
+    async def botuse(self, ctx, bot: BotCommands):
+        await ctx.embed(
+            title=f"{bot}'s Usage",
+            description=plural(f"`{bot.total_usage}` command(s) has been called for **{bot}**.", bot.total_usage)
+        )
 
     @commands.command(aliases=["bot_info", "bi", "botinfos"],
                       brief="Shows the bot information such as bot owner, prefixes, command usage.",
@@ -643,9 +671,9 @@ class FindBot(commands.Cog, name="Bots"):
                            "joined the server.")
     @is_discordpy()
     async def botinfo(self, ctx, bot: IsBot):
-        # TODO: this is pretty terrible, optimise this
-        titles = (("Bot Prefix", "{0.allprefixes}", BotPrefix),
-                  ("Command Usage", "{0.count}", BotUsage),
+        # TODO: I said this 3 months ago to redo this, but im lazy
+        titles = (("Bot Prefix", "{0.allprefixes}", BotPrefixes),
+                  ("Command Usage", "{0.total_usage}", BotCommands),
                   (("Bot Invited by", "{0.author}"),
                    (("Reason", "reason"),
                     ("Requested at", 'requested_at')),
@@ -703,13 +731,15 @@ class FindBot(commands.Cog, name="Bots"):
                       cls=flg.SFlagCommand)
     @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
                   help="Reverses the list. This flag accepts True or False, default to False if not stated.")
-    async def botrank(self, ctx, bot: BotUsage = None, **flags):
+    async def botrank(self, ctx, bot: BotCommands = None, **flags):
         reverse = flags.pop("reverse", False)
         bots = {x.id: x for x in ctx.guild.members if x.bot}
-        query = "SELECT * FROM bot_usage_count WHERE bot_id=ANY($1::BIGINT[])"
-        record = await self.bot.pool_pg.fetch(query, list(bots))
-        bot_data = [BotUsage(bots[r["bot_id"]], r["count"]) for r in record]
-        bot_data.sort(key=lambda x: x.count, reverse=not reverse)
+        query = "SELECT bot_id, COUNT(command) AS total_usage FROM commands_list " \
+                "WHERE guild_id=$1 AND bot_id=ANY($2::BIGINT[]) " \
+                "GROUP BY bot_id"
+        record = await self.bot.pool_pg.fetch(query, ctx.guild.id, list(bots))
+        bot_data = [BotCommands(bots[r["bot_id"]], 0, 0, r["total_usage"]) for r in record]
+        bot_data.sort(key=lambda x: x.total_usage, reverse=not reverse)
         if not bot:
             menu = MenuBase(source=all_bot_count(bot_data))
             await menu.start(ctx)
@@ -717,7 +747,7 @@ class FindBot(commands.Cog, name="Bots"):
             key = "(\u200b|\u200b)"
             idx = [*map(int, bot_data)].index(bot.bot.id)
             scope_bot = bot_data[idx:min(idx + len(bot_data[idx:]), idx + 10)]
-            contents = ["`{0}. {1} {2} {1.count}`".format(i + idx + 1, b, key) for i, b in enumerate(scope_bot)]
+            contents = ["`{0}. {1} {2} {1.total_usage}`".format(i + idx + 1, b, key) for i, b in enumerate(scope_bot)]
             await ctx.embed(title="Bot Command Rank", description="\n".join(realign(contents, key)))
 
     @commands.command(aliases=["pendingbot", "penbot", "peb"],
@@ -735,7 +765,7 @@ class FindBot(commands.Cog, name="Bots"):
 
     @commands.command(aliases=["botcommand", "bc", "bcs"],
                       help="Predicting the bot's command based on the message history.")
-    async def botcommands(self, ctx, bot: BotCommand):
+    async def botcommands(self, ctx, bot: BotCommands):
         @pages(per_page=6)
         def each_page(self, menu, entries):
             number = menu.current_page * self.per_page + 1
