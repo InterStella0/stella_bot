@@ -3,6 +3,7 @@ import re
 import discord
 import asyncpg
 import datetime
+import os
 from utils.useful import StellaContext, ListCall
 from utils.decorators import event_check, wait_ready
 from discord.ext import commands
@@ -57,7 +58,12 @@ class StellaBot(commands.Bot):
     @to_call.append
     def loading_cog(self):
         """Loads the cog"""
-        cogs = ("error_handler", "find_bot", "useful", "helpful", "myself", "eros", "jishaku")
+        cogs = ()
+        for file in os.listdir("cogs"):
+            if file.endswith(".py"):
+                cogs += (file[:-3],)
+
+        cogs += ("jishaku",)
         for cog in cogs:
             ext = "cogs." if cog != "jishaku" else ""
             if error := call(self.load_extension, f"{ext}{cog}", ret=True):
@@ -107,7 +113,9 @@ class StellaBot(commands.Bot):
 
     async def get_context(self, message, *, cls=None):
         """Override get_context to use a custom Context"""
-        return await super().get_context(message, cls=StellaContext)
+        context = await super().get_context(message, cls=StellaContext)
+        context.view.update_values()
+        return context
 
     async def process_commands(self, message):
         """Override process_commands to call typing every invoke"""

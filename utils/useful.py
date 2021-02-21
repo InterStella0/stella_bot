@@ -7,6 +7,7 @@ import sys
 import asyncio
 import contextlib
 from utils.decorators import pages
+from utils.greedy_parser import WithCommaStringView
 from collections import namedtuple
 from discord.ext.menus import First, Last, Button
 from discord.utils import maybe_coroutine
@@ -49,15 +50,6 @@ class BaseEmbed(discord.Embed):
     @classmethod
     def to_error(cls, title="Error", color=discord.Color.red(), **kwargs):
         return cls(title=title, color=color, **kwargs)
-
-
-class AfterGreedy(commands.Command):
-    """Allows the ability to process Greedy converter result before it is passed into the command parameter."""
-    async def _transform_greedy_pos(self, ctx, param, required, converter):
-        result = await super()._transform_greedy_pos(ctx, param, required, converter)
-        if hasattr(converter, 'after_greedy'):
-            return await converter.after_greedy(ctx, result)
-        return result
 
 
 def unpack(li: list):
@@ -217,6 +209,7 @@ def realign(iterable, key, discrim='|'):
 class StellaContext(commands.Context):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.view = WithCommaStringView(kwargs.get("view"))
         self.__dict__.update(dict.fromkeys(["waiting", "result", "channel_used", "running", "failed"]))
 
     async def maybe_reply(self, content=None, mention_author=False, **kwargs):

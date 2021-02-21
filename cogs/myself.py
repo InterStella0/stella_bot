@@ -11,7 +11,8 @@ from typing import Union
 from discord.ext import commands
 from discord.ext.commands import Greedy
 from utils.decorators import event_check
-from utils.useful import call, AfterGreedy, empty_page_format, MenuBase
+from utils.useful import call, empty_page_format, MenuBase
+from utils.greedy_parser import GreedyParser, Greedy
 from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
 from utils import flags as flg
 from jishaku.codeblocks import codeblock_converter
@@ -293,7 +294,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
 def setup(bot):
     cog = Myself(bot)
     for name in ("load", "unload", "reload"):
-        @commands.command(name=name, aliases=["c"+name, name+"s"], cls=AfterGreedy)
+        @commands.command(name=name, aliases=["c"+name, name+"s"], cls=GreedyParser)
         async def _cog_load(self, ctx, extension: Greedy[ValidCog]):
             await self.cogs_handler(ctx, extension)
 
