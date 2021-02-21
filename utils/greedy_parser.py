@@ -11,8 +11,8 @@ from discord.ext.commands import CommandError, ArgumentParsingError
 class GreedyParser(commands.Command):
     """
     Allows the ability to process Greedy converter result before it is passed into the command parameter.
-    Also allows for NewGreedy to have a new parsing method which is to split every ", " or any other passed
-    separator into NewGreedy class.
+    Also allows for Greedy to have a new parsing method which is to split every ", " or any other passed
+    separator into Greedy class.
     """
     async def _transform_greedy_pos(self, ctx, param, required, converter):
         result = await self.actual_greedy_parsing(ctx, param, required, converter)
@@ -64,12 +64,26 @@ class WithCommaStringView(commands.view.StringView):
         if not hasattr(converter, "parsers"):
             return
         pos = 0
+        escaped = []
         with contextlib.suppress(IndexError):
             while not self.eof:
                 current = self.buffer[self.index + pos]
                 if current in converter.parsers:
-                    return pos
+                    if previous != "\\":
+                        break
+                    else:
+                        escaped.append(pos - 1)
+                    
                 pos += 1
+                previous = current
+        
+        for offset, escape in enumerate(escaped):
+            maximum = self.index + escape - offset
+            self.buffer = self.buffer[0: maximum] + self.buffer[maximum + 1: self.end]
+            self.end -= 1
+        pos -= len(escaped)
+        if self.index + pos != self.end:
+            return pos
 
     def get_arg_parser(self, end):
         self.previous = self.index
