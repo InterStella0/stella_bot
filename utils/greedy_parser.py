@@ -5,6 +5,7 @@ pls be nice to me if you do copy it that's all i want :pleading:
 """
 import contextlib
 import discord
+import itertools
 from discord.ext import commands
 from discord.ext.commands import CommandError, ArgumentParsingError
 
@@ -61,15 +62,15 @@ class WithCommaStringView(commands.view.StringView):
         self.__dict__.update({key: getattr(self.old_view, key) for key in ["previous", "index", "end"]})
 
     def get_parser(self, converter):
-        if not hasattr(converter, "parsers"):
+        if not hasattr(converter, "separators"):
             return
         pos = 0
         escaped = []
         with contextlib.suppress(IndexError):
             while not self.eof:
                 current = self.buffer[self.index + pos]
-                if current in converter.parsers:
-                    if previous != "\\":
+                if current in converter.separators:
+                    if previous not in converter.escapes:
                         break
                     else:
                         escaped.append(pos - 1)
@@ -96,17 +97,39 @@ class WithCommaStringView(commands.view.StringView):
         self.index += end + PARSERSIZE
         return result
 
+
 class _CustomGreedy(commands.converter._Greedy):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.parsers = {','}
+        self.separators = {','}
+        self.escapes = {'\\'}
 
-    def __call__(self, *parsers):
-        for x in parsers:
-            if len(x) != 1:
+    def add_into_instance(self, instance, separators, escapes):
+        if not hasattr(separators, "__iter__"):
+            raise Exception("Separators passed must be an iterable.")
+        if not hasattr(escapes, "__iter__"):
+            raise Exception("Escapes passed must be an iterable.")
+        for s, e in itertools.zip_longest(separators, escapes):
+            if s and len(s) != 1:
                 raise Exception("Separator must only be a single character.")
+            if e and len(e) != 1:
+                raise Exception("Escape must only be a single character.")
+        instance.separators |= set(separators)
+        instance.escapes |= set(escapes)
+        return instance
 
-        self.parsers |= set(parsers)
-        return self
+    def __getitem__(self, param):
+        new_param = param
+        if hasattr(param, "__iter__"):
+            new_param = new_param[0]
+        instance = super().__getitem__(new_param) 
+        if hasattr(param, "__iter__"):
+            separators, escapes = param[1:] if len(param) > 2 else (param[1], {})
+            instance = self.add_into_instance(instance, separators, escapes)
+        return instance
+
+    def __call__(self, *separators, escapes={}):
+        instance = self.add_into_instance(self, separators, escapes)
+        return instance
 
 Greedy = _CustomGreedy()
