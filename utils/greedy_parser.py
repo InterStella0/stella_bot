@@ -132,4 +132,4 @@ class _CustomGreedy(commands.converter._Greedy):
         instance = self.add_into_instance(self, separators, escapes)
         return instance
 
-Greedy = _CustomGreedy()
+Separator = _CustomGreedy()

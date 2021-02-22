@@ -12,7 +12,7 @@ from discord.ext import commands
 from discord.ext.commands import Greedy
 from utils.decorators import event_check
 from utils.useful import call, empty_page_format, MenuBase
-from utils.greedy_parser import GreedyParser, Greedy
+from utils.greedy_parser import GreedyParser, Separator
 from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
 from utils import flags as flg
 from jishaku.codeblocks import codeblock_converter
@@ -295,7 +295,7 @@ def setup(bot):
     cog = Myself(bot)
     for name in ("load", "unload", "reload"):
         @commands.command(name=name, aliases=["c"+name, name+"s"], cls=GreedyParser)
-        async def _cog_load(self, ctx, extension: Greedy[ValidCog]):
+        async def _cog_load(self, ctx, extension: Separator[ValidCog]):
             await self.cogs_handler(ctx, extension)
 
         cog.__cog_commands__ += (_cog_load,)

@@ -6,7 +6,7 @@ import traceback
 import sys
 import asyncio
 import contextlib
-from utils.decorators import pages
+from utils.decorators import pages, in_executor
 from utils.greedy_parser import WithCommaStringView
 from collections import namedtuple
 from discord.ext.menus import First, Last, Button
@@ -156,12 +156,14 @@ def compile_array(string_list):
     array_string = ArrString(*binary_array)
     return array_string, len(string_list)
 
+
 def decode_result(return_result):
     """Creates a RESULT structure from address given and return a list of the address"""
     result = RESULT.from_address(return_result)
     to_return = [x.decode("utf-8") for x in result.found_array[:result.size]]
     freeing(ctypes.byref(result))
     return to_return
+
 
 def actually_calls(param, callback):
     """Handles C functions and return value."""
@@ -172,13 +174,18 @@ def actually_calls(param, callback):
         return_result = callback(array_string, content_buffer, size)
         return decode_result(return_result)
 
+
+@in_executor()
 def search_prefixes(*args):
     """Pass multi_find_prefix function from C."""
     return actually_calls(args, multi_find_prefix)
 
+
+@in_executor()
 def search_commands(*args):
     """Pass find_commands function from C."""
     return actually_calls(args, find_commands)
+
 
 def print_exception(text, error):
     """Prints the exception with proper traceback."""

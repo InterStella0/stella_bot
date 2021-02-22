@@ -335,7 +335,7 @@ class FindBot(commands.Cog, name="Bots"):
         """Gets the prefix/command that are in this message, gets the bot that responded
            and return them."""
         content_compiled = ctypes.create_string_buffer(word.encode("utf-8"))
-        if not (result := callback(getattr(self, f"compiled_{type}"), content_compiled)):
+        if not (result := await callback(getattr(self, f"compiled_{type}"), content_compiled)):
             return
 
         singular = type[:len(type) - ((type != "commands") + 1)]

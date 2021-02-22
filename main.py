@@ -144,6 +144,7 @@ class StellaBot(commands.Bot):
             self.loop.run_until_complete(self.after_db())
             self.run(self.token)
 
+
 intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions')}
 intents = discord.Intents(**intent_data)
 bot_data = {"token": environ.get("TOKEN"),

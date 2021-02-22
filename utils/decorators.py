@@ -1,5 +1,6 @@
 import discord
 import functools
+import asyncio
 from discord.ext import commands, menus
 from utils.errors import NotInDpy
 
@@ -66,3 +67,15 @@ def listen_for_guilds():
         message = args[len(args) != 1]
         return message.guild is not None
     return event_check(predicate)
+
+
+def in_executor(loop=None):
+    """Makes a sync blocking function unblocking"""
+    loop = loop or asyncio.get_event_loop()
+    def inner_function(func):
+        @functools.wraps(func)
+        def function(*args, **kwargs):
+            partial = functools.partial(func, *args, **kwargs)
+            return loop.run_in_executor(None, partial)
+        return function
+    return inner_function
