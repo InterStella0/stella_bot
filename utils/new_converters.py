@@ -3,6 +3,7 @@ import os
 import re
 import contextlib
 import datetime
+import humanize
 from collections import namedtuple, Counter
 from fuzzywuzzy import fuzz
 from discord.ext import commands
@@ -43,12 +44,13 @@ class ValidCog(CleanListGreedy):
 
 class IsBot(commands.Converter):
     """Raises an error if the member is not a bot"""
-    def __init__(self, is_bot=True, user_check=True):
+    def __init__(self, is_bot=True, user_check=True, dont_fetch=False):
         self.is_bot = is_bot
         self.user_check = user_check
+        self.dont_fetch = dont_fetch
 
     async def convert(self, ctx, argument, cls=None):
-        for converter in ("Member", "User"):
+        for converter in ("Member", "User")[:(not self.dont_fetch) + 1]:
             with contextlib.suppress(commands.BadArgument):
                 user = await getattr(commands, f"{converter}Converter")().convert(ctx, argument)
                 if user.bot is not self.is_bot:
@@ -176,3 +178,32 @@ class JumpValidator(commands.Converter):
             message = await commands.MessageConverter().convert(ctx, argument)
             return message.jump_url
         raise commands.CommandError(f"I can't find {argument}. Is this even a real message?")
+
+
+time_regex = re.compile(r"(\d{1,5}(?:[.,]?\d{1,5})?)([smhd])")
+time_dict = {"h":3600, "s":1, "m":60, "d":86400}
+class TimeConverter(commands.Converter):
+    """Stole from discord.py because lazy, i'll make a better one later"""
+    def __init__(self, minimum_time=None, maximum_time=None):
+        self.minimum_time = minimum_time
+        self.maximum_time = maximum_time
+
+    async def convert(self, ctx, argument):
+        matches = time_regex.findall(argument.lower())
+        time = 0
+        for v, k in matches:
+            try:
+                time += time_dict[k]*float(v)
+            except KeyError:
+                raise commands.BadArgument(f"{k} is an invalid time-key! h/m/s/d are valid!")
+            except ValueError:
+                raise commands.BadArgument(f"{v} is not a number!")
+        
+        time_converted = datetime.datetime.utcnow() - datetime.timedelta(seconds=time)
+        if self.minimum_time or self.maximum_time:
+            if time_converted > datetime.datetime.utcnow() - self.minimum_time:
+                raise commands.BadArgument(f"Time must be longer than `{humanize.precisedelta(self.minimum_time)}`")
+            if time_converted < datetime.datetime.utcnow() - self.maximum_time:
+                raise commands.BadArgument(f"Time must be shorter than `{humanize.precisedelta(self.maximum_time)}`")
+
+        return time_converted
