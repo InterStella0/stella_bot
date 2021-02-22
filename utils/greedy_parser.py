@@ -6,52 +6,11 @@ pls be nice to me if you do copy it that's all i want :pleading:
 import contextlib
 import discord
 import itertools
+import inspect
+from utils.errors import ConsumerUnableToConvert
 from discord.ext import commands
 from discord.ext.commands import CommandError, ArgumentParsingError
 
-class GreedyParser(commands.Command):
-    """
-    Allows the ability to process Greedy converter result before it is passed into the command parameter.
-    Also allows for Greedy to have a new parsing method which is to split every ", " or any other passed
-    separator into Greedy class.
-    """
-    async def _transform_greedy_pos(self, ctx, param, required, converter):
-        result = await self.actual_greedy_parsing(ctx, param, required, converter)
-        if hasattr(converter, 'after_greedy'):
-            return await converter.after_greedy(ctx, result)
-        return result
-
-    async def actual_greedy_parsing(self, ctx, param, required, converter):
-        view = ctx.view
-        result = []
-        while not view.eof:
-            previous = view.index
-
-            view.skip_ws()
-            try:
-                if pos := view.get_parser(param.annotation):
-                    argument = view.get_arg_parser(pos)
-                else:
-                    argument = view.get_quoted_word()
-                value = await self.do_conversion(ctx, converter, argument, param)
-            except (CommandError, ArgumentParsingError):
-                view.index = previous
-                break
-            else:
-                result.append(value)
-
-        if not result and not required:
-            return param.default
-        return result
-
-    async def transform(self, ctx, param):
-        required = param.default is param.empty
-        converter = self._get_converter(param)
-        if isinstance(converter, commands.converter._Greedy):
-            if param.kind == param.POSITIONAL_OR_KEYWORD or param.kind == param.POSITIONAL_ONLY:
-                return await self._transform_greedy_pos(ctx, param, required, converter.converter)
-
-        return await super().transform(ctx, param)
 
 class WithCommaStringView(commands.view.StringView):
     def __init__(self, view):
@@ -98,7 +57,7 @@ class WithCommaStringView(commands.view.StringView):
         return result
 
 
-class _CustomGreedy(commands.converter._Greedy):
+class _SeparatorParsing(commands.converter._Greedy):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.separators = {','}
@@ -131,5 +90,79 @@ class _CustomGreedy(commands.converter._Greedy):
     def __call__(self, *separators, escapes={}):
         instance = self.add_into_instance(self, separators, escapes)
         return instance
+    
+    async def actual_greedy_parsing(self, command, ctx, param, required, converter):
+        view = ctx.view
+        result = []
+        while not view.eof:
+            previous = view.index
+            view.skip_ws()
+            try:
+                if pos := view.get_parser(param.annotation):
+                    argument = view.get_arg_parser(pos)
+                else:
+                    argument = view.get_quoted_word()
+                value = await command.do_conversion(ctx, converter, argument, param)
+            except (CommandError, ArgumentParsingError):
+                view.index = previous
+                break
+            else:
+                result.append(value)
 
-Separator = _CustomGreedy()
+        if not result and not required:
+            return param.default
+        return result
+
+
+class _ConsumerParsing(commands.converter._Greedy):
+    async def actual_greedy_parsing(self, command, ctx, param, required, converter):
+        view = ctx.view
+        view.skip_ws()
+        previous = view.index
+        once = 0
+        while not view.eof:
+            view.skip_ws()
+            with contextlib.suppress(CommandError, ArgumentParsingError):
+                if not once:
+                    current = view.get_quoted_word()
+                else:
+                    while not view.eof:
+                        if view.buffer[view.index].isspace():
+                            break
+                        view.index += 1
+                    
+                    current = view.buffer[previous: view.index]
+                once |= 1
+                return await command.do_conversion(ctx, converter, current, param)
+
+        name = converter if inspect.isclass(converter) else type(converter) 
+        raise ConsumerUnableToConvert(view.buffer[previous: view.index], name.__name__)
+
+Separator = _SeparatorParsing()
+Consumer = _ConsumerParsing()
+
+
+class GreedyParser(commands.Command):
+    """
+    Allows the ability to process Greedy converter result before it is passed into the command parameter.
+    Also allows for Greedy converter subclass to have a new parsing method depending of the type of methods
+    there are.
+    """
+    async def _transform_greedy_pos(self, ctx, param, required, greedy, converter):
+        if hasattr(greedy, "actual_greedy_parsing"):
+            result = await greedy.actual_greedy_parsing(self, ctx, param, required, converter)
+        else:
+            result = await super()._transform_greedy_pos(ctx, param, required, converter)
+        if hasattr(converter, 'after_greedy'):
+            return await converter.after_greedy(ctx, result)
+        return result
+
+
+    async def transform(self, ctx, param):
+        required = param.default is param.empty
+        converter = self._get_converter(param)
+        if isinstance(converter, commands.converter._Greedy):
+            if param.kind == param.POSITIONAL_OR_KEYWORD or param.kind == param.POSITIONAL_ONLY:
+                return await self._transform_greedy_pos(ctx, param, required, converter, converter.converter)
+
+        return await super().transform(ctx, param)

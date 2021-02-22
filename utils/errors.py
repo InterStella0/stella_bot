@@ -54,3 +54,7 @@ class UserNotFound(ArgumentBaseError):
 class CantRun(commands.CommandError):
     def __init__(self, message, *arg):
         super().__init__(message=message, *arg)
+
+class ConsumerUnableToConvert(commands.CommandError):
+    def __init__(self, *args):
+        super().__init__(message="Could not convert {} into {}".format(*args))
