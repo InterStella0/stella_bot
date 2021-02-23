@@ -9,7 +9,7 @@ from fuzzywuzzy import fuzz
 from discord.ext import commands
 from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound, MustMember
 from discord.utils import _unique
-from utils.useful import unpack
+from utils.useful import unpack, RenameClass
 
 
 class CleanListGreedy:
@@ -42,7 +42,7 @@ class ValidCog(CleanListGreedy):
         raise NotValidCog(argument, converter=cls)
 
 
-class IsBot(commands.Converter):
+class IsBot(commands.Converter, metaclass=RenameClass, name="Bot"):
     """Raises an error if the member is not a bot"""
     def __init__(self, is_bot=True, user_check=True, dont_fetch=False):
         self.is_bot = is_bot

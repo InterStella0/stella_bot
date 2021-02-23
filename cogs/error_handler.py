@@ -78,7 +78,7 @@ class ErrorHandler(commands.Cog):
                 frames = [*traceback.walk_tb(_error.__traceback__)]
                 last_trace = frames[-1]
                 frame = last_trace[0]
-                converter = frame.f_locals.get("self")
+                converter = frame.f_locals.get("self") or frame.f_locals.get("cls")
                 if converter is not None:
                     return getattr(discord, converter.__class__.__name__.replace("Converter", ""), None)
 
@@ -87,6 +87,8 @@ class ErrorHandler(commands.Cog):
             for typing in signature.values():
                 if typing_inspect.is_union_type(typing):
                     checking = typing.annotation.__args__
+                elif isinstance(typing.annotation, commands.converter._Greedy):
+                    checking = (typing.annotation.converter,)
                 else:
                     checking = (typing.annotation,)
                 for convert in checking:
