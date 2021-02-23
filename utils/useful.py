@@ -265,4 +265,13 @@ class ListCall(list):
         return asyncio.gather(*(maybe_coroutine(func, *args, **kwargs) for func in self))
 
 def in_local(func, target):
+    """Useless function"""
     return func()[target]
+
+class RenameClass(type):
+    """It rename a class based on name kwargs, what do you expect"""
+    def __new__(mcls, names, bases, attrs, *, name=None):
+        new_class = super().__new__(mcls, name, bases, attrs)
+        if name:
+            new_class.__name__ = name
+        return new_class

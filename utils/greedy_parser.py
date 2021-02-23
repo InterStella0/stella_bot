@@ -13,14 +13,17 @@ from discord.ext.commands import CommandError, ArgumentParsingError
 
 
 class WithCommaStringView(commands.view.StringView):
+    """Custom StringView for Separator and Consumer class to use."""
     def __init__(self, view):
         super().__init__(view.buffer)
         self.old_view = view
 
     def update_values(self):
+        """Update the current StringView value into this object""" 
         self.__dict__.update({key: getattr(self.old_view, key) for key in ["previous", "index", "end"]})
 
     def get_parser(self, converter):
+        """Tries to get a separator within an argument, return None if it can't find any."""
         if not hasattr(converter, "separators"):
             return
         pos = 0
@@ -46,6 +49,7 @@ class WithCommaStringView(commands.view.StringView):
             return pos
 
     def get_arg_parser(self, end):
+        """Gets a word that ends with ','"""
         self.previous = self.index
         offset = 0
         PARSERSIZE = 1
@@ -57,7 +61,9 @@ class WithCommaStringView(commands.view.StringView):
         return result
 
 
-class _SeparatorParsing(commands.converter._Greedy):
+class BaseGreedy(commands.converter._Greedy):
+    """A Base class for all Greedy subclass, basic attribute such as separators
+       and escapes."""
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.separators = {','}
@@ -92,6 +98,16 @@ class _SeparatorParsing(commands.converter._Greedy):
         return instance
     
     async def actual_greedy_parsing(self, command, ctx, param, required, converter):
+        raise NotImplemented("Greedy subclass seems to not have this method. It dies.")
+    
+class _SeparatorParsing(BaseGreedy):
+    """Allow Greedy to be parse in a way that it will try to find ',' or any
+       other passed separator in an argument, and will allow spaced argument to be
+       passed given that there are a separator at the end of each argument.
+       
+       Returns an empty list when none of the argument was valid."""
+
+    async def actual_greedy_parsing(self, command, ctx, param, required, converter):
         view = ctx.view
         result = []
         while not view.eof:
@@ -114,10 +130,23 @@ class _SeparatorParsing(commands.converter._Greedy):
         return result
 
 
-class _ConsumerParsing(commands.converter._Greedy):
+class _ConsumerParsing(BaseGreedy):
+    """Allow a consume rest behaviour by trying to convert an argument into a valid
+       conversion for each word it sees.
+       Example: 'uwu argument1 argument2 argument3'
+
+       If the Greedy is at argument1, it will try to first convert "argument1"
+       when fails, it goes into "argument1 argument2" and so on.
+
+       This Greedy raises an error if it can't find any valid conversion."""
+
     async def actual_greedy_parsing(self, command, ctx, param, required, converter):
         view = ctx.view
         view.skip_ws()
+        if pos := view.get_parser(param.annotation):
+            current = view.get_arg_parser(pos)
+            return await command.do_conversion(ctx, converter, current, param)
+
         previous = view.index
         once = 0
         while not view.eof:
@@ -135,21 +164,20 @@ class _ConsumerParsing(commands.converter._Greedy):
                 once |= 1
                 return await command.do_conversion(ctx, converter, current, param)
 
-        name = converter if inspect.isclass(converter) else type(converter) 
-        raise ConsumerUnableToConvert(view.buffer[previous: view.index], name.__name__)
+        name = (converter if inspect.isclass(converter) else type(converter)).__name__
+        raise ConsumerUnableToConvert(view.buffer[previous: view.index], name, converter=converter)
 
 Separator = _SeparatorParsing()
 Consumer = _ConsumerParsing()
 
 
 class GreedyParser(commands.Command):
-    """
-    Allows the ability to process Greedy converter result before it is passed into the command parameter.
-    Also allows for Greedy converter subclass to have a new parsing method depending of the type of methods
-    there are.
-    """
-    async def _transform_greedy_pos(self, ctx, param, required, greedy, converter):
-        if hasattr(greedy, "actual_greedy_parsing"):
+    async def _transform_greedy_pos(self, ctx, param, required, greedy, converter, normal_greedy=False):
+        """Allow Greedy subclass to have their own method of conversion by checking "actual_greedy_parsing"
+           method, and invoking that method when it is available, else it will call the normal greedy method
+           conversion."""
+
+        if hasattr(greedy, "actual_greedy_parsing") and not normal_greedy:
             result = await greedy.actual_greedy_parsing(self, ctx, param, required, converter)
         else:
             result = await super()._transform_greedy_pos(ctx, param, required, converter)
@@ -159,6 +187,11 @@ class GreedyParser(commands.Command):
 
 
     async def transform(self, ctx, param):
+        """Because Danny literally only allow commands.converter._Greedy class to be pass here using
+           'is' comparison, I have to override it to allow any other Greedy subclass.
+           
+           It's obvious that Danny doesn't want people to subclass it smh."""
+
         required = param.default is param.empty
         converter = self._get_converter(param)
         if isinstance(converter, commands.converter._Greedy):

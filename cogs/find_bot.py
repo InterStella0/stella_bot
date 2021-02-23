@@ -277,7 +277,7 @@ class FindBot(commands.Cog, name="Bots"):
         existing = await self.bot.pool_pg.fetch(exist_query, message.guild.id, bots_responded)
         for x in existing:
             if prefix.startswith(x["prefix"]) and x["bot_id"] in bots_responded:
-                message_sent.pop(x["bot_id"])
+                message_sent.pop(x["bot_id"], None)
 
         if not message_sent:
             return
