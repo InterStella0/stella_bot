@@ -40,10 +40,13 @@ class StellaBot(commands.Bot):
     async def after_db(self):
         """Runs after the db is connected"""
         await to_call.call(self)
-        for command in bot.commands:
-            command.cooldown_after_parsing = True
-            if not getattr(command._buckets, "_cooldown", None):
-                command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
+
+    def add_command(self, command):
+        super().add_command(command)
+        command.cooldown_after_parsing = True
+        if not getattr(command._buckets, "_cooldown", None):
+            command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
+        
 
     @property
     def stella(self):
