@@ -236,7 +236,13 @@ class StellaContext(commands.Context):
         to_send = (self.send, self.maybe_reply)[reply]
         if not self.me.permissions_in(self.channel).embed_links:
             raise commands.BotMissingPermissions(["embed_links"])
-        return await to_send(content, mention_author=mention_author, embed=ori_embed)
+        send_dict = {'tts': False, 'file': None, 'files': None, 
+                    'delete_after': None, 'nonce': None}
+        for x, v in kwargs.items():
+            if x in send_dict:
+                send_dict[x] = v
+
+        return await to_send(content, mention_author=mention_author, embed=ori_embed, **send_dict)
 
     def confirmed(self, message_id=None):
         message = self.message if not message_id else self.get_partial_message(message_id)

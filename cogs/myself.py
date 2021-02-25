@@ -7,7 +7,7 @@ import traceback
 import io
 import textwrap
 import more_itertools
-from typing import Union
+from typing import Union, Optional
 from discord.ext import commands
 from discord.ext.commands import Greedy
 from utils.decorators import event_check
@@ -242,8 +242,9 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
 
     @commands.command(cls=flg.SFlagCommand)
     @flg.add_flag("--must", type=bool, action="store_true", default=False)
+    @flg.add_flag("--messages", nargs='+', type=discord.Message)
     @commands.bot_has_permissions(read_message_history=True)
-    async def clear(self, ctx, amount=50, **flag):
+    async def clear(self, ctx, amount: Optional[int]=50, **flag):
         def check(m):
             return m.author == ctx.me
 
@@ -252,7 +253,13 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
 
         must = flag["must"]
         purge_enable = ctx.me.permissions_in(ctx.channel).manage_messages
-        if not must and purge_enable:
+        if messages := flag.get("messages"):
+            if purge_enable:
+                await ctx.channel.delete_messages(messages)
+            else:
+                for m in messages:
+                    await m.delete()
+        elif not must and purge_enable:
             await ctx.channel.purge(limit=amount, check=check)
         else:
             counter = 0
