@@ -46,7 +46,6 @@ class StellaBot(commands.Bot):
         command.cooldown_after_parsing = True
         if not getattr(command._buckets, "_cooldown", None):
             command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
-        
 
     @property
     def stella(self):
