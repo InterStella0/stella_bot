@@ -8,6 +8,7 @@ import discord
 import itertools
 import inspect
 from utils.errors import ConsumerUnableToConvert
+from utils.flags import SFlagCommand
 from discord.ext import commands
 from discord.ext.commands import CommandError, ArgumentParsingError
 
@@ -170,8 +171,8 @@ class _ConsumerParsing(BaseGreedy):
 Separator = _SeparatorParsing()
 Consumer = _ConsumerParsing()
 
-
-class GreedyParser(commands.Command):
+#Subclass Flag so i can use flag lol
+class GreedyParser(SFlagCommand):
     async def _transform_greedy_pos(self, ctx, param, required, greedy, converter, normal_greedy=False):
         """Allow Greedy subclass to have their own method of conversion by checking "actual_greedy_parsing"
            method, and invoking that method when it is available, else it will call the normal greedy method

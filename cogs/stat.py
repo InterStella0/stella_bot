@@ -1,8 +1,7 @@
 import datetime
 import discord
 import matplotlib
-import itertools
-import collections
+import math
 import io
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
@@ -10,16 +9,16 @@ from scipy.interpolate import make_interp_spline
 from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.colors as mcolors
-from typing import Optional
+from typing import Optional, Union
 from matplotlib.patches import Polygon
-from utils.flags import SFlagCommand
+from utils import flags as flg
 from utils.greedy_parser import GreedyParser, Consumer
 from utils.new_converters import TimeConverter, IsBot
 from utils.decorators import in_executor
 from discord.ext import commands
 
 matplotlib.use('Agg')
-TimeConverterMinMax = TimeConverter(datetime.timedelta(days=2), datetime.timedelta(weeks=8))
+TimeConvert = TimeConverter(datetime.timedelta(days=2), datetime.timedelta(weeks=8))
 
 def create_gradient_array(color, *, alpha_min=0, alpha_max=1):
     z = np.empty((100, 1, 4), dtype=float)
@@ -28,7 +27,8 @@ def create_gradient_array(color, *, alpha_min=0, alpha_max=1):
     return z
 
 @in_executor()
-def create_graph(x, y, color):
+def create_graph(x, y, **kwargs):
+    color = str(kwargs.get("color"))
     fig, axes = plt.subplots()
     date_np = np.array(sorted(x))
     value_np = np.array([*reversed(y)])
@@ -36,7 +36,7 @@ def create_graph(x, y, color):
 
     # Graph smoothen
     date_num_smooth = np.linspace(date_num.min(), date_num.max(), 100) 
-    spl = make_interp_spline(date_num, value_np, k=2)
+    spl = make_interp_spline(date_num, value_np, k=2 - kwargs.get("accurate"))
     value_np_smooth = spl(date_num_smooth)
 
     line, = axes.plot(mdates.num2date(date_num_smooth), value_np_smooth, color=color)
@@ -134,6 +134,35 @@ def process_image(avatar_bytes, target):
         return to_send
 
 
+@in_executor()
+def get_majority_color(bytes):
+    with Image.open(bytes) as target:
+        smol = target.quantize(4)
+        return discord.Color.from_rgb(*smol.getpalette()[:3])
+
+
+def islight(r, g, b):
+    # Found this equation in http://alienryderflex.com/hsp.html, fucking insane i tell ya
+    hsp = math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b))
+    return (hsp > 127.5)
+
+class ElseConverter(commands.Converter):
+    valid_conversion = {"all": ["al", "a", "guild", "g", "guilds"],
+                        "this": ["thi", "th", "me", "myself"]}
+    async def convert(self, ctx, argument):
+        found = None
+        for k, v in self.valid_conversion.items():
+            if k == argument or argument in v:
+                found = k
+
+        if self.valid_conversion.get(found):
+            if found == "all":
+                return ctx.guild
+            elif found == "this":
+                return ctx.me
+        raise commands.CommandError("No valid else conversion.")
+
+
 class Stat(commands.Cog, name="Statistic"):
     def __init__(self, bot):
         self.bot = bot
@@ -143,16 +172,33 @@ class Stat(commands.Cog, name="Statistic"):
                            "invoke happening for a bot.",
                       cls=GreedyParser)
     @commands.guild_only()
+    @flg.add_flag("--time", "-T", type=TimeConvert, 
+                  help="Time given for the bot, this flag must be more than 2 days and less than 2 months. " \
+                       "Defaults to 2 days when not given.")
+    @flg.add_flag("--accurate", "-A", action="store_true", default=False,
+                  help="Makes the graph the exact value, rather than a smooth curve. Defaults to False.")
+    @flg.add_flag("--color", "--colour", "-C", type=discord.Color, default=None, 
+                  help="Changes the graph's color depending on the hex given. " \
+                       "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
     @commands.cooldown(1, 30, commands.BucketType.user)
-    async def botactivity(self, ctx, color: Optional[discord.Color], member: Consumer[IsBot(dont_fetch=True)], *, time: TimeConverterMinMax=None):
-        color = color or discord.Color(self.bot.color)
+    async def botactivity(self, ctx, member: Consumer[Union[ElseConverter, IsBot]], **flags):
+        target = member
         time_rn = datetime.datetime.utcnow()
-        time_given = time or time_rn - datetime.timedelta(days=2)
-        query = "SELECT * FROM commands_list WHERE guild_id=$1 AND bot_id=$2 AND time_used > $3"
-        data = await self.bot.pool_pg.fetch(query, ctx.guild.id, member.id, time_given)
+        time_given = flags.get("time") or time_rn - datetime.timedelta(days=2)
+        if isinstance(target, discord.Member):
+            query = "SELECT * FROM commands_list WHERE guild_id=$1 AND bot_id=$2 AND time_used > $3"
+            values = (ctx.guild.id, target.id, time_given)
+            error = "Looks like no data is present for this bot."
+            method = "avatar_url"
+        else:
+            query = "SELECT * FROM commands_list WHERE guild_id=$1 AND time_used > $2"
+            values = (target.id, time_given)
+            error = "Looks like i dont know anything in this server."
+            method = "icon_url"
+        
+        data = await self.bot.pool_pg.fetch(query, *values)
         if not data:
-            raise commands.CommandError("Looks like no data is present for this bot.")
-
+            raise commands.CommandError(error)
         bot_based_time = {}
         total_seconds = (time_rn - time_given).total_seconds()
         each_time = datetime.timedelta(seconds=total_seconds / 10)
@@ -169,24 +215,34 @@ class Stat(commands.Cog, name="Statistic"):
         x = list(bot_based_time)
         y = list(bot_based_time.values())
 
+        asset = getattr(target, method)
         with ctx.typing():
-            graph = await create_graph(x, y, str(color))
-            avatar_bytes = io.BytesIO(await member.avatar_url.read())
+            avatar_bytes = io.BytesIO(await asset.read())
+            if not flags.get("color"):
+                new_color = major = await get_majority_color(avatar_bytes)
+                if not islight(*major.to_rgb()) or member == ctx.me:
+                    new_color = discord.Color(ctx.bot.color)
+                flags["color"] = new_color
+
+            graph = await create_graph(x, y, **flags)
             to_send = await process_image(avatar_bytes, graph)
         embed = discord.Embed()
         embed.set_image(url="attachment://picture.png")
-        embed.set_author(name=member, icon_url=member.avatar_url)
+        embed.set_author(name=target, icon_url=asset)
         await ctx.embed(embed=embed, file=discord.File(to_send, filename="picture.png"))
         graph.close()
         avatar_bytes.close()
         to_send.close()
 
     @commands.command(aliases=["topcommand", "tc", "tcs"],
-                      help="Generate a bar graph for 10 most used command for a bot.")
+                      help="Generate a bar graph for 10 most used command for a bot.",
+                      cls=GreedyParser)
     @commands.guild_only()
     @commands.cooldown(1, 30, commands.BucketType.user)
-    async def topcommands(self, ctx, color: Optional[discord.Color], *, member: IsBot(user_check=False)):
-        color = color or discord.Color(self.bot.color)
+    @flg.add_flag("--color", "--colour", "-C", type=discord.Color, default=None, 
+                  help="Changes the graph's color depending on the hex given. " \
+                       "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
+    async def topcommands(self, ctx, member: Consumer[IsBot(user_check=False)], **flags):
         query = "SELECT bot_id, command, COUNT(command) AS usage FROM commands_list " \
                 "WHERE guild_id=$1 AND bot_id=$2 " \
                 "GROUP BY bot_id, command " \
@@ -204,8 +260,13 @@ class Stat(commands.Cog, name="Statistic"):
                        ylabel="Commands")
 
         with ctx.typing():
-            bar = await create_bar(names, usages, str(color), **payload)
             avatar_bytes = io.BytesIO(await member.avatar_url.read())
+            if not (color := flags.get("color")):
+                color = major = await get_majority_color(avatar_bytes)
+                if not islight(*major.to_rgb()) or member == ctx.me:
+                    color = discord.Color(ctx.bot.color)
+
+            bar = await create_bar(names, usages, str(color), **payload)
             to_send = await process_image(avatar_bytes, bar)
 
         embed = discord.Embed()

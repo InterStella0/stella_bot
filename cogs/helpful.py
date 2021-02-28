@@ -316,6 +316,10 @@ class Helpful(commands.Cog):
             url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
             await ctx.embed(title=f"Here's uh, {content}", description=f"[Click Here]({url})")
 
+    @commands.command()
+    async def invite(self, ctx):
+        await ctx.maybe_reply(f"Thx\n<{discord.utils.oauth_url(ctx.me.id)}>")
+
     def cog_unload(self):
         self.bot.help_command = self._default_help_command
 

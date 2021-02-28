@@ -188,6 +188,9 @@ class TimeConverter(commands.Converter):
         self.minimum_time = minimum_time
         self.maximum_time = maximum_time
 
+    async def __call__(self, argument):
+        return await self.convert(0, argument)
+
     async def convert(self, ctx, argument):
         matches = time_regex.findall(argument.lower())
         time = 0

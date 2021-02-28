@@ -383,7 +383,8 @@ class FindBot(commands.Cog, name="Bots"):
             if bot["command"] == command:
                 bot_id = bot['bot_id']
                 message_respond = message_sent[bot_id].created_at
-                if (match := re.match("(?P<prefix>^.{{1,100}}?(?={}))".format(command), word, re.I)) and len(match["prefix"]) < 31:
+                target = re.escape(command)
+                if (match := re.match("(?P<prefix>^.{{1,100}}?(?={}))".format(target), word, re.I)) and len(match["prefix"]) < 31:
                     existing = await self.bot.pool_pg.fetch(exist_query, message.guild.id, bot_id)
                     prefix = match["prefix"]
                     if any(x['prefix'] != prefix and prefix.startswith(x["prefix"]) for x in existing):
