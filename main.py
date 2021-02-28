@@ -16,7 +16,7 @@ load_dotenv(dotenv_path)
 
 import utils.library_override
 to_call = ListCall()
-
+fallback = os.urandom(32).hex()
 
 class StellaBot(commands.Bot):
     def __init__(self, **kwargs):
@@ -32,9 +32,9 @@ class StellaBot(commands.Bot):
         self.pending_bots = set()
         self.confirmed_bots = set()
         self.token = kwargs.pop("token", None)
-        self.existing_prefix = None
         self.blacklist = set()
         self.cached_users = {}
+        self.existing_prefix = {}
         super().__init__(self.get_prefix, **kwargs)
 
     async def after_db(self):
@@ -74,19 +74,12 @@ class StellaBot(commands.Bot):
                 print(f"cog {cog} is loaded")
 
     @to_call.append
-    async def fill_prefix(self):
-        """Fills the bot actual prefix"""
-        prefixes = await self.pool_pg.fetch("SELECT * FROM internal_prefix")
-        self.existing_prefix = {data["snowflake_id"]: data["prefix"] for data in prefixes}
-
-    @to_call.append
     async def fill_bots(self):
         """Fills the pending/confirmed bots in discord.py"""
-        record_pending = await self.pool_pg.fetch("SELECT bot_id FROM pending_bots;")
-        self.pending_bots = set(x["bot_id"] for x in record_pending)
+        for attr in "pending", "confirmed":
+            record = await self.pool_pg.fetch(f"SELECT bot_id FROM {attr}_bots")
+            setattr(self, f"{attr}_bots", set(x["bot_id"] for x in record))
 
-        record_confirmed = await self.pool_pg.fetch("SELECT bot_id FROM confirmed_bots;")
-        self.confirmed_bots = set(x["bot_id"] for x in record_confirmed)
         print("Bots list are now filled.")
 
     @to_call.append
@@ -98,16 +91,20 @@ class StellaBot(commands.Bot):
     async def get_prefix(self, message):
         """Handles custom prefixes, this function is invoked every time process_command method is invoke thus returning
         the appropriate prefixes depending on the guild."""
-        query = "INSERT INTO internal_prefix VALUES($1, $2) ON CONFLICT(snowflake_id) DO NOTHING"
+        query = "SELECT prefix internal_prefix WHERE snowflake_id=$1"
         snowflake_id = message.guild.id if message.guild else message.author.id
-        default = "uwu "
         if self.tester:
             return "+="
-        if snowflake_id not in self.existing_prefix:
-            self.existing_prefix.update({snowflake_id: default})
-            await self.pool_pg.fetch(query, snowflake_id, default)
-            return default
-        return self.existing_prefix.get(snowflake_id)
+
+        if not (prefix := self.existing_prefix.get(snowflake_id)):
+            data = await self.pool_pg.fetchrow(query, snowflake_id) or {}
+            prefix = self.existing_prefix.setdefault(snowflake_id, data.get("prefix") or "uwu ")
+
+        comp = re.compile(f"^({re.escape(prefix)}).*", flags=re.I)
+        match = comp.match(message.content)
+        if match is not None:
+            return match.group(1)
+        return fallback
 
     def get_message(self, message_id):
         """Gets the message from the cache"""

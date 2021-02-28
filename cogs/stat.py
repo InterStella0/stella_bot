@@ -242,15 +242,28 @@ class Stat(commands.Cog, name="Statistic"):
     @flg.add_flag("--color", "--colour", "-C", type=discord.Color, default=None, 
                   help="Changes the graph's color depending on the hex given. " \
                        "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
-    async def topcommands(self, ctx, member: Consumer[IsBot(user_check=False)], **flags):
-        query = "SELECT bot_id, command, COUNT(command) AS usage FROM commands_list " \
-                "WHERE guild_id=$1 AND bot_id=$2 " \
-                "GROUP BY bot_id, command " \
-                "ORDER BY usage DESC LIMIT 10"
+    async def topcommands(self, ctx, member: Consumer[Union[ElseConverter, IsBot]], **flags):
+        target = member
+        if isinstance(target, discord.Member):
+            query = "SELECT bot_id, command, COUNT(command) AS usage FROM commands_list " \
+                    "WHERE guild_id=$1 AND bot_id=$2 " \
+                    "GROUP BY bot_id, command " \
+                    "ORDER BY usage DESC LIMIT 10"
+            values = (ctx.guild.id, target.id)
+            error = "Looks like no data is present for this bot."
+            method = "avatar_url"
+        else:
+            query = "SELECT command, COUNT(command) AS usage FROM commands_list " \
+                    "WHERE guild_id=$1 " \
+                    "GROUP BY command " \
+                    "ORDER BY usage DESC LIMIT 10;"
+            values = (target.id,)
+            error = "Looks like i dont know anything in this server."
+            method = "icon_url"
 
-        data = await self.bot.pool_pg.fetch(query, ctx.guild.id, member.id)
+        data = await self.bot.pool_pg.fetch(query, *values)
         if not data:
-            raise commands.CommandError("Looks like no data is present for this bot.")
+            raise commands.CommandError(error)
 
         data.reverse()
         names = [v["command"] for v in data]
@@ -259,8 +272,9 @@ class Stat(commands.Cog, name="Statistic"):
                        xlabel="Usage",
                        ylabel="Commands")
 
+        asset = getattr(target, method)
         with ctx.typing():
-            avatar_bytes = io.BytesIO(await member.avatar_url.read())
+            avatar_bytes = io.BytesIO(await asset.read())
             if not (color := flags.get("color")):
                 color = major = await get_majority_color(avatar_bytes)
                 if not islight(*major.to_rgb()) or member == ctx.me:
@@ -271,7 +285,7 @@ class Stat(commands.Cog, name="Statistic"):
 
         embed = discord.Embed()
         embed.set_image(url="attachment://picture.png")
-        embed.set_author(name=member, icon_url=member.avatar_url)
+        embed.set_author(name=target, icon_url=asset)
         await ctx.embed(embed=embed, file=discord.File(to_send, filename="picture.png"))
         to_send.close()
 
