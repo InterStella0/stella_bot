@@ -9,10 +9,10 @@ from scipy.interpolate import make_interp_spline
 from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.colors as mcolors
-from typing import Optional, Union
+from typing import Union
 from matplotlib.patches import Polygon
 from utils import flags as flg
-from utils.greedy_parser import GreedyParser, Consumer
+from utils.greedy_parser import command, Consumer
 from utils.new_converters import TimeConverter, IsBot
 from utils.decorators import in_executor
 from discord.ext import commands
@@ -67,7 +67,12 @@ def create_graph(x, y, **kwargs):
     axes.get_xaxis().set_major_formatter(mdates.DateFormatter('%d/%m'))
     axes.grid(True)
     axes.autoscale(True)
-    return save_matplotlib(fig, axes)
+    value = save_matplotlib(fig, axes)
+    del im
+    del clip_path
+    del axes
+    del line
+    return value
 
 @in_executor()
 def create_bar(x_val, y_val, color, **kwargs):
@@ -109,7 +114,6 @@ def save_matplotlib(fig, axes):
     axes.clear()
     fig.clf()
     plt.close(fig)
-    buffer.seek(0)
     return buffer
 
 @in_executor()
@@ -130,6 +134,7 @@ def process_image(avatar_bytes, target):
         background.paste(target, [0,0], mask=target)
         to_send = io.BytesIO()
         background.save(to_send, format="PNG")
+        gray_back.close()
         to_send.seek(0)
         return to_send
 
@@ -167,10 +172,9 @@ class Stat(commands.Cog, name="Statistic"):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(aliases=["botactivitys", "ba"], 
-                      help="Creates a graph that represents the bot's usage in a server, which shows the command " \
-                           "invoke happening for a bot.",
-                      cls=GreedyParser)
+    @command(aliases=["botactivitys", "ba"], 
+             help="Creates a graph that represents the bot's usage in a server, which shows the command " \
+                  "invoke happening for a bot.")
     @commands.guild_only()
     @flg.add_flag("--time", "-T", type=TimeConvert, 
                   help="Time given for the bot, this flag must be more than 2 days and less than 2 months. " \
@@ -234,9 +238,12 @@ class Stat(commands.Cog, name="Statistic"):
         avatar_bytes.close()
         to_send.close()
 
-    @commands.command(aliases=["topcommand", "tc", "tcs"],
-                      help="Generate a bar graph for 10 most used command for a bot.",
-                      cls=GreedyParser)
+        del graph
+        del avatar_bytes
+        del to_send
+
+    @command(aliases=["topcommand", "tc", "tcs"],
+             help="Generate a bar graph for 10 most used command for a bot.")
     @commands.guild_only()
     @commands.cooldown(1, 30, commands.BucketType.user)
     @flg.add_flag("--color", "--colour", "-C", type=discord.Color, default=None, 
@@ -287,6 +294,8 @@ class Stat(commands.Cog, name="Statistic"):
         embed.set_image(url="attachment://picture.png")
         embed.set_author(name=target, icon_url=asset)
         await ctx.embed(embed=embed, file=discord.File(to_send, filename="picture.png"))
+        bar.close()
+        avatar_bytes.close()
         to_send.close()
 
 

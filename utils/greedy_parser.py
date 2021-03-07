@@ -7,6 +7,9 @@ import contextlib
 import discord
 import itertools
 import inspect
+import typing
+
+from discord.ext.commands.errors import BadUnionArgument
 from utils.errors import ConsumerUnableToConvert
 from utils.flags import SFlagCommand
 from discord.ext import commands
@@ -165,6 +168,8 @@ class _ConsumerParsing(BaseGreedy):
                 once |= 1
                 return await command.do_conversion(ctx, converter, current, param)
 
+        if getattr(converter, "__origin__", None) is typing.Union:
+            raise BadUnionArgument(param, converter.__args__, [])
         name = (converter if inspect.isclass(converter) else type(converter)).__name__
         raise ConsumerUnableToConvert(view.buffer[previous: view.index], name, converter=converter)
 
@@ -197,6 +202,19 @@ class GreedyParser(SFlagCommand):
         converter = self._get_converter(param)
         if isinstance(converter, commands.converter._Greedy):
             if param.kind == param.POSITIONAL_OR_KEYWORD or param.kind == param.POSITIONAL_ONLY:
+                if isinstance(converter, _ConsumerParsing) and required and ctx.view.eof:
+                    raise commands.MissingRequiredArgument(param)
                 return await self._transform_greedy_pos(ctx, param, required, converter, converter.converter)
 
         return await super().transform(ctx, param)
+
+def command(name=None, *, bot=None, **attrs):
+    def decorator(func):
+        if isinstance(func, commands.Command):
+            raise TypeError('Callback is already a command.')
+
+        command = GreedyParser(func, name=name, **attrs)
+        if bot:
+            bot.add_command(command)
+        return command
+    return decorator

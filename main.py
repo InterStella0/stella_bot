@@ -91,7 +91,7 @@ class StellaBot(commands.Bot):
     async def get_prefix(self, message):
         """Handles custom prefixes, this function is invoked every time process_command method is invoke thus returning
         the appropriate prefixes depending on the guild."""
-        query = "SELECT prefix internal_prefix WHERE snowflake_id=$1"
+        query = "SELECT prefix FROM internal_prefix WHERE snowflake_id=$1"
         snowflake_id = message.guild.id if message.guild else message.author.id
         if self.tester:
             return "+="
