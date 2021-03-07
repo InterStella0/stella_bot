@@ -2,6 +2,7 @@ import discord
 import datetime
 import contextlib
 import time
+import tabulate
 import asyncio
 import traceback
 import io
@@ -9,14 +10,18 @@ import textwrap
 import more_itertools
 from typing import Union, Optional
 from discord.ext import commands
-from discord.ext.commands import Greedy
-from utils.decorators import event_check
+from utils import greedy_parser
+from utils.decorators import event_check, pages
 from utils.useful import call, empty_page_format, MenuBase
-from utils.greedy_parser import GreedyParser, Separator
+from utils.greedy_parser import GreedyParser, Separator, UntilFlag
 from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
 from utils import flags as flg
 from jishaku.codeblocks import codeblock_converter
 
+
+@pages()
+async def show_result(self, menu, entry):
+    return f"```py\n{entry}```"
 
 class Myself(commands.Cog, command_attrs=dict(hidden=True)):
     def __init__(self, bot):
@@ -25,7 +30,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
     async def cog_check(self, ctx):
         return await commands.is_owner().predicate(ctx)
 
-    @commands.command(cls=flg.SFlagCommand)
+    @greedy_parser.command()
     @flg.add_flag("--joined_at", type=DatetimeConverter)
     @flg.add_flag("--jump_url", type=JumpValidator)
     @flg.add_flag("--requested_at", type=DatetimeConverter)
@@ -73,7 +78,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         self.bot.dispatch("message", message)
         await ctx.confirmed()
 
-    @commands.command(cls=flg.SFlagCommand)
+    @greedy_parser.command()
     @flg.add_flag("--uses", type=int, default=1)
     @flg.add_flag("--code", type=codeblock_converter)
     async def command(self, ctx, **flags):
@@ -240,7 +245,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         if await self.bot.is_owner(before.author) and not before.embeds and not after.embeds:
             await self.bot.process_commands(after)
 
-    @commands.command(cls=flg.SFlagCommand)
+    @greedy_parser.command()
     @flg.add_flag("--must", type=bool, action="store_true", default=False)
     @flg.add_flag("--messages", nargs='+', type=discord.Message)
     @commands.bot_has_permissions(read_message_history=True)
@@ -280,7 +285,6 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         
         await ctx.confirmed()
 
-
     @commands.command()
     async def dispatch(self, ctx, message: discord.Message):
         self.bot.dispatch('message', message)
@@ -296,6 +300,32 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         outputs = [call(do_cog, ext, ret=True) or f"cogs.{ext} is {method}ed"
                    for ext in extensions]
         await ctx.embed(description="\n".join(str(x) for x in outputs))
+
+    @greedy_parser.command()
+    @flg.add_flag("--not_tabulate", "-NT", action="store_true", default=False)
+    @flg.add_flag("--max_row", "-MR", type=int, default=15)
+    async def sql(self, ctx, query: UntilFlag[str], **flags):
+        dont_tabulate = flags.pop("not_tabulate", False)
+        rows = await self.bot.pool_pg.fetch(query)
+        if not dont_tabulate and rows:
+            to_pass = {"no": [*range(1, len(rows) + 1)]}
+            for d in rows:
+                for k, v in d.items():
+                    value = to_pass.setdefault(k, [])
+                    value.append(v)
+            table = tabulate.tabulate(to_pass, 'keys', 'pretty').split("\n")
+            datarows = []
+            last_row = [(" " * int(len(table[0]) / 2 - 5)) + "-- More --"] 
+            tabledata = [*more_itertools.chunked(table[3:], flags.pop("max_row"))]
+            for few_row in tabledata:
+                last_row = [] if few_row is tabledata[-1] else last_row
+                datarows.append(table[:3] + few_row + last_row)
+            to_display = ["\n".join(row) for row in datarows]
+        else:
+            to_display = textwrap.wrap(str(rows), 1000, replace_whitespace=False)
+        
+        menu = MenuBase(show_result(to_display)) 
+        await menu.start(ctx)
 
 
 def setup(bot):

@@ -7,7 +7,6 @@ import sys
 import asyncio
 import contextlib
 from utils.decorators import pages, in_executor
-from utils.greedy_parser import WithCommaStringView
 from collections import namedtuple
 from discord.ext.menus import First, Last, Button
 from discord.utils import maybe_coroutine
@@ -216,6 +215,7 @@ def realign(iterable, key, discrim='|'):
 class StellaContext(commands.Context):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        from utils.greedy_parser import WithCommaStringView
         self.view = WithCommaStringView(kwargs.get("view"))
         self.__dict__.update(dict.fromkeys(["waiting", "result", "channel_used", "running", "failed"]))
 
@@ -281,3 +281,12 @@ class RenameClass(type):
         if name:
             new_class.__name__ = name
         return new_class
+
+def isiterable(obj):
+    try:
+        iter(obj) and obj[0]
+    except TypeError:
+        return False
+    except:
+        pass
+    return True

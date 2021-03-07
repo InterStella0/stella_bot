@@ -8,10 +8,11 @@ import discord
 import itertools
 import inspect
 import typing
-
+from collections.abc import Iterable
 from discord.ext.commands.errors import BadUnionArgument
 from utils.errors import ConsumerUnableToConvert
 from utils.flags import SFlagCommand
+from utils.useful import isiterable
 from discord.ext import commands
 from discord.ext.commands import CommandError, ArgumentParsingError
 
@@ -65,7 +66,17 @@ class WithCommaStringView(commands.view.StringView):
         return result
 
 
-class BaseGreedy(commands.converter._Greedy):
+class GreedyAllowStr(commands.converter._Greedy):
+    def __getitem__(self, params):
+        try:
+            return super().__getitem__(params)
+        except TypeError as e:
+            if str(e) == "Greedy[str] is invalid.":
+                return self.__class__(converter=str)
+            raise e from None
+
+
+class BaseGreedy(GreedyAllowStr):
     """A Base class for all Greedy subclass, basic attribute such as separators
        and escapes."""
     def __init__(self, **kwargs):
@@ -89,10 +100,10 @@ class BaseGreedy(commands.converter._Greedy):
 
     def __getitem__(self, param):
         new_param = param
-        if hasattr(param, "__iter__"):
+        if isiterable(param):
             new_param = new_param[0]
         instance = super().__getitem__(new_param) 
-        if hasattr(param, "__iter__"):
+        if isiterable(param):
             separators, escapes = param[1:] if len(param) > 2 else (param[1], {})
             instance = self.add_into_instance(instance, separators, escapes)
         return instance
@@ -173,8 +184,24 @@ class _ConsumerParsing(BaseGreedy):
         name = (converter if inspect.isclass(converter) else type(converter)).__name__
         raise ConsumerUnableToConvert(view.buffer[previous: view.index], name, converter=converter)
 
+
+class _UntilFlagParsing(BaseGreedy):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.separators = {"-"}
+
+    async def actual_greedy_parsing(self, command, ctx, param, required, converter):
+        view = ctx.view
+        view.skip_ws()
+        if pos := view.get_parser(param.annotation):
+            argument = view.get_arg_parser(pos)
+        else:
+            argument = view.read_rest()
+        return await command.do_conversion(ctx, converter, argument, param)
+
 Separator = _SeparatorParsing()
 Consumer = _ConsumerParsing()
+UntilFlag = _UntilFlagParsing()
 
 #Subclass Flag so i can use flag lol
 class GreedyParser(SFlagCommand):
