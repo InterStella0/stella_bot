@@ -12,7 +12,7 @@ import matplotlib.colors as mcolors
 from typing import Union
 from matplotlib.patches import Polygon
 from utils import flags as flg
-from utils.greedy_parser import command, Consumer
+from utils.greedy_parser import UntilFlag, command, Consumer
 from utils.new_converters import TimeConverter, IsBot
 from utils.decorators import in_executor
 from discord.ext import commands
@@ -185,7 +185,7 @@ class Stat(commands.Cog, name="Statistic"):
                   help="Changes the graph's color depending on the hex given. " \
                        "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
     @commands.cooldown(1, 30, commands.BucketType.user)
-    async def botactivity(self, ctx, member: Consumer[Union[ElseConverter, IsBot]], **flags):
+    async def botactivity(self, ctx, member: UntilFlag[Union[ElseConverter, IsBot]], **flags):
         target = member
         time_rn = datetime.datetime.utcnow()
         time_given = flags.get("time") or time_rn - datetime.timedelta(days=2)
@@ -249,7 +249,7 @@ class Stat(commands.Cog, name="Statistic"):
     @flg.add_flag("--color", "--colour", "-C", type=discord.Color, default=None, 
                   help="Changes the graph's color depending on the hex given. " \
                        "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
-    async def topcommands(self, ctx, member: Consumer[Union[ElseConverter, IsBot]], **flags):
+    async def topcommands(self, ctx, member: UntilFlag[Union[ElseConverter, IsBot]], **flags):
         target = member
         if isinstance(target, discord.Member):
             query = "SELECT bot_id, command, COUNT(command) AS usage FROM commands_list " \

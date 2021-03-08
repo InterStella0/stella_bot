@@ -194,10 +194,13 @@ class _UntilFlagParsing(BaseGreedy):
         view = ctx.view
         view.skip_ws()
         if pos := view.get_parser(param.annotation):
+            while view.buffer[pos].isspace():
+                pos -= 1
             argument = view.get_arg_parser(pos)
         else:
             argument = view.read_rest()
         return await command.do_conversion(ctx, converter, argument, param)
+
 
 Separator = _SeparatorParsing()
 Consumer = _ConsumerParsing()
@@ -229,7 +232,7 @@ class GreedyParser(SFlagCommand):
         converter = self._get_converter(param)
         if isinstance(converter, commands.converter._Greedy):
             if param.kind == param.POSITIONAL_OR_KEYWORD or param.kind == param.POSITIONAL_ONLY:
-                if isinstance(converter, _ConsumerParsing) and required and ctx.view.eof:
+                if isinstance(converter, (_ConsumerParsing, _UntilFlagParsing)) and required and ctx.view.eof:
                     raise commands.MissingRequiredArgument(param)
                 return await self._transform_greedy_pos(ctx, param, required, converter, converter.converter)
 

@@ -17,7 +17,7 @@ from utils.new_converters import BotPrefixes, IsBot, BotCommands, JumpValidator,
 from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, MenuBase, default_date, plural, realign, search_commands
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
-
+from utils import greedy_parser
 
 ReactRespond = collections.namedtuple("ReactRespond", "created_at author reference")
 
@@ -550,7 +550,7 @@ class FindBot(commands.Cog, name="Bots"):
                            "This is useful for flexing for no reason."
                       )
     @is_discordpy()
-    async def whatadd(self, ctx, author: IsBot(is_bot=False, user_check=False) = None):
+    async def whatadd(self, ctx, *, author: IsBot(is_bot=False, user_check=False) = None):
         author = author or ctx.author
         if author.bot:
             return await ctx.maybe_reply("That's a bot lol")
@@ -584,7 +584,7 @@ class FindBot(commands.Cog, name="Bots"):
                       help="Shows who added the bot, when they requested it and when the bot was added including the "
                            "jump url to the original request message in discord.py.")
     @is_discordpy()
-    async def whoadd(self, ctx, bot: BotAdded):
+    async def whoadd(self, ctx, *, bot: BotAdded):
         data = bot
         author = await try_call(commands.UserConverter().convert, ctx, str(data.author), exception=UserNotFound)
         embed = discord.Embed(title=str(data.bot))
@@ -614,7 +614,7 @@ class FindBot(commands.Cog, name="Bots"):
                       help="Shows what the bot's prefix. This is sometimes inaccurate. Don't rely on it too much. "
                            "This also does not know it's aliases prefixes.")
     @commands.guild_only()
-    async def whatprefix(self, ctx, member: BotPrefixes):
+    async def whatprefix(self, ctx, *, member: BotPrefixes):
         show_prefix = functools.partial(self.clean_prefix, ctx)
         prefix = show_prefix(member.prefix)
         alias = '`, `'.join(map(show_prefix, member.aliases))
@@ -695,7 +695,7 @@ class FindBot(commands.Cog, name="Bots"):
                       help="Show's how many command calls for a given bot. This works by counting how many times "
                            "a message is considered a command for that bot where that bot has responded in less than "
                            "2 seconds.")
-    async def botuse(self, ctx, bot: BotCommands):
+    async def botuse(self, ctx, *, bot: BotCommands):
         await ctx.embed(
             title=f"{bot}'s Usage",
             description=plural(f"`{bot.total_usage}` command(s) has been called for **{bot}**.", bot.total_usage)
@@ -707,7 +707,7 @@ class FindBot(commands.Cog, name="Bots"):
                            "been called, the reason on why it was added, the time it was requested and the time it "
                            "joined the server.")
     @is_discordpy()
-    async def botinfo(self, ctx, bot: IsBot):
+    async def botinfo(self, ctx, *, bot: IsBot):
         # TODO: I said this 3 months ago to redo this, but im lazy
         titles = (("Bot Prefix", "{0.allprefixes}", BotPrefixes),
                   ("Command Usage", "{0.total_usage}", BotCommands),
@@ -763,12 +763,11 @@ class FindBot(commands.Cog, name="Bots"):
         await menu.start(ctx)
 
 
-    @commands.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
-                      help="Shows all bot's command usage in the server on a sorted list.",
-                      cls=flg.SFlagCommand)
+    @greedy_parser.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
+                      help="Shows all bot's command usage in the server on a sorted list.")
     @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
                   help="Reverses the list. This flag accepts True or False, default to False if not stated.")
-    async def botrank(self, ctx, bot: BotCommands = None, **flags):
+    async def botrank(self, ctx, bot: greedy_parser.UntilFlag[BotCommands] = None, **flags):
         reverse = flags.pop("reverse", False)
         bots = {x.id: x for x in ctx.guild.members if x.bot}
         query = "SELECT bot_id, COUNT(command) AS total_usage FROM commands_list " \
@@ -803,7 +802,7 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.command(aliases=["botcommand", "bc", "bcs"],
                       help="Predicting the bot's command based on the message history.")
     @commands.guild_only()
-    async def botcommands(self, ctx, bot: BotCommands):
+    async def botcommands(self, ctx, *, bot: BotCommands):
         owner_info = None
         if ctx.guild.id == DISCORD_PY:
             owner_info = await try_call(BotAdded.convert, ctx, str(int(bot)))
@@ -820,7 +819,7 @@ class FindBot(commands.Cog, name="Bots"):
         menu = MenuBase(each_page(bot.commands))
         await menu.start(ctx)
 
-    @commands.command(cls=flg.SFlagCommand, aliases=["botchange", "cb", "botchanges"],
+    @greedy_parser.command(aliases=["botchange", "cb", "botchanges"],
                       brief="Allows you to change your own bot's information in whoadd/whatadd command.",
                       help="Allows you to change your own bot's information  in whoadd/whatadd command, "\
                            "only applicable for discord.py server. The user is only allowed to change their own bot, "\
@@ -831,7 +830,7 @@ class FindBot(commands.Cog, name="Bots"):
     @flg.add_flag("--reason", nargs="+", help="The text that are displayed under 'Reason'.")
     @flg.add_flag("--message", type=AuthorMessage, 
                   help="This flag will override 'reason', 'requested' and 'jump url' according to the target message.")
-    async def changebot(self, ctx, bot: BotOwner, **flags):
+    async def changebot(self, ctx, bot: greedy_parser.UntilFlag[BotOwner], **flags):
         bot = bot.bot
         if not any(flags.values()):
             raise commands.CommandError("No value were passed, at least put a flag." \
