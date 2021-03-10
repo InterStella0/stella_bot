@@ -310,7 +310,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         MR = flags.get("max_row")
         rows = await self.bot.pool_pg.fetch(query)
         if not dont_tabulate and rows:
-            to_pass = {"no": [*range(1, len(rows) + 1)]} if flags.pop("not_number") else {}
+            to_pass = {"no": [*range(1, len(rows) + 1)]} if not flags.pop("not_number") else {}
             for d in rows:
                 for k, v in d.items():
                     value = to_pass.setdefault(k, [])
@@ -324,13 +324,13 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
                 values = table[:size] + last_row
                 result = len("\n".join(values))
                 was_size = max(result, was_size)
-                return result > 1500
+                return result > 1430
             
             while check_content(MR):
                 MR -= 1
             if (given := flags.pop("max_row")) - MR:
                 await ctx.maybe_reply(
-                    f"Showing `{given}` rows was more than `1500` characters(`{was_size}`), showing `{MR}` rows instead.",
+                    f"Showing `{given}` rows was more than `1430` characters(`{was_size}`), showing `{MR}` rows instead.",
                     delete_after=60
                 )
 

@@ -13,8 +13,6 @@ def is_discordpy(silent=False):
         else:
             if not silent:
                 raise NotInDpy()
-            else:
-                raise
     return commands.check(predicate)
 
 
