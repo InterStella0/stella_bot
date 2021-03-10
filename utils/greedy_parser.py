@@ -194,7 +194,8 @@ class _UntilFlagParsing(BaseGreedy):
         view = ctx.view
         view.skip_ws()
         if pos := view.get_parser(param.annotation):
-            while view.buffer[pos].isspace():
+            # Undo until end of arg before separator
+            while view.buffer[view.index + pos - 1].isspace():
                 pos -= 1
             argument = view.get_arg_parser(pos)
         else:
