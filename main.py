@@ -16,7 +16,6 @@ load_dotenv(dotenv_path)
 
 import utils.library_override
 to_call = ListCall()
-fallback = os.urandom(32).hex()
 
 class StellaBot(commands.Bot):
     def __init__(self, **kwargs):
@@ -104,7 +103,7 @@ class StellaBot(commands.Bot):
         match = comp.match(message.content)
         if match is not None:
             return match.group(1)
-        return fallback
+        return prefix
 
     def get_message(self, message_id):
         """Gets the message from the cache"""
