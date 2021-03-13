@@ -1,4 +1,5 @@
 import datetime
+import enum
 import discord
 import matplotlib
 import math
@@ -9,6 +10,7 @@ from scipy.interpolate import make_interp_spline
 from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.colors as mcolors
+import matplotlib.patheffects as peffects
 from typing import Union
 from matplotlib.patches import Polygon
 from utils import flags as flg
@@ -74,10 +76,45 @@ def create_graph(x, y, **kwargs):
     del line
     return value
 
+def hilo(a, b, c):
+    if c < b: 
+        b, c = c, b
+    if b < a: 
+        a, b = b, a
+    if c < b: 
+        b, c = c, b
+    return a + c
+
+def complement_color(r, g, b):
+    k = hilo(r, g, b)
+    return discord.Color.from_rgb(*tuple(k - u for u in (r, g, b)))
+
+
+def inverse_color(r, g, b):
+    return [*map(lambda x: 255 - x, (r, g, b))]
+
 @in_executor()
 def create_bar(x_val, y_val, color, **kwargs):
     fig, axes = plt.subplots()
     bars = axes.barh(x_val, y_val, edgecolor=color)
+
+    temp = discord.Color(int(color.replace("#", "0x"), base=16))
+    comp = str((comp_color := complement_color(*temp.to_rgb())))
+    inverse = str(discord.Color.from_rgb(*inverse_color(*comp_color.to_rgb())))
+    maximum_size = max(y_val)
+
+    def percent(per):
+        return maximum_size * per
+
+    for i, v in enumerate(y_val):
+        pixel = percent(0.025) + percent(0.001)
+        text_size = len(str(v))
+        offset = pixel * text_size
+        actual_val = v - offset
+        actual_val += ((pixel + percent(0.010)) * text_size) * (actual_val <= 0)
+        axes.text(actual_val, i - .15, str(v), color=comp, fontweight='bold', 
+                    path_effects=[peffects.withStroke(linewidth=0.8, foreground=inverse)])
+        
     for attr, value in kwargs.items():
         getattr(axes, f"set_{attr}")(value, color='w')
 
