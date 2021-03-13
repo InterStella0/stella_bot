@@ -4,11 +4,9 @@ if you copy this but make your repository private, ur weird
 pls be nice to me if you do copy it that's all i want :pleading:
 """
 import contextlib
-import discord
 import itertools
 import inspect
 import typing
-from collections.abc import Iterable
 from discord.ext.commands.errors import BadUnionArgument
 from utils.errors import ConsumerUnableToConvert
 from utils.flags import SFlagCommand
@@ -114,7 +112,13 @@ class BaseGreedy(GreedyAllowStr):
     
     async def actual_greedy_parsing(self, command, ctx, param, required, converter):
         raise NotImplemented("Greedy subclass seems to not have this method. It dies.")
-    
+
+
+class RequiredGreedy(BaseGreedy):
+    """All Required greedy must inherit this class so I can tell which greedy is required."""
+    pass
+
+
 class _SeparatorParsing(BaseGreedy):
     """Allow Greedy to be parse in a way that it will try to find ',' or any
        other passed separator in an argument, and will allow spaced argument to be
@@ -145,7 +149,7 @@ class _SeparatorParsing(BaseGreedy):
         return result
 
 
-class _ConsumerParsing(BaseGreedy):
+class _ConsumerParsing(RequiredGreedy):
     """Allow a consume rest behaviour by trying to convert an argument into a valid
        conversion for each word it sees.
        Example: 'uwu argument1 argument2 argument3'
@@ -185,7 +189,7 @@ class _ConsumerParsing(BaseGreedy):
         raise ConsumerUnableToConvert(view.buffer[previous: view.index], name, converter=converter)
 
 
-class _UntilFlagParsing(BaseGreedy):
+class _UntilFlagParsing(RequiredGreedy):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.separators = {"-"}
@@ -231,10 +235,26 @@ class GreedyParser(SFlagCommand):
 
         required = param.default is param.empty
         converter = self._get_converter(param)
+        optional_converter = self._is_typing_optional(param.annotation)
+
+        def is_greedy_required(x):
+            return isinstance(x, RequiredGreedy)
+
+        if optional_converter:
+            stored_converter = converter.__args__[0]
+            if is_greedy_required(stored_converter):
+                converter = stored_converter
+            
+
         if isinstance(converter, commands.converter._Greedy):
             if param.kind == param.POSITIONAL_OR_KEYWORD or param.kind == param.POSITIONAL_ONLY:
-                if isinstance(converter, (_ConsumerParsing, _UntilFlagParsing)) and required and ctx.view.eof:
-                    raise commands.MissingRequiredArgument(param)
+                if is_greedy_required(converter) and ctx.view.eof:
+                    if required:
+                        if optional_converter:
+                            return None
+                        raise commands.MissingRequiredArgument(param)
+                    else:
+                        return param.default
                 return await self._transform_greedy_pos(ctx, param, required, converter, converter.converter)
 
         return await super().transform(ctx, param)
