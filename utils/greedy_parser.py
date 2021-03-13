@@ -29,7 +29,7 @@ class WithCommaStringView(commands.view.StringView):
         """Tries to get a separator within an argument, return None if it can't find any."""
         if not hasattr(converter, "separators"):
             return
-        pos = 0
+        pos = previous = 0
         escaped = []
         with contextlib.suppress(IndexError):
             while not self.eof:
@@ -110,7 +110,7 @@ class BaseGreedy(GreedyAllowStr):
         instance = self.add_into_instance(self, separators, escapes)
         return instance
     
-    async def actual_greedy_parsing(self, command, ctx, param, required, converter):
+    async def actual_greedy_parsing(self, command, ctx, param, required, converter, optional=False):
         raise NotImplemented("Greedy subclass seems to not have this method. It dies.")
 
 
@@ -126,7 +126,7 @@ class _SeparatorParsing(BaseGreedy):
        
        Returns an empty list when none of the argument was valid."""
 
-    async def actual_greedy_parsing(self, command, ctx, param, required, converter):
+    async def actual_greedy_parsing(self, command, ctx, param, required, converter, optional=False):
         view = ctx.view
         result = []
         while not view.eof:
@@ -159,7 +159,7 @@ class _ConsumerParsing(RequiredGreedy):
 
        This Greedy raises an error if it can't find any valid conversion."""
 
-    async def actual_greedy_parsing(self, command, ctx, param, required, converter):
+    async def actual_greedy_parsing(self, command, ctx, param, required, converter, optional=False):
         view = ctx.view
         view.skip_ws()
         if pos := view.get_parser(param.annotation):
@@ -197,6 +197,13 @@ class _UntilFlagParsing(RequiredGreedy):
     async def actual_greedy_parsing(self, command, ctx, param, required, converter):
         view = ctx.view
         view.skip_ws()
+        if view.buffer[view.index] == '-':
+            if required:
+                if self._is_typing_optional(param.annotation):
+                    return None
+                raise commands.MissingRequiredArgument(param)
+            else:
+                return param.default
         if pos := view.get_parser(param.annotation):
             # Undo until end of arg before separator
             while view.buffer[view.index + pos - 1].isspace():
@@ -278,6 +285,10 @@ class GreedyParser(SFlagCommand):
             converter = self._get_converter(param)
             converter = self.get_optional_converter(converter)
             greedy = isinstance(converter, commands.converter._Greedy)
+            if param.kind == param.VAR_KEYWORD:
+                result.append('[%s...]' % name)
+                continue
+
             if param.default is not param.empty:
                 # We don't want None or '' to trigger the [name=value] case and instead it should
                 # do [name] since [name=None] or [name=] are not exactly useful for the user.

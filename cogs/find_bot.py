@@ -1,3 +1,4 @@
+from typing import Optional
 import discord
 import datetime
 import re
