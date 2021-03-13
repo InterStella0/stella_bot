@@ -226,6 +226,16 @@ class GreedyParser(SFlagCommand):
             return await converter.after_greedy(ctx, result)
         return result
 
+    @staticmethod
+    def is_greedy_required(x):
+        return isinstance(x, RequiredGreedy)
+
+    def get_optional_converter(self, converter):
+        if getattr(converter, "__args__", []):
+            stored_converter = converter.__args__[0]
+            if self.is_greedy_required(stored_converter):
+                return stored_converter
+        return converter
 
     async def transform(self, ctx, param):
         """Because Danny literally only allow commands.converter._Greedy class to be pass here using
@@ -237,18 +247,12 @@ class GreedyParser(SFlagCommand):
         converter = self._get_converter(param)
         optional_converter = self._is_typing_optional(param.annotation)
 
-        def is_greedy_required(x):
-            return isinstance(x, RequiredGreedy)
-
         if optional_converter:
-            stored_converter = converter.__args__[0]
-            if is_greedy_required(stored_converter):
-                converter = stored_converter
-            
+            converter = self.get_optional_converter(converter)
 
         if isinstance(converter, commands.converter._Greedy):
             if param.kind == param.POSITIONAL_OR_KEYWORD or param.kind == param.POSITIONAL_ONLY:
-                if is_greedy_required(converter) and ctx.view.eof:
+                if self.is_greedy_required(converter) and ctx.view.eof:
                     if required:
                         if optional_converter:
                             return None
@@ -258,6 +262,53 @@ class GreedyParser(SFlagCommand):
                 return await self._transform_greedy_pos(ctx, param, required, converter, converter.converter)
 
         return await super().transform(ctx, param)
+
+    @property
+    def signature(self):
+        if self.usage is not None:
+            return self.usage
+
+
+        params = self.clean_params
+        if not params:
+            return ''
+
+        result = []
+        for name, param in params.items():
+            converter = self._get_converter(param)
+            converter = self.get_optional_converter(converter)
+            greedy = isinstance(converter, commands.converter._Greedy)
+            if param.default is not param.empty:
+                # We don't want None or '' to trigger the [name=value] case and instead it should
+                # do [name] since [name=None] or [name=] are not exactly useful for the user.
+                should_print = param.default if isinstance(param.default, str) else param.default is not None
+                if should_print:
+                    result.append('[%s=%s]' % (name, param.default) if not greedy else
+                                  '[%s=%s]...' % (name, param.default))
+                    continue
+                else:
+                    if not isinstance(converter, commands.converter._Greedy):
+                        result.append('[%s]' % name)
+                    else:
+                        result.append('[%s]...' % name)
+
+            elif param.kind == param.VAR_POSITIONAL:
+                if self.require_var_positional:
+                    result.append('<%s...>' % name)
+                else:
+                    result.append('[%s...]' % name)
+            elif greedy:
+                if isinstance(converter, RequiredGreedy) and not self._is_typing_optional(param.annotation):
+                    result.append('<%s>...' % name)
+                else:
+                    result.append('[%s]...' % name)
+            elif self._is_typing_optional(param.annotation):
+                result.append('[%s]' % name)
+            else:
+                result.append('<%s>' % name)
+
+        return ' '.join(result)
+
 
 def command(name=None, *, bot=None, **attrs):
     def decorator(func):
