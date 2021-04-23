@@ -6,6 +6,7 @@ import traceback
 import sys
 import asyncio
 import contextlib
+import typing
 from utils.decorators import pages, in_executor
 from collections import namedtuple
 from discord.ext.menus import First, Last, Button
@@ -43,7 +44,7 @@ class BaseEmbed(discord.Embed):
     @classmethod
     def default(cls, ctx, **kwargs):
         instance = cls(**kwargs)
-        instance.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar_url)
+        instance.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar.url)
         return instance
 
     @classmethod
@@ -234,7 +235,7 @@ class StellaContext(commands.Context):
             new_embed.update(ori_embed.to_dict())
             ori_embed = discord.Embed.from_dict(new_embed)
         to_send = (self.send, self.maybe_reply)[reply]
-        if not self.me.permissions_in(self.channel).embed_links:
+        if not self.channel.permissions_for(self.me).embed_links:
             raise commands.BotMissingPermissions(["embed_links"])
         send_dict = {'tts': False, 'file': None, 'files': None, 
                     'delete_after': None, 'nonce': None}
@@ -274,7 +275,7 @@ def in_local(func, target):
     """Useless function"""
     return func()[target]
 
-class RenameClass(type):
+class RenameClass(typing._ProtocolMeta):
     """It rename a class based on name kwargs, what do you expect"""
     def __new__(mcls, names, bases, attrs, *, name=None):
         new_class = super().__new__(mcls, name, bases, attrs)

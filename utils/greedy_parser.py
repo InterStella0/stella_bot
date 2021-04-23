@@ -64,13 +64,13 @@ class WithCommaStringView(commands.view.StringView):
         return result
 
 
-class GreedyAllowStr(commands.converter._Greedy):
-    def __getitem__(self, params):
+class GreedyAllowStr(commands.converter.Greedy):
+    def __class_getitem__(cls, params):
         try:
-            return super().__getitem__(params)
+            return super().__class_getitem__(params)
         except TypeError as e:
             if str(e) == "Greedy[str] is invalid.":
-                return self.__class__(converter=str)
+                return cls(converter=str)
             raise e from None
 
 
@@ -96,14 +96,14 @@ class BaseGreedy(GreedyAllowStr):
         instance.escapes |= set(escapes)
         return instance
 
-    def __getitem__(self, param):
+    def __class_getitem__(cls, param):
         new_param = param
         if isiterable(param):
             new_param = new_param[0]
-        instance = super().__getitem__(new_param) 
+        instance = super().__class_getitem__(new_param) 
         if isiterable(param):
             separators, escapes = param[1:] if len(param) > 2 else (param[1], {})
-            instance = self.add_into_instance(instance, separators, escapes)
+            instance = cls.add_into_instance(instance, separators, escapes)
         return instance
 
     def __call__(self, *separators, escapes={}):
@@ -119,7 +119,7 @@ class RequiredGreedy(BaseGreedy):
     pass
 
 
-class _SeparatorParsing(BaseGreedy):
+class Separator(BaseGreedy):
     """Allow Greedy to be parse in a way that it will try to find ',' or any
        other passed separator in an argument, and will allow spaced argument to be
        passed given that there are a separator at the end of each argument.
@@ -137,7 +137,7 @@ class _SeparatorParsing(BaseGreedy):
                     argument = view.get_arg_parser(pos)
                 else:
                     argument = view.get_quoted_word()
-                value = await command.do_conversion(ctx, converter, argument, param)
+                value = await commands.run_converters(ctx, converter, argument, param)
             except (CommandError, ArgumentParsingError):
                 view.index = previous
                 break
@@ -149,7 +149,7 @@ class _SeparatorParsing(BaseGreedy):
         return result
 
 
-class _ConsumerParsing(RequiredGreedy):
+class Consumer(RequiredGreedy):
     """Allow a consume rest behaviour by trying to convert an argument into a valid
        conversion for each word it sees.
        Example: 'uwu argument1 argument2 argument3'
@@ -164,7 +164,7 @@ class _ConsumerParsing(RequiredGreedy):
         view.skip_ws()
         if pos := view.get_parser(param.annotation):
             current = view.get_arg_parser(pos)
-            return await command.do_conversion(ctx, converter, current, param)
+            return await commands.run_converters(ctx, converter, current, param)
 
         previous = view.index
         once = 0
@@ -181,7 +181,7 @@ class _ConsumerParsing(RequiredGreedy):
                     
                     current = view.buffer[previous: view.index]
                 once |= 1
-                return await command.do_conversion(ctx, converter, current, param)
+                return await commands.run_converters(ctx, converter, current, param)
 
         if getattr(converter, "__origin__", None) is typing.Union:
             raise BadUnionArgument(param, converter.__args__, [])
@@ -189,7 +189,7 @@ class _ConsumerParsing(RequiredGreedy):
         raise ConsumerUnableToConvert(view.buffer[previous: view.index], name, converter=converter)
 
 
-class _UntilFlagParsing(RequiredGreedy):
+class UntilFlag(RequiredGreedy):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.separators = {"-"}
@@ -211,12 +211,8 @@ class _UntilFlagParsing(RequiredGreedy):
             argument = view.get_arg_parser(pos)
         else:
             argument = view.read_rest()
-        return await command.do_conversion(ctx, converter, argument, param)
+        return await commands.converter.run_converters(ctx, converter, argument, param)
 
-
-Separator = _SeparatorParsing()
-Consumer = _ConsumerParsing()
-UntilFlag = _UntilFlagParsing()
 
 #Subclass Flag so i can use flag lol
 class GreedyParser(SFlagCommand):
@@ -251,13 +247,13 @@ class GreedyParser(SFlagCommand):
            It's obvious that Danny doesn't want people to subclass it smh."""
 
         required = param.default is param.empty
-        converter = self._get_converter(param)
+        converter = commands.converter.get_converter(param)
         optional_converter = self._is_typing_optional(param.annotation)
 
         if optional_converter:
             converter = self.get_optional_converter(converter)
 
-        if isinstance(converter, commands.converter._Greedy):
+        if isinstance(converter, commands.converter.Greedy):
             if param.kind == param.POSITIONAL_OR_KEYWORD or param.kind == param.POSITIONAL_ONLY:
                 if self.is_greedy_required(converter) and ctx.view.eof:
                     if required:
@@ -282,7 +278,7 @@ class GreedyParser(SFlagCommand):
 
         result = []
         for name, param in params.items():
-            converter = self._get_converter(param)
+            converter = commands.converter.get_converter(param)
             converter = self.get_optional_converter(converter)
             greedy = isinstance(converter, commands.converter._Greedy)
             if param.kind == param.VAR_KEYWORD:

@@ -183,7 +183,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
                 return result.content
 
         async def giving_emote(e):
-            if ctx.me.permissions_in(ctx.channel).external_emojis:
+            if ctx.channel.permissions_for(ctx.me).external_emojis:
                 await ctx.message.add_reaction(e)
 
         async def starting(startup):
@@ -257,7 +257,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
             return message.created_at > datetime.datetime.utcnow() - datetime.timedelta(days=14)
 
         must = flag["must"]
-        purge_enable = ctx.me.permissions_in(ctx.channel).manage_messages
+        purge_enable = ctx.channel.permissions_for(ctx.me).manage_messages
         if messages := flag.get("messages"):
             if purge_enable:
                 await ctx.channel.delete_messages(messages)

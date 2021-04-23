@@ -111,8 +111,8 @@ def create_bar(x_val, y_val, color, **kwargs):
         text_size = len(str(v))
         offset = pixel * text_size
         actual_val = v - offset
-        actual_val += ((pixel + percent(0.010)) * text_size) * (actual_val <= 0)
-        axes.text(actual_val, i - .15, str(v), color=comp, fontweight='bold', 
+        actual_val += ((pixel + percent(0.010)) * text_size) * (actual_val <= (0 + percent(0.01)))
+        axes.text(actual_val, i - .15, f"{v:,}", color=comp, fontweight='bold', 
                     path_effects=[peffects.withStroke(linewidth=0.8, foreground=inverse)])
         
     for attr, value in kwargs.items():
@@ -230,12 +230,12 @@ class Stat(commands.Cog, name="Statistic"):
             query = "SELECT * FROM commands_list WHERE guild_id=$1 AND bot_id=$2 AND time_used > $3"
             values = (ctx.guild.id, target.id, time_given)
             error = "Looks like no data is present for this bot."
-            method = "avatar_url"
+            method = "avatar"
         else:
             query = "SELECT * FROM commands_list WHERE guild_id=$1 AND time_used > $2"
             values = (target.id, time_given)
             error = "Looks like i dont know anything in this server."
-            method = "icon_url"
+            method = "icon"
         
         data = await self.bot.pool_pg.fetch(query, *values)
         if not data:
@@ -295,7 +295,7 @@ class Stat(commands.Cog, name="Statistic"):
                     "ORDER BY usage DESC LIMIT 10"
             values = (ctx.guild.id, target.id)
             error = "Looks like no data is present for this bot."
-            method = "avatar_url"
+            method = "avatar"
         else:
             query = "SELECT command, COUNT(command) AS usage FROM commands_list " \
                     "WHERE guild_id=$1 " \
@@ -303,7 +303,7 @@ class Stat(commands.Cog, name="Statistic"):
                     "ORDER BY usage DESC LIMIT 10;"
             values = (target.id,)
             error = "Looks like i dont know anything in this server."
-            method = "icon_url"
+            method = "icon"
 
         data = await self.bot.pool_pg.fetch(query, *values)
         if not data:

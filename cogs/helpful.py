@@ -82,7 +82,7 @@ class HelpMenu(HelpMenuBase):
                                               "what commands that the category have.")
         curr = self.current_page + 1 if (p := self.current_page > -1) else "cover page"
         pa = "page" if p else "the"
-        embed.set_author(icon_url=ctx.bot.user.avatar_url,
+        embed.set_author(icon_url=ctx.bot.user.avatar.url,
                          name=f"You were on {pa} {curr}")
         nav = '\n'.join(f"{self.dict_emoji[e].emoji} {self.dict_emoji[e].explain}" for e in exists)
         embed.add_field(name="Navigation:", value=nav)
@@ -106,7 +106,7 @@ class CogMenu(HelpMenu):
                                               "what's the command is about and a demonstration of usage.")
         curr = self.current_page + 1 if (p := self.current_page > -1) else "cover page"
         pa = "page" if p else "the"
-        embed.set_author(icon_url=ctx.bot.user.avatar_url,
+        embed.set_author(icon_url=ctx.bot.user.avatar.url,
                          name=f"You were on {pa} {curr}")
         nav = '\n'.join(f"{self.dict_emoji[e].emoji} {self.dict_emoji[e].explain}" for e in exists)
         embed.add_field(name="Navigation:", value=nav)
@@ -123,7 +123,7 @@ async def help_source_format(self, menu: HelpMenu, entry):
                                                     for command_help in list_commands),
                           color=menu.bot.color)
     author = menu.ctx.author
-    return embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar_url)
+    return embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar.url)
 
 
 class StellaBotHelp(commands.DefaultHelpCommand):

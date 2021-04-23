@@ -19,7 +19,7 @@ class ErrorHandler(commands.Cog):
         """The event triggered when an error is raised while invoking a command."""
         async def send_del(*args, **kwargs):
             await ctx.reply(*args, delete_after=60, **kwargs)
-            if ctx.me.permissions_in(ctx.channel).manage_messages:
+            if ctx.channel.permissions_for(ctx.me).manage_messages:
                 with contextlib.suppress(discord.NotFound):
                     await ctx.message.delete(delay=60)
         if hasattr(ctx.command, 'on_error'):
@@ -131,7 +131,7 @@ class ErrorHandler(commands.Cog):
             if not bucket.update_rate_limit():
                 embed.description += "**Command Example**"
                 embed.set_image(url=demo)
-        embed.set_footer(icon_url=ctx.me.avatar_url, text="The error is the capitalize argument.")
+        embed.set_footer(icon_url=ctx.me.avatar.url, text="The error is the capitalize argument.")
         return embed
 
 

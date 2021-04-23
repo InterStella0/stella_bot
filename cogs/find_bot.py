@@ -9,6 +9,7 @@ import contextlib
 import humanize
 import functools
 import collections
+import textwrap
 from dataclasses import dataclass
 from discord.ext import commands
 from discord.ext.commands import UserNotFound
@@ -143,7 +144,7 @@ async def bot_pending_list(self, menu: MenuBase, entry):
               ("Requested at", default_date(entry["requested_at"])),
               ("Message", f"[jump]({entry['jump_url']})"))
     embed = BaseEmbed(title=f"{bot}(`{bot.id}`)", fields=fields)
-    embed.set_thumbnail(url=bot.avatar_url)
+    embed.set_thumbnail(url=bot.avatar.url)
     return embed
 
 
@@ -222,7 +223,7 @@ class FindBot(commands.Cog, name="Bots"):
 
         stuff_here = locals()
         with contextlib.suppress(asyncio.TimeoutError):
-            while time_to_listen > (time_rn := datetime.datetime.utcnow()):
+            while time_to_listen > (time_rn := discord.utils.utcnow()):
                 time_left = (time_to_listen - time_rn).total_seconds()
                 done, didnt = await asyncio.wait(
                     [self.bot.wait_for(event, check=stuff_here[f"{event}_check"], timeout=time_left) 
@@ -372,8 +373,8 @@ class FindBot(commands.Cog, name="Bots"):
     async def find_bot_commands(self, message):
         """Get a prefix based on known command used."""
         word, _, _ = message.content.partition("\n")
-        limit = min(len(word), 101)
-        if not (received := await self.search_respond(search_commands, message, word[:limit].casefold(), "commands")):
+        to_find = textwrap.shorten(word, width=100, placeholder="")
+        if not (received := await self.search_respond(search_commands, message, to_find.casefold(), "commands")):
             return
 
         responded, result, message_sent = received
@@ -383,7 +384,7 @@ class FindBot(commands.Cog, name="Bots"):
         for command, bot in itertools.product(result, responded):
             if bot["command"] == command:
                 bot_id = bot['bot_id']
-                message_respond = message_sent[bot_id].created_at
+                message_respond = message_sent[bot_id].created_at.replace(tzinfo=None)
                 target = re.escape(command)
                 if (match := re.match("(?P<prefix>^.{{1,100}}?(?={}))".format(target), word, re.I)) and len(match["prefix"]) < 31:
                     existing = await self.bot.pool_pg.fetch(exist_query, message.guild.id, bot_id)
@@ -421,7 +422,7 @@ class FindBot(commands.Cog, name="Bots"):
         for prefix, bot in itertools.product(result, responded):
             if bot["prefix"] == prefix:
                 bot_id = bot['bot_id']
-                message_respond = message_sent[bot_id].created_at
+                message_respond = message_sent[bot_id].created_at.replace(tzinfo=None)
                 prefixes_values.append((message.guild.id, bot_id, prefix, 1, message_respond))
                 command = message.content[len(prefix):]
                 word, _, _ = command.partition("\n")
@@ -575,7 +576,7 @@ class FindBot(commands.Cog, name="Bots"):
 
             value += f"**Created at:** `{default_date(dbot.bot.created_at)}`"
             embed.add_field(name=dbot, value=value, inline=False)
-        embed.set_thumbnail(url=author.avatar_url)
+        embed.set_thumbnail(url=author.avatar.url)
         if not list_bots:
             embed.description = f"{author} doesnt own any bot here."
         await ctx.embed(embed=embed)
@@ -589,7 +590,7 @@ class FindBot(commands.Cog, name="Bots"):
         data = bot
         author = await try_call(commands.UserConverter().convert, ctx, str(data.author), exception=UserNotFound)
         embed = discord.Embed(title=str(data.bot))
-        embed.set_thumbnail(url=data.bot.avatar_url)
+        embed.set_thumbnail(url=data.bot.avatar.url)
 
         def or_none(condition, func):
             if condition:
@@ -717,7 +718,7 @@ class FindBot(commands.Cog, name="Bots"):
                     ("Requested at", 'requested_at')),
                    BotAdded))
         embed = BaseEmbed.default(ctx, title=str(bot))
-        embed.set_thumbnail(url=bot.avatar_url)
+        embed.set_thumbnail(url=bot.avatar.url)
         embed.add_field(name="ID", value=f"`{bot.id}`")
         for title, attrib, converter in reversed(titles):
             with contextlib.suppress(Exception):
@@ -765,7 +766,7 @@ class FindBot(commands.Cog, name="Bots"):
 
 
     @greedy_parser.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
-                      help="Shows all bot's command usage in the server on a sorted list.")
+                           help="Shows all bot's command usage in the server on a sorted list.")
     @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
                   help="Reverses the list. This flag accepts True or False, default to False if not stated.")
     async def botrank(self, ctx, bot: greedy_parser.UntilFlag[BotCommands] = None, **flags):
@@ -814,9 +815,9 @@ class FindBot(commands.Cog, name="Bots"):
             list_commands = "\n".join(f"{x}. {c}[`{bot.get_command(c)}`]" for x, c in enumerate(entries, start=number))
             embed = BaseEmbed.default(ctx, title=f"{bot} Commands[`{bot.total_usage}`]", description=list_commands)
             if owner_info and owner_info.author:
-                embed.set_author(icon_url=owner_info.author.avatar_url, name=f"Owner {owner_info.author}")
+                embed.set_author(icon_url=owner_info.author.avatar.url, name=f"Owner {owner_info.author}")
 
-            return embed.set_thumbnail(url=bot.bot.avatar_url)
+            return embed.set_thumbnail(url=bot.bot.avatar.url)
         menu = MenuBase(each_page(bot.commands))
         await menu.start(ctx)
 

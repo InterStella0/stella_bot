@@ -5,9 +5,11 @@ import argparse
 import sys
 from discord.ext import commands
 from discord.ext.flags import FlagCommand, _parser
+from discord.ext.commands.flags import MISSING
 
 
 class SFlagCommand(FlagCommand):
+    """Legacy Flag parsing, only be used when i want to"""
     async def _parse_flag_arguments(self, ctx):
         if not hasattr(self.callback, '_def_parser'):
             return
@@ -94,3 +96,13 @@ def add_flag(*flag_names, **kwargs):
         nfunc._def_parser.add_argument(*flag_names, **kwargs)
         return func
     return inner
+
+
+class HelpFlag(commands.Flag):
+    help: str 
+
+
+def flag(*,name: str = MISSING,aliases: List[str] = MISSING,default= MISSING,
+            max_args: int = MISSING,override: bool = MISSING, help=MISSING):
+    return HelpFlag(name=name, aliases=aliases, default=default, max_args=max_args, override=override, help=help)
+
