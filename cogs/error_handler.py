@@ -87,7 +87,7 @@ class ErrorHandler(commands.Cog):
             for typing in signature.values():
                 if typing_inspect.is_union_type(typing):
                     checking = typing.annotation.__args__
-                elif isinstance(typing.annotation, commands.converter._Greedy):
+                elif isinstance(typing.annotation, commands.converter.Greedy):
                     checking = (typing.annotation.converter,)
                 else:
                     checking = (typing.annotation,)

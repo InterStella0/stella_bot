@@ -748,11 +748,11 @@ class FindBot(commands.Cog, name="Bots"):
         reverse = flags.pop("reverse", False)
 
         def predicate(m):
-            return m.bot and m.joined_at > ctx.message.created_at - datetime.timedelta(days=1)
+            return m.bot and m.joined_at.replace(tzinfo=None) > ctx.message.created_at.replace(tzinfo=None) - datetime.timedelta(days=1)
         members = {m.id: m for m in filter(predicate, ctx.guild.members)}
         if not members:
             member = max(filter(lambda x: x.bot, ctx.guild.members), key=lambda x: x.joined_at)
-            time_add = humanize.precisedelta(member.joined_at, minimum_unit="minutes")
+            time_add = humanize.precisedelta(member.joined_at.replace(tzinfo=None), minimum_unit="minutes")
             return await ctx.embed(
                             title="Bots added today",
                             description="Looks like there are no bots added in the span of 24 hours.\n"
@@ -821,18 +821,26 @@ class FindBot(commands.Cog, name="Bots"):
         menu = MenuBase(each_page(bot.commands))
         await menu.start(ctx)
 
-    @greedy_parser.command(aliases=["botchange", "cb", "botchanges"],
-                      brief="Allows you to change your own bot's information in whoadd/whatadd command.",
-                      help="Allows you to change your own bot's information  in whoadd/whatadd command, "\
-                           "only applicable for discord.py server. The user is only allowed to change their own bot, "\
-                           "which they are able to change 'requested', 'reason' and 'jump url' values.")
+    @commands.group(name="bot",
+                    help="A group command that are related to all the bot that is stored in my database.")
+    @commands.guild_only()
+    async def _bot(self, ctx):
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @_bot.command(cls=greedy_parser.GreedyParser,
+                  aliases=[ "ci", "changeinfos"],
+                  brief="Allows you to change your own bot's information in whoadd/whatadd command.",
+                  help="Allows you to change your own bot's information  in whoadd/whatadd command, "\
+                       "only applicable for discord.py server. The user is only allowed to change their own bot, "\
+                       "which they are able to change 'requested', 'reason' and 'jump url' values.")
     @is_discordpy()
     @flg.add_flag("--jump_url", type=AuthorJump_url, help="The jump url that will be displayed under 'Message Request'.")
     @flg.add_flag("--requested_at", type=DatetimeConverter, help="The date that is displayed under 'Requested'.")
     @flg.add_flag("--reason", nargs="+", help="The text that are displayed under 'Reason'.")
     @flg.add_flag("--message", type=AuthorMessage, 
                   help="This flag will override 'reason', 'requested' and 'jump url' according to the target message.")
-    async def changebot(self, ctx, bot: greedy_parser.UntilFlag[BotOwner], **flags):
+    async def changeinfo(self, ctx, bot: greedy_parser.UntilFlag[BotOwner], **flags):
         bot = bot.bot
         if not any(flags.values()):
             raise commands.CommandError("No value were passed, at least put a flag." \
@@ -871,6 +879,36 @@ class FindBot(commands.Cog, name="Bots"):
             if value and topic in new_changes:
                 changes.append((topic, f"**Before:**\n{bot_exist.get(topic)}\n**After**:\n {value}"))
         await ctx.embed(title=f"{bot} Information Changes", fields=changes)
+
+    @_bot.command(help="View raw prefix that is stored on a bot for bot owners")
+    async def viewprefix(self, ctx, *, bot: BotOwner):
+        query = "SELECT * FROM prefixes_list WHERE bot_id=$1 AND guild_id=$2"
+        raw_prefixes = await self.bot.pool_pg.fetch(query, bot.bot.id, ctx.guild.id)
+        @pages(per_page=10)
+        async def show_result(self, menu, entry):
+            to_show = "\n".join(f"{i}. `{x['prefix']}`" for i, x in enumerate(entry, start=menu.current_page * 10 + 1))
+            return discord.Embed(title=f"{bot}'s raw prefixes", description=to_show)
+
+        await MenuBase(show_result(raw_prefixes)).start(ctx)
+
+    @_bot.command(help="Removes prefix that is stored on a specific bot for bot owners")
+    async def delprefix(self, ctx, bot: BotOwner, *prefixes):
+        query = "DELETE FROM prefixes_list WHERE guild_id=$1 AND bot_id=$2 AND prefix=$3"
+        unique_prefixes = set(prefixes)
+        await self.bot.pool_pg.executemany(query, [(ctx.guild.id, bot.bot.id, x) for x in unique_prefixes])
+        await ctx.confirmed()
+
+    @_bot.command(help="Add prefixes into a specific bot for bot owners")
+    async def addprefix(self, ctx, bot: BotOwner, *prefixes):
+        query = "INSERT INTO prefixes_list VALUES ($1, $2, $3, $4, $5)"
+        unique_prefixes = set(prefixes)
+        guild_id, bot_id = ctx.guild.id, bot.bot.id
+        current_prefixes = await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE guild_id=$1 AND bot_id=$2", guild_id, bot_id)
+        max_usage = max([p['usage'] for p in current_prefixes] or [1])
+        values = [(guild_id, bot_id, x, max_usage, datetime.datetime.utcnow()) for x in unique_prefixes]
+        await self.bot.pool_pg.executemany(query, values)
+        await ctx.maybe_reply(f"Successfully inserted `{'` `'.join(unique_prefixes)}`")
+        await ctx.confirmed()
 
     @commands.command(cls=flg.SFlagCommand,
                       brief="Get all unique command for all bot in a server.",
