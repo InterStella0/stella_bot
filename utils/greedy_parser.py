@@ -119,6 +119,14 @@ class RequiredGreedy(BaseGreedy):
     pass
 
 
+def find_flag(command):
+    """Helper function to find the flag that is in a command"""
+    last = [*command.params.values()][-1]
+    if last.kind is last.KEYWORD_ONLY:
+        if issubclass(last.annotation, commands.FlagConverter):
+            return last
+
+
 class Separator(BaseGreedy):
     """Allow Greedy to be parse in a way that it will try to find ',' or any
        other passed separator in an argument, and will allow spaced argument to be
@@ -197,20 +205,30 @@ class UntilFlag(RequiredGreedy):
     async def actual_greedy_parsing(self, command, ctx, param, required, converter):
         view = ctx.view
         view.skip_ws()
-        if view.buffer[view.index] == '-':
-            if required:
-                if self._is_typing_optional(param.annotation):
-                    return None
-                raise commands.MissingRequiredArgument(param)
+        argument = None
+        if (con := find_flag(command)):
+            regex = con.annotation.__commands_flag_regex__
+            if (match := regex.search(view.buffer)):
+                maximum = match.span()[0]
+                while view.buffer[maximum - 1].isspace(): # Minus 1 to offset the extra space that it got
+                    maximum -= 1
+                argument = view.buffer[view.index: maximum]
+
+        if argument is None:
+            if view.buffer[view.index] == '-':
+                if required:
+                    if self._is_typing_optional(param.annotation):
+                        return None
+                    raise commands.MissingRequiredArgument(param)
+                else:
+                    return param.default
+            if pos := view.get_parser(param.annotation):
+                # Undo until end of arg before separator
+                while view.buffer[view.index + pos - 1].isspace():
+                    pos -= 1
+                argument = view.get_arg_parser(pos)
             else:
-                return param.default
-        if pos := view.get_parser(param.annotation):
-            # Undo until end of arg before separator
-            while view.buffer[view.index + pos - 1].isspace():
-                pos -= 1
-            argument = view.get_arg_parser(pos)
-        else:
-            argument = view.read_rest()
+                argument = view.read_rest()
         return await commands.converter.run_converters(ctx, converter, argument, param)
 
 
