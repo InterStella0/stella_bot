@@ -280,7 +280,7 @@ class GreedyParser(SFlagCommand):
         for name, param in params.items():
             converter = commands.converter.get_converter(param)
             converter = self.get_optional_converter(converter)
-            greedy = isinstance(converter, commands.converter._Greedy)
+            greedy = isinstance(converter, commands.converter.Greedy)
             if param.kind == param.VAR_KEYWORD:
                 result.append('[%s...]' % name)
                 continue
@@ -294,7 +294,7 @@ class GreedyParser(SFlagCommand):
                                   '[%s=%s]...' % (name, param.default))
                     continue
                 else:
-                    if not isinstance(converter, commands.converter._Greedy):
+                    if not isinstance(converter, commands.converter.Greedy):
                         result.append('[%s]' % name)
                     else:
                         result.append('[%s]...' % name)

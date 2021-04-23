@@ -284,8 +284,8 @@ class FindBot(commands.Cog, name="Bots"):
         if not message_sent:
             return
 
-        prefixes = [(message.guild.id, x, prefix, 1, m.created_at) for x, m in message_sent.items()]
-        commands = [(message.guild.id, x, command, m.created_at) for x, m in message_sent.items()]
+        prefixes = [(message.guild.id, x, prefix, 1, m.created_at.replace(tzinfo=None)) for x, m in message_sent.items()]
+        commands = [(message.guild.id, x, command, m.created_at.replace(tzinfo=None)) for x, m in message_sent.items()]
 
         await self.insert_both_prefix_command(prefixes, commands)
 

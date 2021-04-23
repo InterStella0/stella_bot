@@ -3,6 +3,8 @@ import re
 import discord
 import argparse
 import sys
+from dataclasses import dataclass
+from typing import List
 from discord.ext import commands
 from discord.ext.flags import FlagCommand, _parser
 from discord.ext.commands.flags import MISSING
@@ -62,7 +64,8 @@ class SFlagCommand(FlagCommand):
 
     @property
     def signature(self):
-        return self.old_signature
+        # Due to command.old_signature uses _Greedy, this caused error
+        return commands.Command.signature.__get__(self)
 
 
 class SFlagGroup(SFlagCommand, commands.Group):
@@ -98,11 +101,13 @@ def add_flag(*flag_names, **kwargs):
     return inner
 
 
+@dataclass
 class HelpFlag(commands.Flag):
-    help: str 
+    help: str = MISSING
 
 
-def flag(*,name: str = MISSING,aliases: List[str] = MISSING,default= MISSING,
-            max_args: int = MISSING,override: bool = MISSING, help=MISSING):
-    return HelpFlag(name=name, aliases=aliases, default=default, max_args=max_args, override=override, help=help)
+def flag(*,name: str = MISSING, aliases: List[str] = MISSING, default=MISSING,
+         max_args: int = MISSING, override: bool = MISSING, help=MISSING):
+    return HelpFlag(name=name, aliases=aliases, default=default, max_args=max_args, 
+                    override=override, help=help)
 

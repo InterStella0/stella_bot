@@ -135,14 +135,15 @@ class StellaBotHelp(commands.DefaultHelpCommand):
     def get_command_signature(self, command, ctx=None):
         """Method to return a commands name and signature"""
         if not ctx:
+            prefix = self.context.clean_prefix
             if not command.signature and not command.parent:
-                return f'`{self.clean_prefix}{command.name}`'
+                return f'`{prefix}{command.name}`'
             if command.signature and not command.parent:
-                return f'`{self.clean_prefix}{command.name}` `{command.signature}`'
+                return f'`{prefix}{command.name}` `{command.signature}`'
             if not command.signature and command.parent:
-                return f'`{self.clean_prefix}{command.parent}` `{command.name}`'
+                return f'`{prefix}{command.parent}` `{command.name}`'
             else:
-                return f'`{self.clean_prefix}{command.parent}` `{command.name}` `{command.signature}`'
+                return f'`{prefix}{command.parent}` `{command.name}` `{command.signature}`'
         else:
             def get_invoke_with():
                 msg = ctx.message.content
