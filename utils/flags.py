@@ -4,11 +4,11 @@ import discord
 import argparse
 import sys
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 from discord.ext import commands
 from discord.ext.flags import FlagCommand, _parser
 from discord.ext.commands.flags import MISSING
-
+from utils.new_converters import AuthorJump_url, AuthorMessage, DatetimeConverter
 
 class SFlagCommand(FlagCommand):
     """Legacy Flag parsing, only be used when i want to"""
@@ -110,4 +110,18 @@ def flag(*,name: str = MISSING, aliases: List[str] = MISSING, default=MISSING,
          max_args: int = MISSING, override: bool = MISSING, help=MISSING):
     return HelpFlag(name=name, aliases=aliases, default=default, max_args=max_args, 
                     override=override, help=help)
+
+def find_flag(command):
+    """Helper function to find the flag that is in a command"""
+    last = [*command.params.values()][-1]
+    if last.kind is last.KEYWORD_ONLY:
+        if issubclass(last.annotation, commands.FlagConverter):
+            return last
+
+
+class InfoFlag(commands.FlagConverter):
+    jump_url: Optional[AuthorJump_url] = flag(help="The jump url that will be displayed under 'Message Request'.")
+    requested_at: Optional[DatetimeConverter] = flag(help="The date that is displayed under 'Requested'.")
+    reason: Optional[str] = flag(help="The text that are displayed under 'Reason'.")
+    message: Optional[AuthorMessage] = flag(help="This flag will override 'reason', 'requested' and 'jump url' according to the target message.")
 

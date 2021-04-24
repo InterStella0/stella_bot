@@ -9,7 +9,7 @@ import inspect
 import typing
 from discord.ext.commands.errors import BadUnionArgument
 from utils.errors import ConsumerUnableToConvert
-from utils.flags import SFlagCommand
+from utils.flags import SFlagCommand, find_flag
 from utils.useful import isiterable
 from discord.ext import commands
 from discord.ext.commands import CommandError, ArgumentParsingError
@@ -117,14 +117,6 @@ class BaseGreedy(GreedyAllowStr):
 class RequiredGreedy(BaseGreedy):
     """All Required greedy must inherit this class so I can tell which greedy is required."""
     pass
-
-
-def find_flag(command):
-    """Helper function to find the flag that is in a command"""
-    last = [*command.params.values()][-1]
-    if last.kind is last.KEYWORD_ONLY:
-        if issubclass(last.annotation, commands.FlagConverter):
-            return last
 
 
 class Separator(BaseGreedy):

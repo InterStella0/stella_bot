@@ -210,3 +210,17 @@ class TimeConverter(commands.Converter):
                 raise commands.BadArgument(f"Time must be shorter than `{humanize.precisedelta(self.maximum_time)}`")
 
         return time_converted
+
+class AuthorMessage(commands.MessageConverter):
+    """Only allows messages that belong to the context author"""
+    async def convert(self, ctx, argument):
+        message = await super().convert(ctx, argument)
+        if message.author != ctx.author:
+            raise commands.CommandError("The author of this message must be your own message.")
+        return message
+
+class AuthorJump_url(JumpValidator):
+    """Yes i fetch message twice, I'm lazy to copy paste."""
+    async def convert(self, ctx, argument):
+        message = await AuthorMessage().convert(ctx, await super().convert(ctx, argument))
+        return message.jump_url

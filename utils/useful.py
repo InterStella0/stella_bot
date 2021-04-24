@@ -229,7 +229,7 @@ class StellaContext(commands.Context):
         return await self.send(content, **kwargs)
 
     async def embed(self, content=None, *, reply=True, mention_author=False, embed=None, **kwargs):
-        embed_only_kwargs = ["colour", "color", "title", "type", "url", "description", "timestamp"]
+        embed_only_kwargs = ["colour", "color", "title", "type", "url", "description", "timestamp", "fields", "field_inline"]
         ori_embed = BaseEmbed.default(self, **{key: value for key, value in kwargs.items() if key in embed_only_kwargs})
         if embed:
             new_embed = embed.to_dict()

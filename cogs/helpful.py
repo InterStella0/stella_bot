@@ -6,6 +6,7 @@ import discord
 import humanize
 import datetime
 import textwrap
+import itertools
 import more_itertools
 from discord.ext import commands, menus
 from utils.useful import BaseEmbed, MenuBase, plural, empty_page_format
@@ -176,11 +177,23 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         """This isn't even needed jesus christ"""
         return command.aliases
 
-    def get_flag_help(self, command):
+    def get_old_flag_help(self, command):
         """Gets the flag help if there is any."""
         def c(x):
             return "_OPTIONAL" not in x.dest
-        return ["**--{0.dest}:** {0.help}".format(action) for action in command.callback._def_parser._actions if c(action)]
+        return ["**--{0.dest} |** {0.help}".format(action) for action in command.callback._def_parser._actions if c(action)]
+
+    def get_flag_help(self, command):
+        required_flags = []
+        optional_flags = []
+        if (param := flg.find_flag(command)):
+            for name, flags in param.annotation.__commands_flags__.items():
+                not_documented = "This flag is not documented."
+                description = getattr(flags, "help", not_documented) or not_documented
+                formatted = f"**{':** | **'.join(itertools.chain([name], flags.aliases))}:** **|** {description}"
+                list_append = (required_flags, optional_flags)[command._is_typing_optional(flags.annotation)]
+                list_append.append(formatted)
+        return required_flags, optional_flags
 
     async def send_bot_help(self, mapping):
         """Gets called when `uwu help` is invoked"""
@@ -207,8 +220,17 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             embed.set_image(url=demo)
         if alias := self.get_aliases(command):
             embed.add_field(name="Aliases", value=f'[{" | ".join(f"`{x}`" for x in alias)}]', inline=False)
+        
+        required_flags, optional_flags = self.get_flag_help(command)
         if hasattr(command.callback, "_def_parser"):
-            embed.add_field(name="Optional Flags", value="\n".join(self.get_flag_help(command)))
+            optional_flags.extend(self.get_old_flag_help(command))
+
+        if required_flags:
+            embed.add_field(name="Required Flags", value="\n".join(required_flags), inline=False)
+
+        if optional_flags:
+            embed.add_field(name="Optional Flags", value="\n".join(optional_flags), inline=False)
+    
         if isinstance(command, commands.Group):
             subcommand = command.commands
             value = "\n".join(self.get_command_signature(c) for c in subcommand)

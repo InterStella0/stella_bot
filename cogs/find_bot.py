@@ -76,20 +76,6 @@ class BotOwner(BotAdded):
             raise commands.CommandError("This bot must be in the server.")
         return botdata
 
-class AuthorMessage(commands.MessageConverter):
-    """Only allows messages that belong to the context author"""
-    async def convert(self, ctx, argument):
-        message = await super().convert(ctx, argument)
-        if message.author != ctx.author:
-            raise commands.CommandError("The author of this message must be your own message.")
-        return message
-
-class AuthorJump_url(JumpValidator):
-    """Yes i fetch message twice, I'm lazy to copy paste."""
-    async def convert(self, ctx, argument):
-        message = await AuthorMessage().convert(ctx, await super().convert(ctx, argument))
-        return message.jump_url
-
 def pprefix(bot_guild, prefix):
     if content := re.search("<@(!?)(?P<id>[0-9]*)>", prefix):
         method = getattr(bot_guild, ("get_user","get_member")[isinstance(bot_guild, discord.Guild)])
@@ -835,20 +821,16 @@ class FindBot(commands.Cog, name="Bots"):
                        "only applicable for discord.py server. The user is only allowed to change their own bot, "\
                        "which they are able to change 'requested', 'reason' and 'jump url' values.")
     @is_discordpy()
-    @flg.add_flag("--jump_url", type=AuthorJump_url, help="The jump url that will be displayed under 'Message Request'.")
-    @flg.add_flag("--requested_at", type=DatetimeConverter, help="The date that is displayed under 'Requested'.")
-    @flg.add_flag("--reason", nargs="+", help="The text that are displayed under 'Reason'.")
-    @flg.add_flag("--message", type=AuthorMessage, 
-                  help="This flag will override 'reason', 'requested' and 'jump url' according to the target message.")
-    async def changeinfo(self, ctx, bot: greedy_parser.UntilFlag[BotOwner], **flags):
+    async def changeinfo(self, ctx, bot: greedy_parser.UntilFlag[BotOwner], *, flags: flg.InfoFlag):
         bot = bot.bot
+        new_data = {'bot_id': bot.id}
+        flags = {k: getattr(flags, k) for k in flags.__commands_flags__}
         if not any(flags.values()):
             raise commands.CommandError("No value were passed, at least put a flag." \
-                                        f" Type {ctx.prefix}help {ctx.invoked_with} for more infomation")
-        new_data = {'bot_id': bot.id}
+                                        f" Type {ctx.prefix}help {ctx.invoked_with} for more information.")
         if message := flags.pop('message'):
             new_data['reason'] = message.content
-            new_data['requested_at'] = message.created_at
+            new_data['requested_at'] = message.created_at.replace(tzinfo=None)
             new_data['jump_url'] = message.jump_url
 
         if len(new_data.get('reason', "")) > 1000:
