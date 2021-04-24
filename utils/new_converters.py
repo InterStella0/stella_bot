@@ -22,7 +22,7 @@ class CleanListGreedy:
         unclean = [*unpack(greedy_list)]
         final = _unique(unclean)
         if not final:
-            raise ThisEmpty(cls.__name__, converter=cls)
+            raise ThisEmpty(cls.__name__)
         return final
 
 
@@ -39,7 +39,7 @@ class ValidCog(CleanListGreedy):
         maximum = max((Valid(fuzz.ratio(key, argument), key) for key in valid_cog), key=lambda v: v.ratio)
         if maximum.ratio >= 50:
             return maximum.key
-        raise NotValidCog(argument, converter=cls)
+        raise NotValidCog(argument)
 
 
 class IsBot(commands.Converter, metaclass=RenameClass, name="Bot"):
@@ -54,11 +54,11 @@ class IsBot(commands.Converter, metaclass=RenameClass, name="Bot"):
             with contextlib.suppress(commands.BadArgument):
                 user = await getattr(commands, f"{converter}Converter")().convert(ctx, argument)
                 if user.bot is not self.is_bot:
-                    raise NotBot(user, is_bot=self.is_bot, converter=cls or self)
+                    raise NotBot(user, is_bot=self.is_bot)
                 if isinstance(user, discord.User) and not self.user_check:
-                    raise MustMember(user, converter=cls or self)
+                    raise MustMember(user)
                 return user
-        raise UserNotFound(argument, converter=cls or self) from None
+        raise UserNotFound(argument) from None
 
 
 class BotData:
@@ -78,7 +78,7 @@ class BotData:
         query = f"SELECT * FROM {table}_list WHERE guild_id=$1 AND bot_id=$2"
         if data := await ctx.bot.pool_pg.fetch(query, ctx.guild.id, member.id):
             return member, data
-        raise NotInDatabase(member, converter=cls)
+        raise NotInDatabase(member)
 
     def __int__(self):
         return self.bot.id

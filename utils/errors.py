@@ -2,9 +2,9 @@ from discord.ext import commands
 
 
 class ArgumentBaseError(commands.UserInputError):
-    def __init__(self, converter=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.converter = converter
+        # Base error, this used to have an extra attribute, but was removed due 2.0
 
 
 class NotInDatabase(ArgumentBaseError):

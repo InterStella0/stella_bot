@@ -42,10 +42,10 @@ class BotAdded:
         join = data.pop("joined_at", None)
         bot = bot or bot_id
         if isinstance(bot, discord.Member):
-            join = bot.joined_at
+            join = bot.joined_at.replace(tzinfo=None)
             author = bot.guild.get_member(author) or author
 
-        return cls(author=author, bot=bot, joined_at=join, **data)
+        return cls(author=author, bot=bot, joined_at=join.replace(tzinfo=None), **data)
 
     @classmethod
     async def convert(cls, ctx, argument):
@@ -57,8 +57,8 @@ class BotAdded:
                     if user.id in getattr(ctx.bot, attribute):
                         data = await ctx.bot.pool_pg.fetchrow(f"SELECT * FROM {attribute} WHERE bot_id = $1", user.id)
                         return cls.from_json(user, **data)
-                raise NotInDatabase(user, converter=cls)
-        raise BotNotFound(argument, converter=cls)
+                raise NotInDatabase(user)
+        raise BotNotFound(argument)
 
     def __str__(self):
         return str(self.bot or "")
@@ -196,7 +196,7 @@ class FindBot(commands.Cog, name="Bots"):
             await self.update_confirm(BotAdded.from_json(member, **data))
             await self.bot.pool_pg.execute("DELETE FROM pending_bots WHERE bot_id = $1", member.id)
         else:
-            await self.update_confirm(BotAdded.from_json(member, joined_at=member.joined_at))
+            await self.update_confirm(BotAdded.from_json(member, joined_at=member.joined_at.replace(tzinfo=None)))
 
     async def listen_for_bots_at(self, message, message_check):
         """Listens for bots responding and terminating when a user respond"""
@@ -470,7 +470,7 @@ class FindBot(commands.Cog, name="Bots"):
             if not check:
                 member = get_member(int(result["id"]))
                 six_days = datetime.datetime.utcnow() - datetime.timedelta(days=6)
-                if not member and message.created_at > six_days:
+                if not member and message.created_at.replace(tzinfo=None) > six_days:
                     member = await try_call(self.bot.fetch_user, int(result["id"]), exception=discord.NotFound)
                     if all((reason, member and member.bot and str(member.id) not in self.bot.pending_bots)):
                         if str(member.id) not in self.bot.confirmed_bots:
@@ -478,7 +478,7 @@ class FindBot(commands.Cog, name="Bots"):
                                 BotAdded(author=message.author,
                                          bot=member,
                                          reason=reason,
-                                         requested_at=message.created_at,
+                                         requested_at=message.created_at.replace(tzinfo=None),
                                          jump_url=message.jump_url))
                         return
 
@@ -489,9 +489,9 @@ class FindBot(commands.Cog, name="Bots"):
                         newAddBot = BotAdded(author=message.author,
                                              bot=member,
                                              reason=reason,
-                                             requested_at=message.created_at,
+                                             requested_at=message.created_at.replace(tzinfo=None),
                                              jump_url=message.jump_url,
-                                             joined_at=member.joined_at)
+                                             joined_at=member.joined_at.replace(tzinfo=None))
                         await self.update_confirm(newAddBot)
                     return
                 member = await try_call(self.bot.fetch_user, int(result["id"]), exception=discord.NotFound)
@@ -504,7 +504,7 @@ class FindBot(commands.Cog, name="Bots"):
                 return BotAdded(author=message.author,
                                 bot=member,
                                 reason=reason,
-                                requested_at=message.created_at,
+                                requested_at=message.created_at.replace(tzinfo=None),
                                 jump_url=message.jump_url,
                                 joined_at=join)
 

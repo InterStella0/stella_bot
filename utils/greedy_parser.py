@@ -186,7 +186,7 @@ class Consumer(RequiredGreedy):
         if getattr(converter, "__origin__", None) is typing.Union:
             raise BadUnionArgument(param, converter.__args__, [])
         name = (converter if inspect.isclass(converter) else type(converter)).__name__
-        raise ConsumerUnableToConvert(view.buffer[previous: view.index], name, converter=converter)
+        raise ConsumerUnableToConvert(view.buffer[previous: view.index], name)
 
 
 class UntilFlag(RequiredGreedy):

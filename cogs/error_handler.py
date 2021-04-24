@@ -70,50 +70,14 @@ class ErrorHandler(commands.Cog):
 
     async def generate_signature_error(self, ctx, error):
         command = ctx.command
-        argument = ""
-        found = False
-
-        def check_converter(_error):
-            if isinstance(_error, commands.BadArgument):
-                frames = [*traceback.walk_tb(_error.__traceback__)]
-                last_trace = frames[-1]
-                frame = last_trace[0]
-                converter = frame.f_locals.get("self") or frame.f_locals.get("cls")
-                if converter is not None:
-                    return getattr(discord, converter.__class__.__name__.replace("Converter", ""), None)
-
-        if _class := getattr(error, "converter", call(check_converter, error)):
-            signature = inspect.signature(command.callback).parameters
-            for typing in signature.values():
-                if typing_inspect.is_union_type(typing):
-                    checking = typing.annotation.__args__
-                elif isinstance(typing.annotation, commands.converter.Greedy):
-                    checking = (typing.annotation.converter,)
-                else:
-                    checking = (typing.annotation,)
-                for convert in checking:
-                    if convert is _class:
-                        found = True
-                        argument = typing.name
-                        break
-        elif isinstance(error, (commands.MissingRequiredArgument, commands.BadUnionArgument)):
-            argument = error.param.name
-            found = True
-        if not found:
-            return
         help_com = self.bot.help_command
         help_com.context = ctx
         real_signature = help_com.get_command_signature(command, ctx)
-        pos = 0
-        for word in real_signature.split(" "):  # by this logic, getting pos = 0 isn't possible
-            filtered = re.sub("<|>|\[|\]|\.", "", word)
-            if argument == filtered:
-                break
-            pos += 1
-        list_sig = real_signature.split(" ")
+        pos = [*ctx.command.params.values()].index(ctx.current_parameter)
+        list_sig = real_signature.split()
         target = list_sig[pos]
         target_list = list(target)
-        alpha_index = [i for i, a in enumerate(target) if a.isalpha()]
+        alpha_index = [i for i, a in enumerate(target) if a.isalnum() or a in ("|", '"')]
         minimum, maximum = min(alpha_index), max(alpha_index)
         target_list[minimum] = target_list[minimum].capitalize()
         list_sig[pos] = "".join(target_list)
@@ -131,7 +95,7 @@ class ErrorHandler(commands.Cog):
             if not bucket.update_rate_limit():
                 embed.description += "**Command Example**"
                 embed.set_image(url=demo)
-        embed.set_footer(icon_url=ctx.me.avatar.url, text="The error is the capitalize argument.")
+        embed.set_footer(icon_url=ctx.me.avatar.url, text=f"{ctx.clean_prefix}help {ctx.command.qualified_name} for more information.")
         return embed
 
 
