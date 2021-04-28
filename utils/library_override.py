@@ -2,7 +2,6 @@
 Copyright (C) lmao this is just weird just take it i dont give a shit
 if you copy this but make your repository private, ur weird
 """
-
 import contextlib
 import io
 import os
@@ -20,6 +19,7 @@ import inspect
 from jishaku.functools import AsyncSender
 from typing import Union
 from collections import namedtuple
+from discord.ext import commands
 
 EmojiSettings = namedtuple('EmojiSettings', 'start back forward end close')
 
@@ -112,3 +112,6 @@ def shell_init(self, code: str, timeout: int = 90, loop: asyncio.AbstractEventLo
 
 # This override is to fix ShellReader.__init__ unable to find powershell path.
 jishaku.shell.ShellReader.__init__ = shell_init
+
+# Fix old flag converter pointing to core file
+commands.core._convert_to_bool = commands.converter._convert_to_bool
