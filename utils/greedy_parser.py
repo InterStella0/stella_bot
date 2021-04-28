@@ -231,6 +231,7 @@ class GreedyParser(SFlagCommand):
            method, and invoking that method when it is available, else it will call the normal greedy method
            conversion."""
 
+        ctx.current_parameter = param
         if hasattr(greedy, "actual_greedy_parsing") and not normal_greedy:
             result = await greedy.actual_greedy_parsing(self, ctx, param, required, converter)
         else:

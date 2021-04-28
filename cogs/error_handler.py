@@ -73,9 +73,16 @@ class ErrorHandler(commands.Cog):
         help_com = self.bot.help_command
         help_com.context = ctx
         real_signature = help_com.get_command_signature(command, ctx)
-        pos = [*ctx.command.params.values()].index(ctx.current_parameter)
+        if ctx.current_parameter is None:
+            return
+        
+        parameter = [*ctx.command.params.values()][ctx.command.cog is not None:]
+        pos = parameter.index(ctx.current_parameter) 
         list_sig = real_signature.split()
+        pos += list_sig.index(ctx.invoked_with)
+        
         target = list_sig[pos]
+        print(target, "here")
         target_list = list(target)
         alpha_index = [i for i, a in enumerate(target) if a.isalnum() or a in ("|", '"')]
         minimum, maximum = min(alpha_index), max(alpha_index)

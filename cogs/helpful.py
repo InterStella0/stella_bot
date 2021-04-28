@@ -148,8 +148,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         else:
             def get_invoke_with():
                 msg = ctx.message.content
-                escape = "\\"
-                prefixmax = re.match(f'{escape}{escape.join(ctx.prefix)}', msg).regs[0][1]
+                prefixmax = re.match(f'{re.escape(ctx.prefix)}', ctx.message.content).regs[0][1]
                 return msg[prefixmax:msg.rindex(ctx.invoked_with)]
 
             if not command.signature and not command.parent:

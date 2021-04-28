@@ -526,7 +526,8 @@ class FindBot(commands.Cog, name="Bots"):
         if not result.author:
             return self.bot.pending_bots.remove(result.bot.id)
 
-        value = (result.bot.id, result.author.id, result.reason, result.requested_at, result.jump_url, result.joined_at)
+        author_id = getattr(result.author, "id", result.author)
+        value = (result.bot.id, author_id, result.reason, result.requested_at, result.jump_url, result.joined_at)
         await self.bot.pool_pg.execute(query, *value)
         if result.bot.id in self.bot.pending_bots:
             self.bot.pending_bots.remove(result.bot.id)
@@ -824,7 +825,7 @@ class FindBot(commands.Cog, name="Bots"):
     async def changeinfo(self, ctx, bot: greedy_parser.UntilFlag[BotOwner], *, flags: flg.InfoFlag):
         bot = bot.bot
         new_data = {'bot_id': bot.id}
-        flags = {k: getattr(flags, k) for k in flags.__commands_flags__}
+        flags = dict(flags)
         if not any(flags.values()):
             raise commands.CommandError("No value were passed, at least put a flag." \
                                         f" Type {ctx.prefix}help {ctx.invoked_with} for more information.")
