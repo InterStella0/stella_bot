@@ -187,9 +187,10 @@ def search_commands(*args):
     return actually_calls(args, find_commands)
 
 
-def print_exception(text, error):
+def print_exception(text, error, *, _print=True):
     """Prints the exception with proper traceback."""
-    print(text, file=sys.stderr)
+    if _print:
+        print(text, file=sys.stderr)
     traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
     etype = type(error)
     trace = error.__traceback__

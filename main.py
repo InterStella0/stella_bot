@@ -1,11 +1,11 @@
 import time
 import re
-import discord
 import asyncpg
 import datetime
 import os
+import discord
 from utils.useful import StellaContext, ListCall
-from utils.decorators import event_check, wait_ready
+from utils.decorators import event_check, wait_ready 
 from discord.ext import commands
 from dotenv import load_dotenv
 from os.path import join, dirname
@@ -45,6 +45,35 @@ class StellaBot(commands.Bot):
         command.cooldown_after_parsing = True
         if not getattr(command._buckets, "_cooldown", None):
             command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
+
+    async def invoke(self, ctx, **flags):
+        print(flags, "here")
+        dispatch = flags.pop("dispatch", True)
+        if ctx.command is not None:
+            if dispatch:
+                self.dispatch('command', ctx)
+            try:
+                check = await self.can_run(ctx, call_once=flags.pop("call_once", True))
+
+                if check or not flags.pop("call_check", True):
+                    await ctx.command.invoke(ctx)
+                else:
+                    raise commands.CheckFailure('The global check once functions failed.')
+            except commands.CommandError as exc:
+                if dispatch:
+                    await ctx.command.dispatch_error(ctx, exc)
+                if flags.pop("redirect_error", False):
+                    raise
+            else:
+                if dispatch:
+                    self.dispatch('command_completion', ctx)
+        elif ctx.invoked_with:
+            exc = commands.CommandNotFound('Command "{}" is not found'.format(ctx.invoked_with))
+            if dispatch:
+                self.dispatch('command_error', ctx, exc)
+            
+            if flags.pop("redirect_error", False):
+                raise exc
 
     @property
     def stella(self):

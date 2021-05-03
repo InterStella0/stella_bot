@@ -12,7 +12,7 @@ from typing import Union, Optional
 from discord.ext import commands
 from utils import greedy_parser
 from utils.decorators import event_check, pages
-from utils.useful import call, empty_page_format, MenuBase
+from utils.useful import call, empty_page_format, MenuBase, print_exception
 from utils.greedy_parser import GreedyParser, Separator, UntilFlag
 from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
 from utils import flags as flg
@@ -345,6 +345,42 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         menu = MenuBase(show_result(to_display)) 
         await menu.start(ctx)
 
+    @greedy_parser.command()
+    async def reinvoke(self, ctx, command: greedy_parser.UntilFlag[str], *, flags: flg.ReinvokeFlag):
+        message = ctx.message
+        message.author = flags.user or ctx.author
+        message.content = ctx.prefix + command
+        context = await self.bot.get_context(message)
+        try:
+            c_flags = dict(flags)
+            if c_flags.pop("redirect", True):
+                c_flags["redirect_error"] = True
+                c_flags["dispatch"] = False
+            await self.bot.invoke(context, **c_flags)
+            await ctx.confirmed()
+        except commands.CommandError as e:
+            error = print_exception(f'Exception raised while reinvoking {context.command}:', e, _print=False)
+            lines = error.splitlines()
+            lines.reverse()
+            chunked = []
+            build = ""
+            def add():
+                nonlocal build
+                nonlocal chunked
+                chunked.append(build)
+                build = ""
+
+            while True:
+                build += "\n" + lines.pop()
+                if len(build) > 1800:
+                    add()
+                    continue
+                if not lines:
+                    if build:
+                        add()
+                    break
+            
+            await MenuBase(show_result(chunked)).start(ctx)
 
 def setup(bot):
     cog = Myself(bot)

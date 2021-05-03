@@ -15,6 +15,7 @@ import sys
 import asyncio
 import subprocess
 import re
+import typing
 import inspect
 from jishaku.functools import AsyncSender
 from typing import Union

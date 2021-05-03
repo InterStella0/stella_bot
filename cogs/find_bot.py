@@ -42,10 +42,11 @@ class BotAdded:
         join = data.pop("joined_at", None)
         bot = bot or bot_id
         if isinstance(bot, discord.Member):
-            join = bot.joined_at.replace(tzinfo=None)
+            join = bot.joined_at
             author = bot.guild.get_member(author) or author
-
-        return cls(author=author, bot=bot, joined_at=join.replace(tzinfo=None), **data)
+        if join is not None:
+            join = join.replace(tzinfo=None)
+        return cls(author=author, bot=bot, joined_at=join, **data)
 
     @classmethod
     async def convert(cls, ctx, argument):
@@ -827,6 +828,7 @@ class FindBot(commands.Cog, name="Bots"):
         new_data = {'bot_id': bot.id}
         flags = dict(flags)
         if not any(flags.values()):
+            ctx.current_parameter = [*self.changeinfo.params.values()][-1]
             raise commands.CommandError("No value were passed, at least put a flag." \
                                         f" Type {ctx.prefix}help {ctx.invoked_with} for more information.")
         if message := flags.pop('message'):

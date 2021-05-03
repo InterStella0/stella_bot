@@ -4,10 +4,10 @@ import discord
 import argparse
 import sys
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Union
 from discord.ext import commands
 from discord.ext.flags import FlagCommand, _parser
-from discord.ext.commands.flags import MISSING
+from discord.utils import MISSING
 from utils.new_converters import AuthorJump_url, AuthorMessage, DatetimeConverter
 
 class SFlagCommand(FlagCommand):
@@ -125,3 +125,12 @@ class InfoFlag(commands.FlagConverter):
     reason: Optional[str] = flag(help="The text that are displayed under 'Reason'.")
     message: Optional[AuthorMessage] = flag(help="This flag will override 'reason', 'requested' and 'jump url' according to the target message.")
 
+
+class ReinvokeFlag(commands.FlagConverter):
+    redirect_error: Optional[bool] = flag(help="Redirecting error into the command, defaults to False", default=False)
+    redirect: Optional[bool] = flag(help="Set redirect_error to True and setting dispatch to False. Defaults to True", default=True)
+    dispatch: Optional[bool] = flag(help="Allowing to dispatch the events. Defaults to True", default=True)
+    call_once: Optional[bool] = flag(help="Calling the check once. Defaults to True", default=True)
+    call_check: Optional[bool] = flag(help="Calling the check during invocation. Defaults to True", default=True)
+    user: Optional[Union[discord.Member, discord.User]] = flag(help="Calling the command using another user's object.")
+    

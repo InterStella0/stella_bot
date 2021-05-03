@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.colors as mcolors
 import matplotlib.patheffects as peffects
-from typing import Union
+from typing import Union, Literal
 from matplotlib.patches import Polygon
 from utils import flags as flg
 from utils.greedy_parser import UntilFlag, command, Consumer
@@ -222,8 +222,11 @@ class Stat(commands.Cog, name="Statistic"):
                   help="Changes the graph's color depending on the hex given. " \
                        "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
     @commands.cooldown(1, 30, commands.BucketType.user)
-    async def botactivity(self, ctx, member: UntilFlag[Union[ElseConverter, IsBot]], **flags):
+    async def botactivity(self, ctx, member: UntilFlag[Union[Literal["guild", "me"], IsBot]], **flags):
         target = member
+        if isinstance(target, str):
+            target = await ElseConverter().convert(ctx, target)
+
         time_rn = datetime.datetime.utcnow()
         time_given = flags.get("time") or time_rn - datetime.timedelta(days=2)
         if isinstance(target, discord.Member):
@@ -286,7 +289,7 @@ class Stat(commands.Cog, name="Statistic"):
     @flg.add_flag("--color", "--colour", "-C", type=discord.Color, default=None, 
                   help="Changes the graph's color depending on the hex given. " \
                        "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
-    async def topcommands(self, ctx, member: UntilFlag[Union[ElseConverter, IsBot]], **flags):
+    async def topcommands(self, ctx, member: UntilFlag[Union[Literal["guild", "me"], IsBot]], **flags):
         target = member
         if isinstance(target, discord.Member):
             query = "SELECT bot_id, command, COUNT(command) AS usage FROM commands_list " \
@@ -297,6 +300,7 @@ class Stat(commands.Cog, name="Statistic"):
             error = "Looks like no data is present for this bot."
             method = "avatar"
         else:
+            target = await ElseConverter().convert(ctx, target)
             query = "SELECT command, COUNT(command) AS usage FROM commands_list " \
                     "WHERE guild_id=$1 " \
                     "GROUP BY command " \

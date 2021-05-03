@@ -79,10 +79,14 @@ class ErrorHandler(commands.Cog):
         parameter = [*ctx.command.params.values()][ctx.command.cog is not None:]
         pos = parameter.index(ctx.current_parameter) 
         list_sig = real_signature.split()
-        pos += list_sig.index(ctx.invoked_with)
-        
+        try:
+            pos += list_sig.index(ctx.invoked_with)
+        except ValueError:# It errors if a prefix does not have space, causing not in list error
+            pass
+        else:
+            pos += list_sig.index(ctx.prefix + ctx.invoked_with)
+
         target = list_sig[pos]
-        print(target, "here")
         target_list = list(target)
         alpha_index = [i for i, a in enumerate(target) if a.isalnum() or a in ("|", '"')]
         minimum, maximum = min(alpha_index), max(alpha_index)
