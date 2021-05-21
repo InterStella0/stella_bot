@@ -349,12 +349,19 @@ class Helpful(commands.Cog):
         Indentor = namedtuple("Indentor", "space part")
         witharg_regex = r"(^(\s+)?(?P<captured>(except|class|async def|def|async with|with|async for|for|while|if|elif)))(\s+).*((\s+)?:(\s+)?$)"
         connect_regex = r"(\s+)?(?P<captured>(try|else|except|finally))(\s+)?:(\s+)?"
-        joiner = {"else": ['if', 'try'], 'except': ['try'], 'finally': ['try', 'else', 'except']}
+        joiner = {
+            "else": ['if', 'elif', 'except'], 
+            'except': ['try'], 
+            'finally': ['try', 'else', 'except'], 
+            'elif': ['if']
+        }
 
         collon_regex = r".*(:)(\s+)?$"
         def remove_until_true(predicate, iterable):
             for x_space in itertools.takewhile(predicate, reversed(iterable)):
                 iterable.remove(x_space)
+            if iterable and (x_space := iterable[-1]):
+                return x_space
 
         def parsing():
             previous_space = 0
@@ -372,14 +379,16 @@ class Helpful(commands.Cog):
                             if part := joiner.get(match["captured"]):
                                 ind = discord.utils.get(meet_collon, space=space)
                                 if getattr(ind, "part", None) in part:
+                                    index = meet_collon.index(ind)
+                                    meet_collon[index] = Indentor(space, match["captured"])
                                     indicator_mode = False
                                 else:
                                     raise ReplParserDies("Invalid Syntax", no, line)
 
                             if space:
                                 indicator_mode = False
-                            if meet_collon:
-                                remove_until_true(lambda x_space: x_space.space > space, meet_collon)
+                            if x_space := remove_until_true(lambda x_space: x_space.space > space, meet_collon):
+                                    meet_collon[-1] = Indentor(space, match["captured"])
                             else:
                                 meet_collon.append(Indentor(space, match["captured"]))
                             previous_space = space
@@ -388,7 +397,7 @@ class Helpful(commands.Cog):
                             raise ReplParserDies(f"Invalid Syntax", no, line)
                 if expected_indent:
                     if previous_space < (previous_space := space):
-                        meet_collon.append(Indentor(space, expected_indent))
+                        meet_collon.append(Indentor(space, ""))
                         expected_indent = ()
                         indicator_mode = False
                         expected_indent = check_if_indenting(line)
@@ -398,15 +407,14 @@ class Helpful(commands.Cog):
                     raise ReplParserDies(f"Unexpected Indent", no, line)
                 elif part := check_if_indenting(line):
                     expected_indent = part
-                elif is_empty:
+                elif is_empty and meet_collon:
                     indicator_mode = False
                 elif not space:
                     if meet_collon:
                         meet_collon = []
                     previous_space = 0
                 elif meet_collon:
-                    remove_until_true(lambda x_space: x_space.space > space, meet_collon)
-                    if meet_collon and (x_space := meet_collon[-1]):
+                    if x_space := remove_until_true(lambda x_space: x_space.space > space, meet_collon):
                         if x_space.space == space:
                             indicator_mode = False
                         elif x_space.space < space:
