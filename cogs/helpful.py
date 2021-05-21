@@ -340,11 +340,11 @@ class Helpful(commands.Cog):
             url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
             await ctx.embed(title=f"Here's uh, {content}", description=f"[Click Here]({url})")
 
-    @commands.command()
+    @commands.command(help="Gives you the invite link")
     async def invite(self, ctx):
         await ctx.maybe_reply(f"Thx\n<{discord.utils.oauth_url(ctx.me.id)}>")
 
-    @command()
+    @command(help="Simulate a live python interpreter interface when given a python code.")
     async def repl(self, ctx, content: UntilFlag[codeblock_converter], *, flags: flg.ReplFlag):
         witharg_regex = r"(^(\s+)?(class|async def|def|async with|with|async for|for|while|if|elif))(\s+).*((\s+)?:(\s+)?$)"
         without_regex = r"(\s+)?else(\s+)?:(\s+)?"
