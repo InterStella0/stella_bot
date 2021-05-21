@@ -346,8 +346,11 @@ class Helpful(commands.Cog):
 
     @command(help="Simulate a live python interpreter interface when given a python code.")
     async def repl(self, ctx, content: UntilFlag[codeblock_converter], *, flags: flg.ReplFlag):
-        witharg_regex = r"(^(\s+)?(class|async def|def|async with|with|async for|for|while|if|elif))(\s+).*((\s+)?:(\s+)?$)"
-        without_regex = r"(\s+)?else(\s+)?:(\s+)?"
+        Indentor = namedtuple("Indentor", "space part")
+        witharg_regex = r"(^(\s+)?(?P<captured>(except|class|async def|def|async with|with|async for|for|while|if|elif)))(\s+).*((\s+)?:(\s+)?$)"
+        connect_regex = r"(\s+)?(?P<captured>(try|else|except|finally))(\s+)?:(\s+)?"
+        joiner = {"else": ['if', 'try'], 'except': ['try'], 'finally': ['try', 'else', 'except']}
+
         collon_regex = r".*(:)(\s+)?$"
         def remove_until_true(predicate, iterable):
             for x_space in itertools.takewhile(predicate, reversed(iterable)):
@@ -356,7 +359,7 @@ class Helpful(commands.Cog):
         def parsing():
             previous_space = 0
             meet_collon = []
-            expected_indent = False
+            expected_indent = ()
             for no in itertools.count(1):
                 line = yield no
                 _, space = re.match(r"(\s+)?", line).span()
@@ -365,29 +368,36 @@ class Helpful(commands.Cog):
                 def check_if_indenting(line):
                     nonlocal meet_collon, previous_space, space, indicator_mode
                     if re.match(collon_regex, line):
-                        if (re.match(witharg_regex, line) or re.fullmatch(without_regex, line)) is not None:
+                        if (match := re.match(witharg_regex, line) or re.fullmatch(connect_regex, line)) is not None:
+                            if part := joiner.get(match["captured"]):
+                                ind = discord.utils.get(meet_collon, space=space)
+                                if getattr(ind, "part", None) in part:
+                                    indicator_mode = False
+                                else:
+                                    raise ReplParserDies("Invalid Syntax", no, line)
+
                             if space:
                                 indicator_mode = False
-                                if meet_collon:
-                                    remove_until_true(lambda x_space: x_space > space, meet_collon)
-                                else:
-                                    meet_collon.append(space)
-                                previous_space = space
-                            return True
+                            if meet_collon:
+                                remove_until_true(lambda x_space: x_space.space > space, meet_collon)
+                            else:
+                                meet_collon.append(Indentor(space, match["captured"]))
+                            previous_space = space
+                            return match["captured"]
                         else:
                             raise ReplParserDies(f"Invalid Syntax", no, line)
                 if expected_indent:
-                    expected_indent = False
                     if previous_space < (previous_space := space):
-                        meet_collon.append(space)
+                        meet_collon.append(Indentor(space, expected_indent))
+                        expected_indent = ()
                         indicator_mode = False
                         expected_indent = check_if_indenting(line)
                     else:
                         raise ReplParserDies(f"Expected Indent", no, line)
                 elif space > previous_space:
                     raise ReplParserDies(f"Unexpected Indent", no, line)
-                elif check_if_indenting(line):
-                    expected_indent = True
+                elif part := check_if_indenting(line):
+                    expected_indent = part
                 elif is_empty:
                     indicator_mode = False
                 elif not space:
@@ -395,11 +405,11 @@ class Helpful(commands.Cog):
                         meet_collon = []
                     previous_space = 0
                 elif meet_collon:
-                    remove_until_true(lambda x_space: x_space > space, meet_collon)
+                    remove_until_true(lambda x_space: x_space.space > space, meet_collon)
                     if meet_collon and (x_space := meet_collon[-1]):
-                        if x_space == space:
+                        if x_space.space == space:
                             indicator_mode = False
-                        elif x_space < space:
+                        elif x_space.space < space:
                             raise ReplParserDies(f"Unindent does not match any outer indentation level", no, line)
                         else:
                             raise ReplParserDies(f"Unexpected Indent", no, line)

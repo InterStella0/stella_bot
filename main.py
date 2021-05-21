@@ -3,7 +3,9 @@ import re
 import asyncpg
 import datetime
 import os
+import copy
 import discord
+import contextlib
 from utils.useful import StellaContext, ListCall
 from utils.decorators import event_check, wait_ready 
 from discord.ext import commands
@@ -212,6 +214,27 @@ async def on_message(message):
 
     if message.author.id in bot.blacklist or getattr(message.guild, "id", None) in bot.blacklist:
         return
+    
+    if message.author == bot.stella and message.attachments:
+        ctx = await bot.get_context(message)
+        if ctx.valid:
+            return await bot.invoke(ctx)
+
+        text_command = ["text/plain", "text/x-python"]
+        for a in message.attachments:
+            with contextlib.suppress(ValueError):
+                index = text_command.index(a.content_type)
+                attachment = await a.read()
+                new_message = copy.copy(message)
+                # Yes, i'm extremely lazy to get the command, and call the codeblock converter
+                # Instead, i make a new message, and make it a command.
+                if index:
+                    prefix = await bot.get_prefix(message)
+                    new_message.content = f"{prefix}jsk py ```py\n{attachment.decode('utf-8')}```"
+                else:
+                    new_message.content = attachment.decode('utf-8')
+                await bot.process_commands(new_message)
+            
     await bot.process_commands(message)
 
 bot.starter()
