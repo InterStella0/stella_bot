@@ -58,3 +58,9 @@ class CantRun(commands.CommandError):
 class ConsumerUnableToConvert(ArgumentBaseError):
     def __init__(self, *args, **kwargs):
         super().__init__(message="Could not convert {} into {}".format(*args), **kwargs)
+
+class ReplParserDies(commands.CommandError):
+    def __init__(self, message, no, line):
+        super().__init__(message=message)
+        self.line = line
+        self.no = no

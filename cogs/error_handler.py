@@ -1,12 +1,8 @@
 import discord
-import re
-import inspect
-import typing_inspect
 import contextlib
-import traceback
 from discord.ext import commands, flags
 from utils.useful import BaseEmbed, print_exception, call
-from utils.errors import NotInDpy
+from utils.errors import NotInDpy, ReplParserDies
 
 
 class ErrorHandler(commands.Cog):
@@ -49,6 +45,11 @@ class ErrorHandler(commands.Cog):
                 title="Cooldown Error",
                 description=f"You're on cooldown. Retry after `{error.retry_after:.2f}` seconds")
             )
+        elif isinstance(error, ReplParserDies):
+            await send_del(embed=BaseEmbed.to_error(
+                title="Parsing Error",
+                description=f"```\n{error}``` **Errored at:**```py\n{error.no}: {error.line}```"
+            ))
         elif isinstance(error, default_error):
             await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
         else:
@@ -74,7 +75,10 @@ class ErrorHandler(commands.Cog):
         help_com.context = ctx
         real_signature = help_com.get_command_signature(command, ctx)
         if ctx.current_parameter is None:
-            return
+            if not isinstance(error, commands.MissingRequiredArgument):
+                return
+            
+            ctx.current_parameter = error.param
         
         parameter = [*ctx.command.params.values()][ctx.command.cog is not None:]
         pos = parameter.index(ctx.current_parameter) 
@@ -82,9 +86,10 @@ class ErrorHandler(commands.Cog):
         try:
             pos += list_sig.index(ctx.invoked_with)
         except ValueError:# It errors if a prefix does not have space, causing not in list error
-            pass
-        else:
-            pos += list_sig.index(ctx.prefix + ctx.invoked_with)
+            try:
+                pos += list_sig.index(ctx.prefix + ctx.invoked_with)
+            except ValueError:
+                return
 
         target = list_sig[pos]
         target_list = list(target)

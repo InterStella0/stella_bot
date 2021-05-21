@@ -47,7 +47,6 @@ class StellaBot(commands.Bot):
             command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
 
     async def invoke(self, ctx, **flags):
-        print(flags, "here")
         dispatch = flags.pop("dispatch", True)
         if ctx.command is not None:
             if dispatch:

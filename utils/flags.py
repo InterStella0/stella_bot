@@ -134,3 +134,5 @@ class ReinvokeFlag(commands.FlagConverter):
     call_check: Optional[bool] = flag(help="Calling the check during invocation. Defaults to True", default=True)
     user: Optional[Union[discord.Member, discord.User]] = flag(help="Calling the command using another user's object.")
     
+class ReplFlag(commands.FlagConverter):
+    counter: Optional[bool] = flag(help="Showing the counter for each line, defaults to False", default=False)
