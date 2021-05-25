@@ -48,7 +48,7 @@ class ErrorHandler(commands.Cog):
         elif isinstance(error, ReplParserDies):
             await send_del(embed=BaseEmbed.to_error(
                 title="Parsing Error",
-                description=f"```\n{error}``` **Errored at:**```py\n{error.no}: {error.line}```"
+                description=f"```\n{error}``` **Errored at:**```py\nLine {error.no}: {error.line}```"
             ))
         elif isinstance(error, default_error):
             await send_del(embed=BaseEmbed.to_error(description=f"{error}"))

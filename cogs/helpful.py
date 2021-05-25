@@ -11,7 +11,8 @@ import more_itertools
 from discord.ext import commands, menus
 from utils.useful import BaseEmbed, MenuBase, plural, empty_page_format
 from utils.decorators import pages
-from utils.errors import CantRun, ReplParserDies
+from utils.errors import CantRun
+from utils.parser import ReplReader
 from utils.greedy_parser import UntilFlag, command
 from utils import flags as flg
 from collections import namedtuple
@@ -345,97 +346,9 @@ class Helpful(commands.Cog):
         await ctx.maybe_reply(f"Thx\n<{discord.utils.oauth_url(ctx.me.id)}>")
 
     @command(help="Simulate a live python interpreter interface when given a python code.")
-    async def repl(self, ctx, content: UntilFlag[codeblock_converter], *, flags: flg.ReplFlag):
-        Indentor = namedtuple("Indentor", "space part")
-        witharg_regex = r"(^(\s+)?(?P<captured>(except|class|async def|def|async with|with|async for|for|while|if|elif)))(\s+).*((\s+)?:(\s+)?$)"
-        connect_regex = r"(\s+)?(?P<captured>(try|else|except|finally))(\s+)?:(\s+)?"
-        joiner = {
-            "else": ['if', 'elif', 'except'], 
-            'except': ['try'], 
-            'finally': ['try', 'else', 'except'], 
-            'elif': ['if']
-        }
-
-        collon_regex = r".*(:)(\s+)?$"
-        def remove_until_true(predicate, iterable):
-            for x_space in itertools.takewhile(predicate, reversed(iterable)):
-                iterable.remove(x_space)
-            if iterable and (x_space := iterable[-1]):
-                return x_space
-
-        def parsing():
-            previous_space = 0
-            meet_collon = []
-            expected_indent = ()
-            for no in itertools.count(1):
-                line = yield no
-                _, space = re.match(r"(\s+)?", line).span()
-                is_empty = line[space:] == ""
-                indicator_mode = True
-                def check_if_indenting(line):
-                    nonlocal meet_collon, previous_space, space, indicator_mode
-                    if re.match(collon_regex, line):
-                        if (match := re.match(witharg_regex, line) or re.fullmatch(connect_regex, line)) is not None:
-                            if part := joiner.get(match["captured"]):
-                                ind = discord.utils.get(meet_collon, space=space)
-                                if getattr(ind, "part", None) in part:
-                                    index = meet_collon.index(ind)
-                                    meet_collon[index] = Indentor(space, match["captured"])
-                                    indicator_mode = False
-                                else:
-                                    raise ReplParserDies("Invalid Syntax", no, line)
-
-                            if space:
-                                indicator_mode = False
-                            if x_space := remove_until_true(lambda x_space: x_space.space > space, meet_collon):
-                                    meet_collon[-1] = Indentor(space, match["captured"])
-                            else:
-                                meet_collon.append(Indentor(space, match["captured"]))
-                            previous_space = space
-                            return match["captured"]
-                        else:
-                            raise ReplParserDies(f"Invalid Syntax", no, line)
-                if expected_indent:
-                    if previous_space < (previous_space := space):
-                        meet_collon.append(Indentor(space, ""))
-                        expected_indent = ()
-                        indicator_mode = False
-                        expected_indent = check_if_indenting(line)
-                    else:
-                        raise ReplParserDies(f"Expected Indent", no, line)
-                elif space > previous_space:
-                    raise ReplParserDies(f"Unexpected Indent", no, line)
-                elif part := check_if_indenting(line):
-                    expected_indent = part
-                elif is_empty and meet_collon:
-                    indicator_mode = False
-                elif not space:
-                    if meet_collon:
-                        meet_collon = []
-                    previous_space = 0
-                elif meet_collon:
-                    if x_space := remove_until_true(lambda x_space: x_space.space > space, meet_collon):
-                        if x_space.space == space:
-                            indicator_mode = False
-                        elif x_space.space < space:
-                            raise ReplParserDies(f"Unindent does not match any outer indentation level", no, line)
-                        else:
-                            raise ReplParserDies(f"Unexpected Indent", no, line)
-                    else:
-                        raise ReplParserDies(f"Unindent does not match any outer indentation level", no, line)
-                yield indicator_mode
-    
-        def code_reader(codeblock):
-            codes = codeblock.content.splitlines()
-            parser = parsing()
-            no_lang = codeblock.language is not None
-            for line, no in zip(codes[no_lang:], parser):
-                indent = parser.send(line)
-                number = f"{no} " if flags.counter else ""
-                yield f'{number}{(">>>", "...")[not indent]} {line}'
-
+    async def repl(self, ctx, code: UntilFlag[codeblock_converter], *, flags: flg.ReplFlag):
         newline = "\n"
-        await ctx.send(f"```py{newline}{newline.join(code_reader(content))}\n```")
+        await ctx.maybe_reply(f"```py\n{newline.join(ReplReader(code, **dict(flags)))}```")
 
     def cog_unload(self):
         self.bot.help_command = self._default_help_command
