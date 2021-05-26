@@ -24,8 +24,20 @@ class ReplParser:
         self.ALL_FUNC = self.SYNC_FUNC_ONLY + self.ASYNC_OR_SYNC
         self.ALL_FUNC = list(sorted(self.ALL_FUNC, key=lambda x: len(x), reverse=True))
         self.FUNC_INNER_REGEX = rf".*(\s+)?(?P<captured>{self.form_re_const(self.ALL_FUNC)})(\s+|.)?(?P<statement>.*)"
-        WITHARG_CONST = ["except", "class", "async with", "with", "async for", "for", "while", "if", "elif"]
-        self.WITHARG_REGEX = rf"(^(\s+)?(?P<captured>({self.form_re_const(WITHARG_CONST, self.FUNCTION_DEF)})))(\s+).*((\s+)?:(\s+)?$)"
+
+        self.CLASS_DEF_REGEX = r"(\s+)?(?P<captured>class)(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)((\((?P<subclass>.*)\))?(\s+)?:)"
+
+        self.FUNC_DEF_REGEX = rf"(\s+)?(?P<captured>{self.form_re_const(self.FUNCTION_DEF)})" \
+                              r"(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)()(\((?P<parameter>.*)\)(\s+)?(->(\s+)?(?P<returnhint>.*))?:)"
+        
+        self.WITH_DEF_REGEX = r"(\s+)?(?P<captured>async with|with)(\s+)(?P<statement>[^\s]+)(\s+)?(as(\s+)(?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?(\s+)"\
+                              r"?(((\s+)?\,(\s+)?(?P<statement2>[^\s]+)(\s+)?(as(\s+)(?P<var2>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?)+)?(\s+)?:(\s+)?"
+        self.FOR_DEF_REGEX = r"(\s+)?(?P<captured>async for|for)(\s+)(?P<statement>(?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?))(\s+)in(\s+)(?P<iterator>[^\s]+)(\s+)?:"
+
+        self.EXCEPT_STATE_REGEX = r"(\s+)?(?P<captured>except)(\s+)?((\s+)(?P<exception>[^\s]+)((\s+)as(\s+)((?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?)))?)?(\s+)?(\s+)?:"
+
+        WITHARG_CONST = ["while", "if", "elif"]
+        self.WITHARG_REGEX = rf"(^(\s+)?(?P<captured>({self.form_re_const(WITHARG_CONST)})))(\s+).*((\s+)?:(\s+)?$)"
 
         self.JOINER = {
             "else": ['if', 'elif', 'except'], 
@@ -52,12 +64,17 @@ class ReplParser:
         if iterable and (x_space := iterable[-1]):
             return x_space
 
+    def validation_syntax(self, no, line):
+        for regex in (self.FUNC_DEF_REGEX, self.CLASS_DEF_REGEX, self.WITH_DEF_REGEX, 
+                      self.FOR_DEF_REGEX, self.EXCEPT_STATE_REGEX, self.WITHARG_REGEX):
+            if match := re.match(regex, line):
+                return match
+
     def check_if_indenting(self, no, line):
         if re.match(self.COLLON_REGEX, line):
-            if (match := re.match(self.WITHARG_REGEX, line) or re.fullmatch(self.CONNECT_REGEX, line)) is not None:
+            if (match := self.validation_syntax(no, line) or re.fullmatch(self.CONNECT_REGEX, line)) is not None:
                 return self.execute_inside_dent(no, line, match)
-            else:
-                raise ReplParserDies("Invalid Syntax", no, line)
+            raise ReplParserDies("Invalid Syntax", no, line)
 
     def execute_inside_dent(self, no, line, match):
         captured = match["captured"]
@@ -91,7 +108,6 @@ class ReplParser:
         statement = match["statement"]
         if x_space.func: # In a function
             is_async = "async" in x_space.func
-            print(syntax, "|", statement, "|", is_async, x_space.func)
             if is_async: 
                 if value := discord.utils.find(lambda x: x == syntax, self.SYNC_FUNC_ONLY):
                     raise ReplParserDies(f"'{value}' is inside async function.", no, line)
@@ -103,6 +119,20 @@ class ReplParser:
                 raise ReplParserDies("Syntax Error", no, line)
         else:
             raise ReplParserDies(f"'{syntax}' outside function.", no, line)
+
+    def indentation_checker(self, no, line):
+        if x_space := self.remove_until_true(lambda x_space: x_space.space > self.space, self.meet_collon):
+            if x_space.space == self.space:
+                if match := re.match(self.FUNC_INNER_REGEX, line):
+                    self.inside_function_statement(no, line, x_space, match)
+                if self.space > 0:
+                    self.indicator_mode = False
+            elif x_space.space < self.space:
+                raise ReplParserDies("Unindent does not match any outer indentation level", no, line)
+            else:
+                raise ReplParserDies("Unexpected Indent", no, line)
+        else:
+            raise ReplParserDies("Unindent does not match any outer indentation level", no, line)
 
     def __iter__(self):
         return self._internal()
@@ -137,9 +167,10 @@ class ReplParser:
                 
                 if match := re.match(self.FUNC_INNER_REGEX, line):
                     self.inside_function_statement(no, line, indentor, match)
-                self.expected_indent = ()
                 self.indicator_mode = False
-                self.expected_indent = self.check_if_indenting(no, line)
+                if not is_empty:
+                    self.expected_indent = ()
+                    self.expected_indent = self.check_if_indenting(no, line)
             else:
                 raise ReplParserDies("Expected Indent", no, line)
         elif self.space > self.previous_space:
@@ -154,18 +185,8 @@ class ReplParser:
             self.previous_space = 0
             if match := re.match(self.FUNC_INNER_REGEX, line):
                 raise ReplParserDies(f"'{match['captured']}' outside function.", no, line)
-        elif self.meet_collon:
-            if x_space := self.remove_until_true(lambda x_space: x_space.space > self.space, self.meet_collon):
-                if x_space.space == self.space:
-                    if match := re.match(self.FUNC_INNER_REGEX, line):
-                        self.inside_function_statement(no, line, x_space, match)
-                    self.indicator_mode = False
-                elif x_space.space < self.space:
-                    raise ReplParserDies("Unindent does not match any outer indentation level", no, line)
-                else:
-                    raise ReplParserDies("Unexpected Indent", no, line)
-            else:
-                raise ReplParserDies("Unindent does not match any outer indentation level", no, line)
+        if self.meet_collon and not is_empty:
+            self.indentation_checker(no, line)
         return self.indicator_mode
 
 
