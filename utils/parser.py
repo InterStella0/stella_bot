@@ -13,7 +13,8 @@ Indentor = namedtuple("Indentor", "space part func")
 
 
 class ReplParser:
-    def __init__(self):
+    def __init__(self, **kwargs):
+        self.inner_func_check = kwargs.pop('inner_func_check', True)
         self.previous_line = ""
         self.previous_space = 0
         self.space = 0
@@ -113,9 +114,19 @@ class ReplParser:
         self.previous_space = self.space
         return captured
 
+    def inside_function_state_no_space(self, no, line):
+        if not self.inner_func_check:
+            return
+
+        if match := re.match(self.FUNC_INNER_REGEX, line):
+            raise ReplParserDies(f"'{match['captured']}' outside function.", no, line)
+
     def inside_function_statement(self, no, line, x_space, match):
         syntax = match["captured"]
         statement = match["statement"]
+        if not self.inner_func_check:
+            return
+
         if x_space.func: # In a function
             is_async = "async" in x_space.func
             if is_async: 
@@ -144,10 +155,10 @@ class ReplParser:
         else:
             raise ReplParserDies("Unindent does not match any outer indentation level", no, line)
 
-    def __iter__(self):
+    def __aiter__(self):
         return self._internal()
 
-    def _internal(self):
+    async def _internal(self):
         for no in itertools.count(1):
             self.indicator_mode = True
             line = yield no
@@ -192,46 +203,61 @@ class ReplParser:
             if self.meet_collon:
                 self.meet_collon = []
             self.previous_space = 0
-            if match := re.match(self.FUNC_INNER_REGEX, line):
-                raise ReplParserDies(f"'{match['captured']}' outside function.", no, line)
+            self.inside_function_state_no_space(no, line)
         if self.meet_collon and not is_empty:
             self.indentation_checker(no, line)
         return self.indicator_mode
 
 
 class ReplReader:
-    def __init__(self, codeblock, **flags):
-        self.iterator = iter(ReplParser())
+    def __init__(self, codeblock, *, _globals={}, **flags):
+        self.iterator = ReplParser(**flags).__aiter__()
         self.codeblock = codeblock
         self.counter = flags.get("counter")
-        self.executor = self.compile_exec() if flags.get("exec") else self.empty()
+        self.executor = self.compile_exec(_globals=_globals) if flags.get("exec") else self.empty()
 
-    def __iter__(self):
-        return self.reading_codeblock()
+    def __aiter__(self):
+        return self.reader_handler()
 
-    def reading_codeblock(self):
+    async def reader_handler(self):
+        async for each in self.reading_codeblock():
+            if isinstance(each, tuple):
+                compiled, _ = each
+                yield compiled
+                return
+            yield each
+
+    async def runner(self, code):
+        with contextlib.suppress(StopAsyncIteration):
+            for line in code:
+                result = [line]
+                for x in (self.iterator, self.executor):
+                    result.append(await x.__anext__())
+                yield tuple(result)
+        for x in (self.iterator, self.executor):
+            await x.__anext__()
+            
+
+    async def reading_codeblock(self):
         codes = self.codeblock.content.splitlines()
         no_lang = self.codeblock.language is not None
-        for line, no, ex in zip(codes[no_lang:], self.iterator, self.executor):
-            indent = self.iterator.send(line)
+        async for line, no, ex in self.runner(codes[no_lang:]):
+            indent = await self.iterator.asend(line)
             number = f"{no} " if self.counter else ""
-            compiled = self.executor.send((line, indent))
+            compiled = await self.executor.asend((line, indent))
             if ex and indent and compiled:
                 yield compiled
-            if ex == -1:
-                return
             yield f'{number}{("...", ">>>")[indent]} {line}'
-        try:
-            # End of line
-            for x, y in zip(self.iterator, self.executor):
-                if compiled := self.executor.send((0, True)):
+        else:
+            try:
+                if compiled := await self.executor.asend((0, True)):
                     yield compiled
-                self.iterator.send(0)
-        except StopIteration:
-            return
+                await self.iterator.asend(0)
+            except StopAsyncIteration:
+                return
 
-    def compile_exec(self):
-        global_vars = {}
+    async def compile_exec(self, *, _globals):
+        global_vars = _globals
         build_str = []
         while True:
             line, execute = yield len(build_str)
@@ -240,14 +266,29 @@ class ReplReader:
                 str_io = io.StringIO()
                 try:
                     caller = exec
-                    if len(build_str) == 1:
-                        with contextlib.suppress(SyntaxError):
-                            compiled = compile(compiled, 'repl_command', 'eval')
-                            caller = eval
+                    if len(build_str) == 1: 
+                        # Only wrap with async functions when it's an async operation
+                        if 'await' in compiled:
+                            before = "async def __inner_function__():\n    "
+                            try:
+                                compiled = compile(f"{before}yield {compiled}\n    yield locals()", 'repl_command', 'exec')
+                            except SyntaxError:
+                                compiled = f"{before}{compiled}\n    yield\n    yield locals()"
+                        else:
+                            with contextlib.suppress(SyntaxError):
+                                compiled = compile(compiled, 'repl_command', 'eval')
+                                caller = eval
+
                     output = None
                     with contextlib.redirect_stdout(str_io):
                         if (returned := caller(compiled, global_vars)) is not None:
                             output = repr(returned)
+                        if func := global_vars.get('__inner_function__'):
+                            generator = func()
+                            if (returned := await generator.__anext__()) is not None:
+                                output = repr(returned)
+                            res = await generator.__anext__()
+                            global_vars.update(res)
                     if print_out := str_io.getvalue():
                         if output is None:
                             output = re.sub("[\n]{0,1}$", "", print_out)
@@ -255,10 +296,9 @@ class ReplReader:
                             output = print_out + output
 
                     yield output
-                except Exception as e:
+                except BaseException as e:
                     lines = traceback.format_exception(type(e), e, e.__traceback__)
-                    yield "".join(lines)
-                    return -1
+                    yield "".join(lines), -1
                 build_str.clear()
             else:
                 yield

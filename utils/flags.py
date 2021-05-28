@@ -139,3 +139,4 @@ class ReplFlag(commands.FlagConverter):
     exec_: Optional[BooleanOwner] = flag(name='exec', aliases=['execute'],
                                                  help="Allow execution of repl, defaults to True, unless a non owner.",
                                                  default=True)
+    inner_func_check: Optional[bool] = flag(help="Check if return/yield is inside a function. Defaults to False for owner", default=False)
