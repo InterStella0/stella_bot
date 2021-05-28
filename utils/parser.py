@@ -4,9 +4,9 @@ import re
 import traceback
 import itertools
 import io
-import textwrap
 from collections import namedtuple
 from utils.errors import ReplParserDies
+from utils.useful import cancel_gen
 
 
 Indentor = namedtuple("Indentor", "space part func")
@@ -253,6 +253,8 @@ class ReplReader:
                 if compiled := await self.executor.asend((0, True)):
                     yield compiled
                 await self.iterator.asend(0)
+                await cancel_gen(self.iterator)
+                await cancel_gen(self.executor)
             except StopAsyncIteration:
                 return
 
