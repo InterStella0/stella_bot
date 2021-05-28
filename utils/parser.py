@@ -226,6 +226,9 @@ class ReplReader:
                 yield compiled
                 return
             yield each
+        
+        await cancel_gen(self.iterator)
+        await cancel_gen(self.executor)
 
     async def runner(self, code):
         with contextlib.suppress(StopAsyncIteration):
@@ -253,8 +256,6 @@ class ReplReader:
                 if compiled := await self.executor.asend((0, True)):
                     yield compiled
                 await self.iterator.asend(0)
-                await cancel_gen(self.iterator)
-                await cancel_gen(self.executor)
             except StopAsyncIteration:
                 return
 
@@ -306,8 +307,7 @@ class ReplReader:
                 yield
             build_str.append(line)
 
-    def empty(self):
+    async def empty(self):
         while True:
-            yield
             yield
         

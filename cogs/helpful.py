@@ -8,12 +8,15 @@ import datetime
 import textwrap
 import itertools
 import more_itertools
+import typing
+from fuzzywuzzy import process
 from discord.ext import commands, menus
 from utils.useful import BaseEmbed, MenuBase, plural, empty_page_format
 from utils.decorators import pages
 from utils.errors import CantRun
 from utils.parser import ReplReader
 from utils.greedy_parser import UntilFlag, command
+from utils.buttons import BaseButton, ViewButtonIteration
 from utils import flags as flg
 from collections import namedtuple
 from discord.ext.menus import First, Last
@@ -68,6 +71,20 @@ class HelpMenuBase(MenuBase):
 
     async def on_information_show(self, payload):
         raise NotImplemented("Information is not implemented.")
+
+
+class HelpView(ViewButtonIteration):
+    def __init__(self, help_object, *args, button, style):
+        super().__init__(*args, button=button, style=style)
+        self.help_object = help_object
+
+class HelpButton(BaseButton):
+    async def callback(self, interaction):
+        ctx = self.view.help_object.context
+        bot = ctx.bot
+        command = bot.get_command(self.selected)
+        embed = self.view.help_object.get_command_help(command)
+        await interaction.response.send_message(content=f"Help for **{self.selected}**", embed=embed, ephemeral=True)
 
 
 class HelpMenu(HelpMenuBase):
@@ -262,6 +279,18 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             await pages.start(self.context, wait=True)
             await self.context.confirmed()
 
+    async def command_callback(self, ctx, search: typing.Optional[typing.Literal['search', 'select']], *, command):
+        if search:
+            iterator = filter(lambda x: x[1] > 50, process.extract(command, [x.name for x in ctx.bot.commands], limit=5))
+            result = [*more_itertools.chunked(map(lambda x: x[0], iterator), 2)]
+            if result:
+                button_view = HelpView(self, *result, button=HelpButton, style=discord.ButtonStyle.secondary)
+                await ctx.send("**Searched Command:**", view=button_view, delete_after=120)
+            else:
+                await self.send_error_message(f'Unable to find any command that is even close to "{command}"')
+        else:
+            return await super().command_callback(ctx, command=command)
+
 
 class Helpful(commands.Cog):
     def __init__(self, bot):
@@ -348,7 +377,7 @@ class Helpful(commands.Cog):
     @command(help="Simulate a live python interpreter interface when given a python code.")
     async def repl(self, ctx, code: UntilFlag[codeblock_converter], *, flags: flg.ReplFlag):
         newline = "\n"
-        globals_ = {'ctx': ctx, 'author': ctx.author, 'guild': ctx.guild, 'bot': self.bot}
+        globals_ = {'ctx': ctx, 'author': ctx.author, 'guild': ctx.guild, 'bot': self.bot, 'discord': discord, 'commands': commands}
         flags = dict(flags)
         if flags.get('exec') and not await self.bot.is_owner(ctx.author):
             flags.update({"exec": False, "inner_func_check": True})
