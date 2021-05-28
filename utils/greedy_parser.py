@@ -205,8 +205,9 @@ class UntilFlag(RequiredGreedy):
                 while view.buffer[maximum - 1].isspace(): # Minus 1 to offset the extra space that it got
                     maximum -= 1
                 argument = view.buffer[view.index: maximum]
-
-        if argument is None:
+            else:
+                argument = view.read_rest() # 
+        elif argument is None:
             if view.buffer[view.index] == '-':
                 if required:
                     if self._is_typing_optional(param.annotation):

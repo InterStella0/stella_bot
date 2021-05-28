@@ -7,7 +7,7 @@ import humanize
 from collections import namedtuple, Counter
 from fuzzywuzzy import fuzz
 from discord.ext import commands
-from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound, MustMember
+from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound, MustMember, NotOwnerConvert
 from discord.utils import _unique
 from utils.useful import unpack, RenameClass
 
@@ -224,3 +224,9 @@ class AuthorJump_url(JumpValidator):
     async def convert(self, ctx, argument):
         message = await AuthorMessage().convert(ctx, await super().convert(ctx, argument))
         return message.jump_url
+
+class BooleanOwner(commands.Converter):
+    async def convert(self, ctx, argument):
+        if await ctx.bot.is_owner(ctx.author):
+            return commands.converter._convert_to_bool(argument)
+        raise NotOwnerConvert('Boolean')

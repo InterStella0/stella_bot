@@ -8,7 +8,7 @@ from typing import List, Optional, Union
 from discord.ext import commands
 from discord.ext.flags import FlagCommand, _parser
 from discord.utils import MISSING
-from utils.new_converters import AuthorJump_url, AuthorMessage, DatetimeConverter
+from utils.new_converters import AuthorJump_url, AuthorMessage, DatetimeConverter, BooleanOwner
 
 class SFlagCommand(FlagCommand):
     """Legacy Flag parsing, only be used when i want to"""
@@ -136,3 +136,6 @@ class ReinvokeFlag(commands.FlagConverter):
     
 class ReplFlag(commands.FlagConverter):
     counter: Optional[bool] = flag(help="Showing the counter for each line, defaults to False", default=False)
+    exec_: Optional[BooleanOwner] = flag(name='exec', aliases=['execute'],
+                                                 help="Allow execution of repl, defaults to True, unless a non owner.",
+                                                 default=True)

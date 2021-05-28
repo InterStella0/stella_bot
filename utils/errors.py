@@ -59,8 +59,12 @@ class ConsumerUnableToConvert(ArgumentBaseError):
     def __init__(self, *args, **kwargs):
         super().__init__(message="Could not convert {} into {}".format(*args), **kwargs)
 
-class ReplParserDies(commands.CommandError):
+class ReplParserDies(ArgumentBaseError):
     def __init__(self, message, no, line):
         super().__init__(message=message)
         self.line = line
         self.no = no
+
+class NotOwnerConvert(ArgumentBaseError):
+    def __init__(self, converter):
+        super().__init__(message=f"You're not the owner of this bot. You can't use {converter}")

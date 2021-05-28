@@ -1,6 +1,10 @@
+import contextlib
 import discord
 import re
+import traceback
 import itertools
+import io
+import textwrap
 from collections import namedtuple
 from utils.errors import ReplParserDies
 
@@ -15,7 +19,7 @@ class ReplParser:
         self.space = 0
         self.expecting_combo = []
         self.meet_collon = []
-        self.expected_indent = ()
+        self.expected_indent = None
         self.FUNCTION_DEF = ["async def", "def"]
         self.SYNC_FUNC = ["yield", "return"]
         self.ASYNC_FUNC_ONLY = ["await"]
@@ -23,6 +27,7 @@ class ReplParser:
         self.SYNC_FUNC_ONLY = ["yield from"]
         self.ALL_FUNC = self.SYNC_FUNC_ONLY + self.ASYNC_OR_SYNC
         self.ALL_FUNC = list(sorted(self.ALL_FUNC, key=lambda x: len(x), reverse=True))
+        # Yes, i'm aware of other ways to have selection regex, i dont care, i need to reuse the constants
         self.FUNC_INNER_REGEX = rf".*(\s+)?(?P<captured>{self.form_re_const(self.ALL_FUNC)})(\s+|.)?(?P<statement>.*)"
 
         self.CLASS_DEF_REGEX = r"(\s+)?(?P<captured>class)(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)((\((?P<subclass>.*)\))?(\s+)?:)"
@@ -36,6 +41,8 @@ class ReplParser:
 
         self.EXCEPT_STATE_REGEX = r"(\s+)?(?P<captured>except)(\s+)?((\s+)(?P<exception>[^\s]+)((\s+)as(\s+)((?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?)))?)?(\s+)?(\s+)?:"
 
+        self.DECORATOR_REGEX = r"(\s+)?(?P<captured>\@)(?P<name>[^(]+)(?P<parameter>\(.*\))?(\s+)?"
+
         WITHARG_CONST = ["while", "if", "elif"]
         self.WITHARG_REGEX = rf"(^(\s+)?(?P<captured>({self.form_re_const(WITHARG_CONST)})))(\s+).*((\s+)?:(\s+)?$)"
 
@@ -47,11 +54,12 @@ class ReplParser:
         }
 
         self.COMBINATION = {
-            "try": ["except", "finally"]
+            "try": ["except", "finally"],
+            '@': ["async def", "def", '@']
         }
 
         self.CONNECT_REGEX = rf"(\s+)?(?P<captured>({self.form_re_const(self.COMBINATION, self.JOINER)}))(\s+)?:(\s+)?"
-        self.COLLON_REGEX = r".*(:)(\s+)?$"
+        self.COLLON_DEC_REGEX = r"(^(@)|.*(:)(\s+)?$)"
 
     @staticmethod
     def form_re_const(*iterables):
@@ -65,13 +73,13 @@ class ReplParser:
             return x_space
 
     def validation_syntax(self, no, line):
-        for regex in (self.FUNC_DEF_REGEX, self.CLASS_DEF_REGEX, self.WITH_DEF_REGEX, 
+        for regex in (self.FUNC_DEF_REGEX, self.CLASS_DEF_REGEX, self.WITH_DEF_REGEX, self.DECORATOR_REGEX,
                       self.FOR_DEF_REGEX, self.EXCEPT_STATE_REGEX, self.WITHARG_REGEX):
             if match := re.match(regex, line):
                 return match
 
     def check_if_indenting(self, no, line):
-        if re.match(self.COLLON_REGEX, line):
+        if re.match(self.COLLON_DEC_REGEX, line):
             if (match := self.validation_syntax(no, line) or re.fullmatch(self.CONNECT_REGEX, line)) is not None:
                 return self.execute_inside_dent(no, line, match)
             raise ReplParserDies("Invalid Syntax", no, line)
@@ -91,6 +99,8 @@ class ReplParser:
         if expect := discord.utils.get(self.expecting_combo, space=self.space):
             if captured not in self.COMBINATION.get(expect.part):
                 raise ReplParserDies("Invalid Syntax", no, line)
+            if expect.part == '@':
+                self.indicator_mode = False
             self.expecting_combo.remove(expect)
         if self.COMBINATION.get(captured):
             self.expecting_combo.append(Indentor(self.space, captured, None))
@@ -142,20 +152,19 @@ class ReplParser:
             self.indicator_mode = True
             line = yield no
 
-            if line == 0: # End of line, check for syntax combination statement
+            if line == 0 or line is None: # End of line, check for syntax combination statement
                 if self.expecting_combo:
                     raise ReplParserDies("Syntax Error", no, "")
                 self.space = 0
                 self.parsing(no, "")
                 return
-
             self.space = re.match(r"(\s+)?", line).span()[-1]
             yield self.parsing(no, line)
             self.previous_line = line 
 
     def parsing(self, no, line, /):
         is_empty = line[self.space:] == ""
-        if self.expected_indent:
+        if self.expected_indent != '@' and self.expected_indent is not None:
             if self.previous_space < self.space:
                 self.previous_space = self.space
                 if before := discord.utils.find(lambda x: x.func in self.FUNCTION_DEF, reversed(self.meet_collon)):
@@ -169,7 +178,7 @@ class ReplParser:
                     self.inside_function_statement(no, line, indentor, match)
                 self.indicator_mode = False
                 if not is_empty:
-                    self.expected_indent = ()
+                    self.expected_indent = None
                     self.expected_indent = self.check_if_indenting(no, line)
             else:
                 raise ReplParserDies("Expected Indent", no, line)
@@ -195,6 +204,7 @@ class ReplReader:
         self.iterator = iter(ReplParser())
         self.codeblock = codeblock
         self.counter = flags.get("counter")
+        self.executor = self.compile_exec() if flags.get("exec") else self.empty()
 
     def __iter__(self):
         return self.reading_codeblock()
@@ -202,14 +212,60 @@ class ReplReader:
     def reading_codeblock(self):
         codes = self.codeblock.content.splitlines()
         no_lang = self.codeblock.language is not None
-        for line, no in zip(codes[no_lang:], self.iterator):
+        for line, no, ex in zip(codes[no_lang:], self.iterator, self.executor):
             indent = self.iterator.send(line)
             number = f"{no} " if self.counter else ""
-            yield f'{number}{(">>>", "...")[not indent]} {line}'
-
+            compiled = self.executor.send((line, indent))
+            if ex and indent and compiled:
+                yield compiled
+            if ex == -1:
+                return
+            yield f'{number}{("...", ">>>")[indent]} {line}'
         try:
             # End of line
-            next(self.iterator)
-            self.iterator.send(0)
+            for x, y in zip(self.iterator, self.executor):
+                if compiled := self.executor.send((0, True)):
+                    yield compiled
+                self.iterator.send(0)
         except StopIteration:
             return
+
+    def compile_exec(self):
+        global_vars = {}
+        build_str = []
+        while True:
+            line, execute = yield len(build_str)
+            if execute and build_str:
+                compiled = "\n".join(build_str)
+                str_io = io.StringIO()
+                try:
+                    caller = exec
+                    if len(build_str) == 1:
+                        with contextlib.suppress(SyntaxError):
+                            compiled = compile(compiled, 'repl_command', 'eval')
+                            caller = eval
+                    output = None
+                    with contextlib.redirect_stdout(str_io):
+                        if (returned := caller(compiled, global_vars)) is not None:
+                            output = repr(returned)
+                    if print_out := str_io.getvalue():
+                        if output is None:
+                            output = re.sub("[\n]{0,1}$", "", print_out)
+                        else:
+                            output = print_out + output
+
+                    yield output
+                except Exception as e:
+                    lines = traceback.format_exception(type(e), e, e.__traceback__)
+                    yield "".join(lines)
+                    return -1
+                build_str.clear()
+            else:
+                yield
+            build_str.append(line)
+
+    def empty(self):
+        while True:
+            yield
+            yield
+        

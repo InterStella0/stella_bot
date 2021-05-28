@@ -348,7 +348,10 @@ class Helpful(commands.Cog):
     @command(help="Simulate a live python interpreter interface when given a python code.")
     async def repl(self, ctx, code: UntilFlag[codeblock_converter], *, flags: flg.ReplFlag):
         newline = "\n"
-        await ctx.maybe_reply(f"```py\n{newline.join(ReplReader(code, **dict(flags)))}```")
+        flags = dict(flags)
+        if flags.get('exec') and not await self.bot.is_owner(ctx.author):
+            flags.update({"exec": False})
+        await ctx.maybe_reply(f"```py{newline}{newline.join(ReplReader(code, **flags))}```")
 
     def cog_unload(self):
         self.bot.help_command = self._default_help_command
