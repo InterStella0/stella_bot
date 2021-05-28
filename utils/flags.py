@@ -1,5 +1,6 @@
 import shlex
 import re
+import inspect
 import discord
 import argparse
 import sys
@@ -115,8 +116,10 @@ def find_flag(command):
     """Helper function to find the flag that is in a command"""
     last = [*command.params.values()][-1]
     if last.kind is last.KEYWORD_ONLY:
-        if issubclass(last.annotation, commands.FlagConverter):
-            return last
+        ann = last.annotation
+        if inspect.isclass(ann):
+            if issubclass(ann, commands.FlagConverter):
+                return last
 
 
 class InfoFlag(commands.FlagConverter):

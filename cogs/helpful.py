@@ -279,15 +279,22 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             await pages.start(self.context, wait=True)
             await self.context.confirmed()
 
-    async def command_callback(self, ctx, search: typing.Optional[typing.Literal['search', 'select']], *, command):
+    async def command_callback(self, ctx, search: typing.Optional[typing.Literal['search', 'select']], *, command=None):
         if search:
-            iterator = filter(lambda x: x[1] > 50, process.extract(command, [x.name for x in ctx.bot.commands], limit=5))
-            result = [*more_itertools.chunked(map(lambda x: x[0], iterator), 2)]
-            if result:
-                button_view = HelpView(self, *result, button=HelpButton, style=discord.ButtonStyle.secondary)
-                await ctx.send("**Searched Command:**", view=button_view, delete_after=120)
+            bot = ctx.bot
+            if command is not None:
+                iterator = filter(lambda x: x[1] > 50, process.extract(command, [x.name for x in bot.commands], limit=5))
+                result = [*more_itertools.chunked(map(lambda x: x[0], iterator), 2)]
+                if result:
+                    button_view = HelpView(self, *result, button=HelpButton, style=discord.ButtonStyle.secondary)
+                    await ctx.send("**Searched Command:**", view=button_view, delete_after=180)
+                else:
+                    await self.send_error_message(f'Unable to find any command that is even close to "{command}"')
             else:
-                await self.send_error_message(f'Unable to find any command that is even close to "{command}"')
+                param = bot.get_command('help').params['command']
+                ctx.current_parameter = param
+                raise commands.MissingRequiredArgument(param)
+
         else:
             return await super().command_callback(ctx, command=command)
 
