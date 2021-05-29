@@ -24,6 +24,7 @@ async def show_result(self, menu, entry):
     return f"```py\n{entry}```"
 
 class Myself(commands.Cog, command_attrs=dict(hidden=True)):
+    """Commands for stella"""
     def __init__(self, bot):
         self.bot = bot
 

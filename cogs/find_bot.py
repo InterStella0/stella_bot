@@ -153,6 +153,7 @@ def dpy_bot():
 
 
 class FindBot(commands.Cog, name="Bots"):
+    """Most bot related commands"""
     def __init__(self, bot):
         self.bot = bot
         valid_prefix = ("!", "?", "？", "<@(!?)80528701850124288> ")

@@ -38,7 +38,7 @@ class ReplParser:
         
         self.WITH_DEF_REGEX = r"(\s+)?(?P<captured>async with|with)(\s+)(?P<statement>[^\s]+)(\s+)?(as(\s+)(?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?(\s+)"\
                               r"?(((\s+)?\,(\s+)?(?P<statement2>[^\s]+)(\s+)?(as(\s+)(?P<var2>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?)+)?(\s+)?:(\s+)?"
-        self.FOR_DEF_REGEX = r"(\s+)?(?P<captured>async for|for)(\s+)(?P<statement>(?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?))(\s+)in(\s+)(?P<iterator>[^\s]+)(\s+)?:"
+        self.FOR_DEF_REGEX = r"(\s+)?(?P<captured>async for|for)(\s+)(?P<statement>(?P<var>.*)(\s+)in(\s+)(?P<iterator>.*))(\s+)?:"
 
         self.EXCEPT_STATE_REGEX = r"(\s+)?(?P<captured>except)(\s+)?((\s+)(?P<exception>[^\s]+)((\s+)as(\s+)((?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?)))?)?(\s+)?(\s+)?:"
 
@@ -239,7 +239,6 @@ class ReplReader:
                 yield tuple(result)
         for x in (self.iterator, self.executor):
             await x.__anext__()
-            
 
     async def reading_codeblock(self):
         codes = self.codeblock.content.splitlines()
@@ -310,4 +309,3 @@ class ReplReader:
     async def empty(self):
         while True:
             yield
-        

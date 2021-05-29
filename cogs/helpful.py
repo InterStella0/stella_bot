@@ -3,6 +3,7 @@ import inspect
 import json
 import re
 import discord
+import copy
 import humanize
 import datetime
 import textwrap
@@ -11,7 +12,7 @@ import more_itertools
 import typing
 from fuzzywuzzy import process
 from discord.ext import commands, menus
-from utils.useful import BaseEmbed, MenuBase, plural, empty_page_format
+from utils.useful import BaseEmbed, MenuBase, plural, empty_page_format, unpack
 from utils.decorators import pages
 from utils.errors import CantRun
 from utils.parser import ReplReader
@@ -19,10 +20,10 @@ from utils.greedy_parser import UntilFlag, command
 from utils.buttons import BaseButton, ViewButtonIteration
 from utils import flags as flg
 from collections import namedtuple
-from discord.ext.menus import First, Last
+from discord.ext.menus import First, Last, button
 from jishaku.codeblocks import codeblock_converter
 
-CommandHelp = namedtuple("CommandHelp", 'command brief')
+CommandHelp = namedtuple("CommandHelp", 'command brief command_obj')
 
 
 class HelpMenuBase(MenuBase):
@@ -70,33 +71,140 @@ class HelpMenuBase(MenuBase):
         self.info = info
 
     async def on_information_show(self, payload):
-        raise NotImplemented("Information is not implemented.")
+        raise NotImplementedError
 
+    async def start(self, ctx, **kwargs):
+        self.help_command = ctx.bot.help_command
+        self.help_command.context = ctx
+        await super().start(ctx, **kwargs)
+
+
+class HelpSource(menus.ListPageSource):
+    def __init__(self, button, interaction, entries):
+        super().__init__(entries, per_page=1)
+        self.button = button
+        self.interaction = interaction
+
+    async def help_source_format(self, menu, entry):
+        """This is for the help command ListPageSource"""
+        cog, list_commands = entry
+        new_line = "\n"
+        embed = discord.Embed(title=f"{getattr(cog, 'qualified_name', 'No')} Category",
+                            description=new_line.join(f'{command_help.command}{new_line}{command_help.brief}'
+                                                        for command_help in list_commands),
+                            color=menu.bot.color)
+        author = menu.ctx.author
+        await self.button.during_menu(self.interaction, list_commands)
+        return embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar.url)
+
+    async def format_page(self, menu, entry):
+        result = await self.help_source_format(menu, entry)
+        return menu.generate_page(result, self._max_pages)
 
 class HelpView(ViewButtonIteration):
-    def __init__(self, help_object, *args, button, style):
-        super().__init__(*args, button=button, style=style)
+    def __init__(self, help_object, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.help_object = help_object
+        self.ctx = help_object.context
+        self.bot = help_object.context.bot
+
+class HelpMenuView(HelpView):
+    def __init__(self, embed, page_source, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.page_source = page_source
+        self.original_embed = embed
+        self.menu = None
+        self.__prepare = False
+
+    async def start(self, button, interaction, data):
+        if not self.__prepare:
+            self.menu = HelpMenu(self.page_source(button, interaction, data), message=interaction.message)
+            await self.menu.start(self.help_object.context)
+            await self.menu.show_page(0)
+            self.__prepare = True
+
+    async def update(self, button, interaction, data):
+        if not self.__prepare:
+            await self.start(button, interaction, data)
+        else:
+            menu = self.menu
+            await menu.change_source(self.page_source(button, interaction, data))
+            if not hasattr(menu, "_Menu__tasks"):
+                menu._Menu__tasks = []
+            if not menu._Menu__tasks:
+                loop = self.bot.loop
+                menu._Menu__tasks.append(loop.create_task(menu._internal_loop()))
+                current_react = [*map(str, interaction.message.reactions)]
+                async def add_reactions_task():
+                    for emoji in menu.buttons:
+                        if emoji not in current_react:
+                            await interaction.message.add_reaction(emoji)
+                menu._Menu__tasks.append(loop.create_task(add_reactions_task()))
+
+
+class HelpSearchButton(BaseButton):
+    async def callback(self, interaction):
+        help_obj = self.view.help_object
+        bot = help_obj.context.bot
+        command = bot.get_command(self.selected)
+        embed = help_obj.get_command_help(command)
+        await interaction.response.send_message(content=f"Help for **{self.selected}**", embed=embed, ephemeral=True)
+
+class HomeButton(BaseButton):
+    async def callback(self, interaction):
+        self.view.clear_items()
+        for b in self.view.old_items:
+            self.view.add_item(b)
+        await interaction.message.edit(view=self.view, embed=self.view.original_embed)
+
 
 class HelpButton(BaseButton):
     async def callback(self, interaction):
-        ctx = self.view.help_object.context
-        bot = ctx.bot
-        command = bot.get_command(self.selected)
-        embed = self.view.help_object.get_command_help(command)
-        await interaction.response.send_message(content=f"Help for **{self.selected}**", embed=embed, ephemeral=True)
+        view = self.view
+        select = self.selected or "No Category"
+        cog = view.bot.get_cog(select)
+        data = [(cog, x) for x in view.mapper.get(cog)]
+        self.view.old_items = copy.copy(self.view.children)
+        await view.update(self, interaction, data)
+    
+    async def during_menu(self, interaction, list_commands):
+        commands = [c.command_obj.name for c in list_commands]
+        self.view.clear_items()
+        self.view.add_item(HomeButton(style=discord.ButtonStyle.success, selected="Home", group=None))
+        for c in commands:
+            self.view.add_item(HelpSearchButton(style=discord.ButtonStyle.secondary, selected=c, group=None))
 
+        await interaction.message.edit(view=self.view)
 
-class HelpMenu(HelpMenuBase):
-    """This is a MenuPages class that is used only in help command. All it has is custom information and
-       custom initial message."""
+class HelpMenu(HelpMenuBase, inherit_buttons=False):
+    """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
+       with a custom emoji, and keep the functionality."""
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, form_buttons=False, **kwargs)
         self.help_command = None
+
+    @menus.button("<:before_check:754948796487565332>", position=First(0))
+    async def go_before(self, payload):
+        """Goes to the previous page."""
+        await self.show_checked_page(self.current_page - 1)
+
+    @menus.button("<:next_check:754948796361736213>", position=Last(0))
+    async def go_after(self, payload):
+        """Goes to the next page."""
+        await self.show_checked_page(self.current_page + 1)
+
+    @menus.button("<:stop_check:754948796365930517>", position=First(1))
+    async def dies(self, payload):
+        """Deletes the message."""
+        self.stop()
+
+    @menus.button('<:information_pp:754948796454010900>', position=Last(1))
+    async def on_information(self, payload):
+        """Shows this message"""
+        await super().on_information(payload)
 
     async def on_information_show(self, payload):
         ctx = self.ctx
-        exists = [str(emoji) for emoji in super().buttons]
         embed = BaseEmbed.default(ctx,
                                   title="Information",
                                   description="This shows each commands in this bot. Each page is a category that shows "
@@ -105,17 +213,12 @@ class HelpMenu(HelpMenuBase):
         pa = "page" if p else "the"
         embed.set_author(icon_url=ctx.bot.user.avatar.url,
                          name=f"You were on {pa} {curr}")
-        nav = '\n'.join(f"{self.dict_emoji[e].emoji} {self.dict_emoji[e].explain}" for e in exists)
+        nav = '\n'.join(f"{e} {b.action.__doc__}" for e, b in super().buttons.items())
         embed.add_field(name="Navigation:", value=nav)
         await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
-    async def start(self, ctx, **kwargs):
-        self.help_command = ctx.bot.help_command
-        self.help_command.context = ctx
-        await super().start(ctx, **kwargs)
 
-
-class CogMenu(HelpMenu):
+class CogMenu(HelpMenuBase):
     """This is a MenuPages class that is used only in Cog help command. All it has is custom information and
        custom initial message."""
     async def on_information_show(self, payload):
@@ -132,19 +235,6 @@ class CogMenu(HelpMenu):
         nav = '\n'.join(f"{self.dict_emoji[e].emoji} {self.dict_emoji[e].explain}" for e in exists)
         embed.add_field(name="Navigation:", value=nav)
         await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
-
-
-@pages()
-async def help_source_format(self, menu: HelpMenu, entry):
-    """This is for the help command ListPageSource"""
-    cog, list_commands = entry
-    new_line = "\n"
-    embed = discord.Embed(title=f"{getattr(cog, 'qualified_name', 'No')} Category",
-                          description=new_line.join(f'{command_help.command}{new_line}{command_help.brief}'
-                                                    for command_help in list_commands),
-                          color=menu.bot.color)
-    author = menu.ctx.author
-    return embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar.url)
 
 
 class StellaBotHelp(commands.DefaultHelpCommand):
@@ -217,17 +307,30 @@ class StellaBotHelp(commands.DefaultHelpCommand):
     async def send_bot_help(self, mapping):
         """Gets called when `uwu help` is invoked"""
         def get_info(com):
-            return (getattr(self, f"get_{x}")(com) for x in ("command_signature", "help"))
+            return self.get_command_signature(com), self.get_help(com), com
 
-        command_data = []
+        command_data = {}
         for cog, unfiltered_commands in mapping.items():
-            list_commands = await self.filter_commands(unfiltered_commands, sort=True)
-            for chunks in more_itertools.chunked(list_commands, 6):
-                command_data.append((cog, [CommandHelp(*get_info(command)) for command in chunks]))
+            if list_commands := await self.filter_commands(unfiltered_commands, sort=True):
+                lists = command_data.setdefault(cog, [])
+                for chunks in more_itertools.chunked(list_commands, 4):
+                    lists.append([*map(lambda c: CommandHelp(*get_info(c)), chunks)])
 
-        pages = HelpMenu(source=help_source_format(command_data))
+        cog_names = [getattr(c, "qualified_name", "No Category") for c in command_data]
+        embed = BaseEmbed.default(
+            self.context,
+            title="Select a Category:", 
+            description="\n".join(f"**{getattr(c, 'qualified_name', 'No')} Category [`{len([*unpack(i)])}`]**\n{getattr(c, 'description')}"
+                                  for c, i in command_data.items())
+        )
+        await self.get_destination().send(
+            embed=embed, 
+            view=HelpMenuView(embed, HelpSource, 
+                self, cog_names, style=discord.ButtonStyle.secondary,
+                button=HelpButton, mapper=command_data
+            )
+        )
         with contextlib.suppress(discord.NotFound, discord.Forbidden):
-            await pages.start(self.context, wait=True)
             await self.context.confirmed()
 
     def get_command_help(self, command):
@@ -286,7 +389,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
                 iterator = filter(lambda x: x[1] > 50, process.extract(command, [x.name for x in bot.commands], limit=5))
                 result = [*more_itertools.chunked(map(lambda x: x[0], iterator), 2)]
                 if result:
-                    button_view = HelpView(self, *result, button=HelpButton, style=discord.ButtonStyle.secondary)
+                    button_view = HelpView(self, *result, button=HelpSearchButton, style=discord.ButtonStyle.secondary)
                     await ctx.send("**Searched Command:**", view=button_view, delete_after=180)
                 else:
                     await self.send_error_message(f'Unable to find any command that is even close to "{command}"')
@@ -300,6 +403,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
 
 class Helpful(commands.Cog):
+    """Commands that I think are helpful for users"""
     def __init__(self, bot):
         self._default_help_command = bot.help_command
         bot.help_command = StellaBotHelp()

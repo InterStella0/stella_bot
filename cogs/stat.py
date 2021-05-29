@@ -206,6 +206,7 @@ class ElseConverter(commands.Converter):
 
 
 class Stat(commands.Cog, name="Statistic"):
+    """Statistic related commands"""
     def __init__(self, bot):
         self.bot = bot
 

@@ -64,7 +64,7 @@ def unpack(li: list):
 class MenuBase(menus.MenuPages):
     """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
        with a custom emoji, and keep the functionality."""
-    def __init__(self, source, dict_emoji=None, **kwargs):
+    def __init__(self, source, dict_emoji=None, form_buttons=True, **kwargs):
         super().__init__(source, delete_message_after=kwargs.pop('delete_message_after', True), **kwargs)
         self.info = False
 
@@ -90,7 +90,12 @@ class MenuBase(menus.MenuPages):
                           EmojiB("<:stop_check:754948796365930517>", Last(0),
                                  "Remove this message.")
                           }
-        self.dict_emoji = dict_emoji or def_dict_emoji
+        if form_buttons:
+            self.dict_emoji = dict_emoji or def_dict_emoji
+            self.form_buttons()
+
+
+    def form_buttons(self):
         for emoji in self.buttons:
             callback = self.buttons[emoji].action
             if emoji.name not in self.dict_emoji:
@@ -103,15 +108,9 @@ class MenuBase(menus.MenuPages):
             self.remove_button(emoji)
 
     async def _get_kwargs_from_page(self, page):
-        value = await discord.utils.maybe_coroutine(self._source.format_page, self, page)
-        no_ping = {'allowed_mentions': discord.AllowedMentions(replied_user=False)}
-        if isinstance(value, dict):
-            value.update(no_ping)
-        elif isinstance(value, str):
-            no_ping.update({'content': value})
-        elif isinstance(value, discord.Embed):
-            no_ping.update({'embed': value, 'content': None})
-        return no_ping
+        dicts = await super()._get_kwargs_from_page(page)
+        dicts.update({'allowed_mentions': discord.AllowedMentions(replied_user=False)})
+        return dicts
 
     def generate_page(self, content, maximum):
         if maximum > 1:
