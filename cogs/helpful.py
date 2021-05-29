@@ -127,20 +127,23 @@ class HelpMenuView(HelpView):
         if not self.__prepare:
             await self.start(button, interaction, data)
         else:
-            menu = self.menu
-            await menu.change_source(self.page_source(button, interaction, data))
-            if not hasattr(menu, "_Menu__tasks"):
-                menu._Menu__tasks = []
-            if not menu._Menu__tasks:
-                loop = self.bot.loop
-                menu._Menu__tasks.append(loop.create_task(menu._internal_loop()))
-                current_react = [*map(str, interaction.message.reactions)]
-                async def add_reactions_task():
-                    for emoji in menu.buttons:
-                        if emoji not in current_react:
-                            await interaction.message.add_reaction(emoji)
-                menu._Menu__tasks.append(loop.create_task(add_reactions_task()))
+            await self.menu.change_source(self.page_source(button, interaction, data))
+        menu = self.menu # I declared it here because before `self.start`, `self.menu` is None, 4 hours wasted
+        if not menu._Menu__tasks:
+            loop = self.bot.loop
+            menu._Menu__tasks.append(loop.create_task(menu._internal_loop()))
+            current_react = [*map(str, interaction.message.reactions)]
+            async def add_reactions_task():
+                for emoji in menu.buttons:
+                    if emoji not in current_react:
+                        await interaction.message.add_reaction(emoji)
+            menu._Menu__tasks.append(loop.create_task(add_reactions_task()))
 
+    async def interaction_check(self, interaction):
+        if interaction.user != self.ctx.author:
+            await interaction.response.send_message(content=f"Only {self.ctx.author} can use this.", ephemeral=True)
+            raise Exception("no")
+        return True
 
 class HelpSearchButton(BaseButton):
     async def callback(self, interaction):
@@ -168,9 +171,11 @@ class HelpButton(BaseButton):
         await view.update(self, interaction, data)
     
     async def during_menu(self, interaction, list_commands):
+        if not self.view.menu._running:
+            return
         commands = [c.command_obj.name for c in list_commands]
         self.view.clear_items()
-        self.view.add_item(HomeButton(style=discord.ButtonStyle.success, selected="Home", group=None))
+        self.view.add_item(HomeButton(style=discord.ButtonStyle.success, selected="Home", group=None, emoji='<:house_mark:848227746378809354>'))
         for c in commands:
             self.view.add_item(HelpSearchButton(style=discord.ButtonStyle.secondary, selected=c, group=None))
 
@@ -196,6 +201,7 @@ class HelpMenu(HelpMenuBase, inherit_buttons=False):
     @menus.button("<:stop_check:754948796365930517>", position=First(1))
     async def dies(self, payload):
         """Deletes the message."""
+        self._source.button.view.stop()
         self.stop()
 
     @menus.button('<:information_pp:754948796454010900>', position=Last(1))
@@ -223,7 +229,6 @@ class CogMenu(HelpMenuBase):
        custom initial message."""
     async def on_information_show(self, payload):
         ctx = self.ctx
-        exists = [str(emoji) for emoji in super().buttons]
         embed = BaseEmbed.default(ctx,
                                   title="Information",
                                   description="This shows each commands in this category. Each page is a command that shows "
@@ -232,7 +237,7 @@ class CogMenu(HelpMenuBase):
         pa = "page" if p else "the"
         embed.set_author(icon_url=ctx.bot.user.avatar.url,
                          name=f"You were on {pa} {curr}")
-        nav = '\n'.join(f"{self.dict_emoji[e].emoji} {self.dict_emoji[e].explain}" for e in exists)
+        nav = '\n'.join(f"{self.dict_emoji[e].emoji} {self.dict_emoji[e].explain}" for e in map(emoji, super().buttons))
         embed.add_field(name="Navigation:", value=nav)
         await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
@@ -323,13 +328,13 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             description="\n".join(f"**{getattr(c, 'qualified_name', 'No')} Category [`{len([*unpack(i)])}`]**\n{getattr(c, 'description')}"
                                   for c, i in command_data.items())
         )
-        await self.get_destination().send(
-            embed=embed, 
-            view=HelpMenuView(embed, HelpSource, 
-                self, cog_names, style=discord.ButtonStyle.secondary,
-                button=HelpButton, mapper=command_data
-            )
-        )
+        loads = {
+            "style": discord.ButtonStyle.primary,
+            "button": HelpButton,
+            "mapper": command_data
+        }
+        menu_view = HelpMenuView(embed, HelpSource, self, cog_names, **loads)
+        await self.get_destination().send(embed=embed, view=menu_view)
         with contextlib.suppress(discord.NotFound, discord.Forbidden):
             await self.context.confirmed()
 
