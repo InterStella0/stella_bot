@@ -24,7 +24,12 @@ from discord.ext.menus import First, Last, button
 from jishaku.codeblocks import codeblock_converter
 
 CommandHelp = namedtuple("CommandHelp", 'command brief command_obj')
-
+emoji_dict = {"Bots": '<:robot_mark:848257366587211798>',
+              "Useful": '<:useful:848258928772776037>',
+              "Helpful": '<:helpful:848260729916227645>',
+              "Statistic": '<:statis_mark:848262218554408988>',
+              "Myself": '<:me:848262873783205888>',
+              None: '<:question:848263403604934729>'}
 
 class HelpMenuBase(MenuBase):
     """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
@@ -321,20 +326,26 @@ class StellaBotHelp(commands.DefaultHelpCommand):
                 for chunks in more_itertools.chunked(list_commands, 4):
                     lists.append([*map(lambda c: CommandHelp(*get_info(c)), chunks)])
 
-        cog_names = [getattr(c, "qualified_name", "No Category") for c in command_data]
+        cog_names = [dict(selected=getattr(c, "qualified_name", "No Category"),
+                          emoji=emoji_dict.get(getattr(c, "qualified_name", None))) for c in command_data]
+        fields = ((f"{emoji_dict[getattr(c, 'qualified_name', None)]} {getattr(c, 'qualified_name', 'No')} Category [`{len([*unpack(i)])}`]", 
+                      getattr(c, 'description', "Not documented"))
+                      for c, i in command_data.items())
+
         embed = BaseEmbed.default(
             self.context,
-            title="Select a Category:", 
-            description="\n".join(f"**{getattr(c, 'qualified_name', 'No')} Category [`{len([*unpack(i)])}`]**\n{getattr(c, 'description')}"
-                                  for c, i in command_data.items())
+            title="<:house_mark:848227746378809354> Help Command", 
+            description=f"{self.context.bot.stella}'s personal bot\n**Select a Category:**",
+            fields=fields
         )
+        embed.set_thumbnail(url=self.context.bot.user.avatar)
         loads = {
             "style": discord.ButtonStyle.primary,
             "button": HelpButton,
             "mapper": command_data
         }
         menu_view = HelpMenuView(embed, HelpSource, self, cog_names, **loads)
-        await self.get_destination().send(embed=embed, view=menu_view)
+        await self.context.reply(embed=embed, view=menu_view)
         with contextlib.suppress(discord.NotFound, discord.Forbidden):
             await self.context.confirmed()
 
