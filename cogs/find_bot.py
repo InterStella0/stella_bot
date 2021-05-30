@@ -1,3 +1,4 @@
+from logging import PlaceHolder
 from typing import Optional
 import discord
 import datetime
@@ -127,7 +128,7 @@ async def bot_pending_list(self, menu: MenuBase, entry):
     stellabot = menu.ctx.bot
     bot = menu.cached_bots.setdefault(entry["bot_id"], await stellabot.fetch_user(entry["bot_id"]))
     fields = (("Requested by", stellabot.get_user(entry["author_id"]) or "idk really"),
-              ("Reason", entry["reason"]),
+              ("Reason", textwrap.shorten(entry["reason"], width=1000, placeholder="...")),
               ("Created at", default_date(bot.created_at)),
               ("Requested at", default_date(entry["requested_at"])),
               ("Message", f"[jump]({entry['jump_url']})"))
@@ -587,7 +588,7 @@ class FindBot(commands.Cog, name="Bots"):
                 return func(condition)
 
         fields = (("Added by", f"{author.mention} (`{author.id}`)"),
-                  ("Reason", data.reason),
+                  ("Reason", textwrap.shorten(data.reason, width=1000, placeholder='...')),
                   ("Requested", or_none(data.requested_at, default_date)),
                   ("Joined", or_none(data.joined_at, default_date)),
                   ("Message Request", or_none(data.jump_url, "[jump]({})".format)))
@@ -720,6 +721,8 @@ class FindBot(commands.Cog, name="Bots"):
                                 embed.add_field(name=t, value=f"`{dat}`", inline=False)
 
                         title, attrib = title
+                        if title == "Reason":
+                            attrib = textwrap.shorten(attrib, width=1000, placeholder='...')
                     embed.add_field(name=title, value=f"{attrib.format(obj)}", inline=False)
 
         embed.add_field(name="Created at", value=f"`{default_date(bot.created_at)}`")
