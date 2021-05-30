@@ -8,10 +8,8 @@ import asyncio
 import contextlib
 import typing
 from utils.decorators import pages, in_executor
-from collections import namedtuple
-from discord.ext.menus import First, Last, Button
 from discord.utils import maybe_coroutine
-from discord.ext import commands, menus
+from discord.ext import commands
 
 
 async def try_call(method, *args, exception=Exception, ret=False, **kwargs):
@@ -59,76 +57,6 @@ def unpack(li: list):
             yield from unpack(item)
         else:
             yield item
-
-
-class MenuBase(menus.MenuPages):
-    """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
-       with a custom emoji, and keep the functionality."""
-    def __init__(self, source, dict_emoji=None, form_buttons=True, **kwargs):
-        super().__init__(source, delete_message_after=kwargs.pop('delete_message_after', True), **kwargs)
-        self.info = False
-
-        # Remind me to redo this dumb code
-        EmojiB = namedtuple("EmojiB", "emoji position explain")
-        def_dict_emoji = {'\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
-                          EmojiB("<:before_fast_check:754948796139569224>", First(0),
-                                 "Goes to the first page."),
-
-                          '\N{BLACK LEFT-POINTING TRIANGLE}\ufe0f':
-                          EmojiB("<:before_check:754948796487565332>", First(1),
-                                 "Goes to the previous page."),
-
-                          '\N{BLACK RIGHT-POINTING TRIANGLE}\ufe0f':
-                          EmojiB("<:next_check:754948796361736213>", Last(1),
-                                 "Goes to the next page."),
-
-                          '\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
-                          EmojiB("<:next_fast_check:754948796391227442>", Last(2),
-                                 "Goes to the last page."),
-
-                          '\N{BLACK SQUARE FOR STOP}\ufe0f':
-                          EmojiB("<:stop_check:754948796365930517>", Last(0),
-                                 "Remove this message.")
-                          }
-        if form_buttons:
-            self.dict_emoji = dict_emoji or def_dict_emoji
-            self.form_buttons()
-
-
-    def form_buttons(self):
-        for emoji in self.buttons:
-            callback = self.buttons[emoji].action
-            if emoji.name not in self.dict_emoji:
-                continue
-            new_but = self.dict_emoji[emoji.name]
-            new_button = Button(new_but.emoji, callback, position=new_but.position)
-            del self.dict_emoji[emoji.name]
-            self.dict_emoji[new_but.emoji] = new_but
-            self.add_button(new_button)
-            self.remove_button(emoji)
-
-    async def _get_kwargs_from_page(self, page):
-        dicts = await super()._get_kwargs_from_page(page)
-        dicts.update({'allowed_mentions': discord.AllowedMentions(replied_user=False)})
-        return dicts
-
-    def generate_page(self, content, maximum):
-        if maximum > 1:
-            page = f"Page {self.current_page + 1}/{maximum}"
-            if isinstance(content, discord.Embed):
-                if embed_dict := getattr(content, "_author", None):
-                    embed_dict["name"] += f"[{page.replace('Page ', '')}]"
-                    return content
-                return content.set_author(name=page)
-            elif isinstance(content, str):
-                return f"{page}\n{content}"
-        return content
-
-    async def send_initial_message(self, ctx, channel):
-        page = await self._source.get_page(0)
-        kwargs = await self._get_kwargs_from_page(page)
-        return await ctx.reply(**kwargs)
-
 
 def default_date(datetime_var):
     """The default date format that are used across this bot."""

@@ -12,17 +12,19 @@ import more_itertools
 import typing
 from fuzzywuzzy import process
 from discord.ext import commands, menus
-from utils.useful import BaseEmbed, MenuBase, plural, empty_page_format, unpack
+from utils.useful import BaseEmbed, plural, empty_page_format, unpack
 from utils.decorators import pages
 from utils.errors import CantRun
 from utils.parser import ReplReader
 from utils.greedy_parser import UntilFlag, command
-from utils.buttons import BaseButton, ViewButtonIteration
+from utils.buttons import BaseButton, MenuViewBase, ViewButtonIteration
+from utils.menus import ListPageInteractionBase, MenuBase, HelpMenuBase, MenuViewInteractionBase
 from utils import flags as flg
 from collections import namedtuple
-from discord.ext.menus import First, Last, button
+from discord.ext.menus import First, Last
 from jishaku.codeblocks import codeblock_converter
 
+CogHelp = namedtuple("CogAmount", 'name commands emoji description')
 CommandHelp = namedtuple("CommandHelp", 'command brief command_obj')
 emoji_dict = {"Bots": '<:robot_mark:848257366587211798>',
               "Useful": '<:useful:848258928772776037>',
@@ -30,67 +32,10 @@ emoji_dict = {"Bots": '<:robot_mark:848257366587211798>',
               "Statistic": '<:statis_mark:848262218554408988>',
               "Myself": '<:me:848262873783205888>',
               None: '<:question:848263403604934729>'}
+home_emoji = '<:house_mark:848227746378809354>'
 
-class HelpMenuBase(MenuBase):
-    """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
-       with a custom emoji, and keep the functionality."""
-
-    def __init__(self, source, **kwargs):
-        EmojiB = namedtuple("EmojiB", "emoji position explain")
-        help_dict_emoji = {'\N{BLACK LEFT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
-                           EmojiB("<:before_fast_check:754948796139569224>", First(0),
-                                  "Goes to the first page."),
-
-                           '\N{BLACK LEFT-POINTING TRIANGLE}\ufe0f':
-                           EmojiB("<:before_check:754948796487565332>", First(1),
-                                  "Goes to the previous page."),
-
-                           '\N{BLACK RIGHT-POINTING TRIANGLE}\ufe0f':
-                           EmojiB("<:next_check:754948796361736213>", Last(1),
-                                  "Goes to the next page."),
-
-                           '\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}\ufe0f':
-                           EmojiB("<:next_fast_check:754948796391227442>", Last(2),
-                                  "Goes to the last page."),
-
-                           '\N{BLACK SQUARE FOR STOP}\ufe0f':
-                           EmojiB("<:stop_check:754948796365930517>", Last(0),
-                                  "Remove this message."),
-
-                           '<:information_pp:754948796454010900>':
-                           EmojiB("<:information_pp:754948796454010900>", Last(4),
-                                  "Shows this infomation message.")}
-        super().__init__(source, dict_emoji=help_dict_emoji, **kwargs)
-
-    async def show_page(self, page_number):
-        self.info = False
-        await super().show_page(page_number)
-
-    @menus.button('<:information_pp:754948796454010900>', position=Last(4))
-    async def on_information(self, payload):
-        if info := not self.info:
-            await self.on_information_show(payload)
-        else:
-            self.current_page = max(self.current_page, 0)
-            await self.show_page(self.current_page)
-        self.info = info
-
-    async def on_information_show(self, payload):
-        raise NotImplementedError
-
-    async def start(self, ctx, **kwargs):
-        self.help_command = ctx.bot.help_command
-        self.help_command.context = ctx
-        await super().start(ctx, **kwargs)
-
-
-class HelpSource(menus.ListPageSource):
-    def __init__(self, button, interaction, entries):
-        super().__init__(entries, per_page=1)
-        self.button = button
-        self.interaction = interaction
-
-    async def help_source_format(self, menu, entry):
+class HelpSource(ListPageInteractionBase):
+    async def format_page(self, menu, entry):
         """This is for the help command ListPageSource"""
         cog, list_commands = entry
         new_line = "\n"
@@ -99,60 +44,36 @@ class HelpSource(menus.ListPageSource):
                                                         for command_help in list_commands),
                             color=menu.bot.color)
         author = menu.ctx.author
-        await self.button.during_menu(self.interaction, list_commands)
         return embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar.url)
 
-    async def format_page(self, menu, entry):
-        result = await self.help_source_format(menu, entry)
-        return menu.generate_page(result, self._max_pages)
+    async def format_view(self, menu, entry):
+        if not menu._running:
+            return
+        _, list_commands = entry
+        commands = [c.command_obj.name for c in list_commands]
+        menu.view.clear_items()
+        menu.view.add_item(HomeButton(style=discord.ButtonStyle.success, selected="Home", group=None, emoji=home_emoji))
+        for c in commands:
+            menu.view.add_item(HelpSearchButton(style=discord.ButtonStyle.secondary, selected=c, group=None))
+
+        return menu.view
 
 class HelpView(ViewButtonIteration):
     def __init__(self, help_object, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.help_object = help_object
+        self.help_command = help_object
         self.ctx = help_object.context
         self.bot = help_object.context.bot
 
-class HelpMenuView(HelpView):
-    def __init__(self, embed, page_source, *args, **kwargs):
+class HelpMenuView(MenuViewBase):
+    def __init__(self, embed, help_object, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.page_source = page_source
         self.original_embed = embed
-        self.menu = None
-        self.__prepare = False
-
-    async def start(self, button, interaction, data):
-        if not self.__prepare:
-            self.menu = HelpMenu(self.page_source(button, interaction, data), message=interaction.message)
-            await self.menu.start(self.help_object.context)
-            await self.menu.show_page(0)
-            self.__prepare = True
-
-    async def update(self, button, interaction, data):
-        if not self.__prepare:
-            await self.start(button, interaction, data)
-        else:
-            await self.menu.change_source(self.page_source(button, interaction, data))
-        menu = self.menu # I declared it here because before `self.start`, `self.menu` is None, 4 hours wasted
-        if not menu._Menu__tasks:
-            loop = self.bot.loop
-            menu._Menu__tasks.append(loop.create_task(menu._internal_loop()))
-            current_react = [*map(str, interaction.message.reactions)]
-            async def add_reactions_task():
-                for emoji in menu.buttons:
-                    if emoji not in current_react:
-                        await interaction.message.add_reaction(emoji)
-            menu._Menu__tasks.append(loop.create_task(add_reactions_task()))
-
-    async def interaction_check(self, interaction):
-        if interaction.user != self.ctx.author:
-            await interaction.response.send_message(content=f"Only {self.ctx.author} can use this.", ephemeral=True)
-            raise Exception("no")
-        return True
+        self.help_command = help_object
 
 class HelpSearchButton(BaseButton):
     async def callback(self, interaction):
-        help_obj = self.view.help_object
+        help_obj = self.view.help_command
         bot = help_obj.context.bot
         command = bot.get_command(self.selected)
         embed = help_obj.get_command_help(command)
@@ -169,57 +90,23 @@ class HomeButton(BaseButton):
 class HelpButton(BaseButton):
     async def callback(self, interaction):
         view = self.view
+        bot = view.help_command.context.bot
         select = self.selected or "No Category"
-        cog = view.bot.get_cog(select)
-        data = [(cog, x) for x in view.mapper.get(cog)]
+        cog = bot.get_cog(select)
+        data = [(cog, commands_list) for commands_list in view.mapper.get(cog)]
         self.view.old_items = copy.copy(self.view.children)
         await view.update(self, interaction, data)
-    
-    async def during_menu(self, interaction, list_commands):
-        if not self.view.menu._running:
-            return
-        commands = [c.command_obj.name for c in list_commands]
-        self.view.clear_items()
-        self.view.add_item(HomeButton(style=discord.ButtonStyle.success, selected="Home", group=None, emoji='<:house_mark:848227746378809354>'))
-        for c in commands:
-            self.view.add_item(HelpSearchButton(style=discord.ButtonStyle.secondary, selected=c, group=None))
 
-        await interaction.message.edit(view=self.view)
-
-class HelpMenu(HelpMenuBase, inherit_buttons=False):
-    """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
-       with a custom emoji, and keep the functionality."""
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, form_buttons=False, **kwargs)
-        self.help_command = None
-
-    @menus.button("<:before_check:754948796487565332>", position=First(0))
-    async def go_before(self, payload):
-        """Goes to the previous page."""
-        await self.show_checked_page(self.current_page - 1)
-
-    @menus.button("<:next_check:754948796361736213>", position=Last(0))
-    async def go_after(self, payload):
-        """Goes to the next page."""
-        await self.show_checked_page(self.current_page + 1)
-
-    @menus.button("<:stop_check:754948796365930517>", position=First(1))
-    async def dies(self, payload):
-        """Deletes the message."""
-        self._source.button.view.stop()
-        self.stop()
-
-    @menus.button('<:information_pp:754948796454010900>', position=Last(1))
-    async def on_information(self, payload):
-        """Shows this message"""
-        await super().on_information(payload)
-
+class HelpMenu(MenuViewInteractionBase):
+    """MenuPages class that is specifically for the help command."""
     async def on_information_show(self, payload):
         ctx = self.ctx
-        embed = BaseEmbed.default(ctx,
-                                  title="Information",
-                                  description="This shows each commands in this bot. Each page is a category that shows "
-                                              "what commands that the category have.")
+        embed = BaseEmbed.default(
+            ctx,
+            title="Information",
+            description="This shows each commands in this bot. Each page is a category that shows "
+                        "what commands that the category have."
+        )
         curr = self.current_page + 1 if (p := self.current_page > -1) else "cover page"
         pa = "page" if p else "the"
         embed.set_author(icon_url=ctx.bot.user.avatar.url,
@@ -242,7 +129,7 @@ class CogMenu(HelpMenuBase):
         pa = "page" if p else "the"
         embed.set_author(icon_url=ctx.bot.user.avatar.url,
                          name=f"You were on {pa} {curr}")
-        nav = '\n'.join(f"{self.dict_emoji[e].emoji} {self.dict_emoji[e].explain}" for e in map(emoji, super().buttons))
+        nav = '\n'.join(f"{e} {b.action.__doc__}" for e, b in super().buttons.items())
         embed.add_field(name="Navigation:", value=nav)
         await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
 
@@ -316,38 +203,52 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     async def send_bot_help(self, mapping):
         """Gets called when `uwu help` is invoked"""
-        def get_info(com):
-            return self.get_command_signature(com), self.get_help(com), com
+        def get_command_help(com):
+            signature = self.get_command_signature(com)
+            desc = self.get_help(com)
+            return CommandHelp(signature, desc, com)
 
+        def get_cog_help(cog, cog_commands):
+            cog_name_none = getattr(cog, "qualified_name", None)
+            cog_name = cog_name_none or "No Category"
+            cog_description = getattr(cog, 'description', "Not documented")
+            cog_emoji = emoji_dict.get(cog_name_none) or emoji_dict[None]
+            cog_amount = len([*unpack(cog_commands)])
+            return CogHelp(cog_name, cog_amount, cog_emoji, cog_description)
+
+        ctx = self.context
+        bot = ctx.bot
+        EACH_PAGE = 4
         command_data = {}
         for cog, unfiltered_commands in mapping.items():
             if list_commands := await self.filter_commands(unfiltered_commands, sort=True):
                 lists = command_data.setdefault(cog, [])
-                for chunks in more_itertools.chunked(list_commands, 4):
-                    lists.append([*map(lambda c: CommandHelp(*get_info(c)), chunks)])
+                for chunks in more_itertools.chunked(list_commands, EACH_PAGE):
+                    lists.append([*map(get_command_help, chunks)])
 
-        cog_names = [dict(selected=getattr(c, "qualified_name", "No Category"),
-                          emoji=emoji_dict.get(getattr(c, "qualified_name", None))) for c in command_data]
-        fields = ((f"{emoji_dict[getattr(c, 'qualified_name', None)]} {getattr(c, 'qualified_name', 'No')} Category [`{len([*unpack(i)])}`]", 
-                      getattr(c, 'description', "Not documented"))
-                      for c, i in command_data.items())
-
-        embed = BaseEmbed.default(
-            self.context,
-            title="<:house_mark:848227746378809354> Help Command", 
-            description=f"{self.context.bot.stella}'s personal bot\n**Select a Category:**",
+        sort_cog = [*itertools.starmap(get_cog_help, command_data.items())]
+        sort_cog.sort(key=lambda c: c.commands, reverse=True)
+        cog_names = [dict(selected=ch.name, emoji=ch.emoji) for ch in sort_cog]
+        fields = (("{0.emoji} {0.name} [`{0.commands}`]".format(ch), ch.description) for ch in sort_cog)
+        stella = bot.stella
+        embed = BaseEmbed.default(ctx,
+            title=f"{home_emoji} Help Command", 
+            description=f"{bot.description.format(stella)}\n\n**Select a Category:**",
             fields=fields
         )
-        embed.set_thumbnail(url=self.context.bot.user.avatar)
+        embed.set_thumbnail(url=bot.user.avatar)
+        embed.set_author(name=f"By {stella}", icon_url=stella.avatar)
         loads = {
             "style": discord.ButtonStyle.primary,
             "button": HelpButton,
-            "mapper": command_data
+            "mapper": command_data,
+            "menu": HelpMenu
         }
-        menu_view = HelpMenuView(embed, HelpSource, self, cog_names, **loads)
-        await self.context.reply(embed=embed, view=menu_view)
+        args = [embed, self, ctx, HelpSource, cog_names]
+        menu_view = HelpMenuView(*args, **loads)
+        await ctx.reply(embed=embed, view=menu_view)
         with contextlib.suppress(discord.NotFound, discord.Forbidden):
-            await self.context.confirmed()
+            await ctx.confirmed()
 
     def get_command_help(self, command):
         """Returns an Embed version of the command object given."""

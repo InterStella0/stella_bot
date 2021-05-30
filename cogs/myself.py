@@ -12,7 +12,8 @@ from typing import Union, Optional
 from discord.ext import commands
 from utils import greedy_parser
 from utils.decorators import event_check, pages
-from utils.useful import call, empty_page_format, MenuBase, print_exception
+from utils.useful import call, empty_page_format, print_exception
+from utils.menus import MenuBase
 from utils.greedy_parser import GreedyParser, Separator, UntilFlag
 from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
 from utils import flags as flg

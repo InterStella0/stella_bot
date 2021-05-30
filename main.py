@@ -183,7 +183,8 @@ bot_data = {"token": environ.get("TOKEN"),
             "tester": bool(environ.get("TEST")),
             "help_src": environ.get("HELP_SRC"),
             "intents": intents,
-            "owner_id": 591135329117798400
+            "owner_id": 591135329117798400,
+            "description": "{}'s personal bot that is partially for the public. plz be nice"
         }
 
 bot = StellaBot(**bot_data)

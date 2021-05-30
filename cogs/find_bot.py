@@ -15,8 +15,9 @@ from discord.ext import commands
 from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
 from utils import flags as flg
-from utils.new_converters import BotPrefixes, IsBot, BotCommands, JumpValidator, DatetimeConverter
-from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, MenuBase, default_date, plural, realign, search_commands
+from utils.new_converters import BotPrefixes, IsBot, BotCommands
+from utils.menus import MenuBase
+from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, default_date, plural, realign, search_commands
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
 from utils import greedy_parser
