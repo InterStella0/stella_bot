@@ -35,6 +35,8 @@ emoji_dict = {"Bots": '<:robot_mark:848257366587211798>',
 home_emoji = '<:house_mark:848227746378809354>'
 
 class HelpSource(ListPageInteractionBase):
+    """This ListPageSource is meant to be used with view, format_page method is called first
+       after that would be the format_view method which must return a View, or None to remove."""
     async def format_page(self, menu, entry):
         """This is for the help command ListPageSource"""
         cog, list_commands = entry
@@ -58,28 +60,19 @@ class HelpSource(ListPageInteractionBase):
 
         return menu.view
 
-class HelpView(ViewButtonIteration):
-    def __init__(self, help_object, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.help_command = help_object
-        self.ctx = help_object.context
-        self.bot = help_object.context.bot
-
 class HelpMenuView(MenuViewBase):
+    """This class is responsible for starting the view + menus activity for the help command.
+       This accepts embed, help_command, context, page_source, dataset and optionally Menu.
+       """
     def __init__(self, embed, help_object, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.original_embed = embed
         self.help_command = help_object
 
-class HelpSearchButton(BaseButton):
-    async def callback(self, interaction):
-        help_obj = self.view.help_command
-        bot = help_obj.context.bot
-        command = bot.get_command(self.selected)
-        embed = help_obj.get_command_help(command)
-        await interaction.response.send_message(content=f"Help for **{self.selected}**", embed=embed, ephemeral=True)
 
 class HomeButton(BaseButton):
+    """This button redirects the view from the menu, into the category section, which
+       adds the old buttons back."""
     async def callback(self, interaction):
         self.view.clear_items()
         for b in self.view.old_items:
@@ -88,6 +81,9 @@ class HomeButton(BaseButton):
 
 
 class HelpButton(BaseButton):
+    """This Button update the menu, and shows a list of commands for the cog.
+       This saves the category buttons as old_items and adds relevant buttons that
+       consist of HomeButton, and HelpSearchButton."""
     async def callback(self, interaction):
         view = self.view
         bot = view.help_command.context.bot
@@ -96,6 +92,27 @@ class HelpButton(BaseButton):
         data = [(cog, commands_list) for commands_list in view.mapper.get(cog)]
         self.view.old_items = copy.copy(self.view.children)
         await view.update(self, interaction, data)
+
+
+class HelpSearchView(ViewButtonIteration):
+    """This view class is specifically for command_callback method"""
+    def __init__(self, help_object, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.help_command = help_object
+        self.ctx = help_object.context
+        self.bot = help_object.context.bot
+
+
+class HelpSearchButton(BaseButton):
+    """This class is used inside a help command that shows a help for a specific command.
+       This is also used inside help search command."""
+    async def callback(self, interaction):
+        help_obj = self.view.help_command
+        bot = help_obj.context.bot
+        command = bot.get_command(self.selected)
+        embed = help_obj.get_command_help(command)
+        await interaction.response.send_message(content=f"Help for **{self.selected}**", embed=embed, ephemeral=True)
+
 
 class HelpMenu(MenuViewInteractionBase):
     """MenuPages class that is specifically for the help command."""
@@ -247,8 +264,6 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         args = [embed, self, ctx, HelpSource, cog_names]
         menu_view = HelpMenuView(*args, **loads)
         await ctx.reply(embed=embed, view=menu_view)
-        with contextlib.suppress(discord.NotFound, discord.Forbidden):
-            await ctx.confirmed()
 
     def get_command_help(self, command):
         """Returns an Embed version of the command object given."""
@@ -306,7 +321,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
                 iterator = filter(lambda x: x[1] > 50, process.extract(command, [x.name for x in bot.commands], limit=5))
                 result = [*more_itertools.chunked(map(lambda x: x[0], iterator), 2)]
                 if result:
-                    button_view = HelpView(self, *result, button=HelpSearchButton, style=discord.ButtonStyle.secondary)
+                    button_view = HelpSearchView(self, *result, button=HelpSearchButton, style=discord.ButtonStyle.secondary)
                     await ctx.send("**Searched Command:**", view=button_view, delete_after=180)
                 else:
                     await self.send_error_message(f'Unable to find any command that is even close to "{command}"')

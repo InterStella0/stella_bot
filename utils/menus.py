@@ -1,7 +1,6 @@
 import discord
 from discord.ext import menus
-from discord.ext.menus import First, Last, Button
-from collections import namedtuple
+from discord.ext.menus import First, Last
 
 class MenuBase(menus.MenuPages):
     """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
@@ -119,6 +118,8 @@ class MenuViewInteractionBase(HelpMenuBase):
         return kwargs
 
 class ListPageInteractionBase(menus.ListPageSource):
+    """A ListPageSource base that is involved with Interaction. It takes button and interaction object
+        to correctly operate and require format_view to be overriden"""
     def __init__(self, button, interaction, entries, **kwargs):
         super().__init__(entries, **kwargs)
         self.button = button
