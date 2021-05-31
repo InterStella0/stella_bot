@@ -171,6 +171,7 @@ class ReplParser:
             yield self.indicator_mode
             if re.match(self.UNCLOSED, line):
                 self.continue_parsing += 1
+            print('prinitng', line)
             if re.match(self.CLOSED, line):
                 self.continue_parsing -= 1
             if not self.continue_parsing:
@@ -179,6 +180,7 @@ class ReplParser:
                 return
 
     async def _internal(self):
+        before = True
         for no in itertools.count(1):
             self.indicator_mode = True
             line = yield no
@@ -192,6 +194,8 @@ class ReplParser:
             returning = True
             if match := re.match(self.UNCLOSED, line):
                 if match['closed'] == "":
+                    if self.expected_indent:
+                        self.indicator_mode = False
                     self.continue_parsing += 1
                     parse = self.reading_parenthesis(no, line)
                     yield self.indicator_mode
@@ -201,11 +205,12 @@ class ReplParser:
                         else:
                             yield parse.send((yield l))
                     returning = False
+                    print(line, "fromed")
             self.space = re.match(r"(\s+)?", line).span()[-1]
             val = self.parsing(no, line)
             if returning:
                 yield val 
-            self.previous_line = line 
+            self.previous_line = line
 
     def parsing(self, no, line, /):
         is_empty = line[self.space:] == ""
