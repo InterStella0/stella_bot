@@ -15,6 +15,8 @@ Indentor = namedtuple("Indentor", "space part func")
 class ReplParser:
     def __init__(self, **kwargs):
         self.inner_func_check = kwargs.pop('inner_func_check', True)
+        self.continue_parsing = 0
+        self.combining_parse = []
         self.previous_line = ""
         self.previous_space = 0
         self.space = 0
@@ -34,7 +36,7 @@ class ReplParser:
         self.CLASS_DEF_REGEX = r"(\s+)?(?P<captured>class)(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)((\((?P<subclass>.*)\))?(\s+)?:)"
 
         self.FUNC_DEF_REGEX = rf"(\s+)?(?P<captured>{self.form_re_const(self.FUNCTION_DEF)})" \
-                              r"(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)()(\((?P<parameter>.*)\)(\s+)?(->(\s+)?(?P<returnhint>.*))?:)"
+                              r"(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)()(\((?P<parameter>[^\)]+)\)(\s+)?(->(\s+)?(?P<returnhint>.*))?:)"
         
         self.WITH_DEF_REGEX = r"(\s+)?(?P<captured>async with|with)(\s+)(?P<statement>[^\s]+)(\s+)?(as(\s+)(?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?(\s+)"\
                               r"?(((\s+)?\,(\s+)?(?P<statement2>[^\s]+)(\s+)?(as(\s+)(?P<var2>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?)+)?(\s+)?:(\s+)?"
@@ -46,6 +48,9 @@ class ReplParser:
 
         WITHARG_CONST = ["while", "if", "elif"]
         self.WITHARG_REGEX = rf"(^(\s+)?(?P<captured>({self.form_re_const(WITHARG_CONST)})))(\s+).*((\s+)?:(\s+)?$)"
+
+        self.UNCLOSED = rf".*(?P<unclosed>\()([^\)]+)?(?P<closed>\)?)"
+        self.CLOSED = rf".*(?P<closed>\))"
 
         self.JOINER = {
             "else": ['if', 'elif', 'except'], 
@@ -60,7 +65,7 @@ class ReplParser:
         }
 
         self.CONNECT_REGEX = rf"(\s+)?(?P<captured>({self.form_re_const(self.COMBINATION, self.JOINER)}))(\s+)?:(\s+)?"
-        self.COLLON_DEC_REGEX = r"(^(@)|.*(:)(\s+)?$)"
+        self.COLLON_DEC_REGEX = r"(^(@)|[^\)]+\)(:)(\s+)?$)"
 
     @staticmethod
     def form_re_const(*iterables):
@@ -158,6 +163,21 @@ class ReplParser:
     def __aiter__(self):
         return self._internal()
 
+    def reading_parenthesis(self, no, line):
+        self.indicator_mode = False
+        while True:
+            self.combining_parse.append(line)
+            line = yield no
+            yield self.indicator_mode
+            if re.match(self.UNCLOSED, line):
+                self.continue_parsing += 1
+            if re.match(self.CLOSED, line):
+                self.continue_parsing -= 1
+            if not self.continue_parsing:
+                yield "\n".join(self.combining_parse) + f"\n{line}"
+                self.combining_parse.clear()
+                return
+
     async def _internal(self):
         for no in itertools.count(1):
             self.indicator_mode = True
@@ -169,8 +189,22 @@ class ReplParser:
                 self.space = 0
                 self.parsing(no, "")
                 return
+            returning = True
+            if match := re.match(self.UNCLOSED, line):
+                if match['closed'] == "":
+                    self.continue_parsing += 1
+                    parse = self.reading_parenthesis(no, line)
+                    yield self.indicator_mode
+                    for l in parse:
+                        if isinstance(l, str):
+                            line = l
+                        else:
+                            yield parse.send((yield l))
+                    returning = False
             self.space = re.match(r"(\s+)?", line).span()[-1]
-            yield self.parsing(no, line)
+            val = self.parsing(no, line)
+            if returning:
+                yield val 
             self.previous_line = line 
 
     def parsing(self, no, line, /):
