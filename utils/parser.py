@@ -171,7 +171,6 @@ class ReplParser:
             yield self.indicator_mode
             if re.match(self.UNCLOSED, line):
                 self.continue_parsing += 1
-            print('prinitng', line)
             if re.match(self.CLOSED, line):
                 self.continue_parsing -= 1
             if not self.continue_parsing:
@@ -205,7 +204,6 @@ class ReplParser:
                         else:
                             yield parse.send((yield l))
                     returning = False
-                    print(line, "fromed")
             self.space = re.match(r"(\s+)?", line).span()[-1]
             val = self.parsing(no, line)
             if returning:
@@ -297,46 +295,55 @@ class ReplReader:
             except StopAsyncIteration:
                 return
 
+    async def compiling(self, build_str, global_vars):
+        compiled = "\n".join(build_str)
+        for ori in re.finditer(r"(?P<quote>(\"|\').*)?(?P<statement>[^\s]+\!)(?P<requote>(\"|\').*)?", compiled):
+            if ori["quote"] is None and ori["requote"] is None:
+                statement = ori["statement"]
+                x = statement[:-1]
+                compiled = compiled.replace(statement, x)
+                global_vars.update({x: __import__(x)})
+        str_io = io.StringIO()
+        caller = exec
+        if len(build_str) == 1: 
+            # Only wrap with async functions when it's an async operation
+            get_local = "yield {0}\n    yield locals()"
+            if 'await' in compiled:
+                before = "async def __inner_function__():\n    "
+                try:
+                    compiled = compile(f"{before}{get_local.format(compiled)}", 'repl_command', 'exec')
+                except SyntaxError:
+                    compiled = f"{before}{compiled}\n    {get_local.format('')}"
+            else:
+                with contextlib.suppress(SyntaxError):
+                    compiled = compile(compiled, 'repl_command', 'eval')
+                    caller = eval
+
+        output = None
+        with contextlib.redirect_stdout(str_io):
+            if (returned := caller(compiled, global_vars)) is not None:
+                output = repr(returned)
+            if func := global_vars.get('__inner_function__'):
+                generator = func()
+                if (returned := await generator.__anext__()) is not None:
+                    output = repr(returned)
+                res = await generator.__anext__()
+                global_vars.update(res)
+        if print_out := str_io.getvalue():
+            if output is None:
+                output = re.sub("[\n]{0,1}$", "", print_out)
+            else:
+                output = print_out + output
+        return output
+
     async def compile_exec(self, *, _globals):
         global_vars = _globals
         build_str = []
         while True:
             line, execute = yield len(build_str)
             if execute and build_str:
-                compiled = "\n".join(build_str)
-                str_io = io.StringIO()
                 try:
-                    caller = exec
-                    if len(build_str) == 1: 
-                        # Only wrap with async functions when it's an async operation
-                        if 'await' in compiled:
-                            before = "async def __inner_function__():\n    "
-                            try:
-                                compiled = compile(f"{before}yield {compiled}\n    yield locals()", 'repl_command', 'exec')
-                            except SyntaxError:
-                                compiled = f"{before}{compiled}\n    yield\n    yield locals()"
-                        else:
-                            with contextlib.suppress(SyntaxError):
-                                compiled = compile(compiled, 'repl_command', 'eval')
-                                caller = eval
-
-                    output = None
-                    with contextlib.redirect_stdout(str_io):
-                        if (returned := caller(compiled, global_vars)) is not None:
-                            output = repr(returned)
-                        if func := global_vars.get('__inner_function__'):
-                            generator = func()
-                            if (returned := await generator.__anext__()) is not None:
-                                output = repr(returned)
-                            res = await generator.__anext__()
-                            global_vars.update(res)
-                    if print_out := str_io.getvalue():
-                        if output is None:
-                            output = re.sub("[\n]{0,1}$", "", print_out)
-                        else:
-                            output = print_out + output
-
-                    yield output
+                    yield await self.compiling(build_str, global_vars)
                 except BaseException as e:
                     lines = traceback.format_exception(type(e), e, e.__traceback__)
                     yield "".join(lines), -1
