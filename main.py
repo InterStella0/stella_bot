@@ -6,7 +6,7 @@ import os
 import copy
 import discord
 import contextlib
-from utils.useful import StellaContext, ListCall
+from utils.useful import StellaContext, ListCall, count_python
 from utils.decorators import event_check, wait_ready 
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -184,7 +184,8 @@ bot_data = {"token": environ.get("TOKEN"),
             "help_src": environ.get("HELP_SRC"),
             "intents": intents,
             "owner_id": 591135329117798400,
-            "description": "{}'s personal bot that is partially for the public. plz be nice"
+            "description": "{}'s personal bot that is partially for the public. "
+                           f"Written with only `{count_python('.'):,}` lines. plz be nice"
         }
 
 bot = StellaBot(**bot_data)

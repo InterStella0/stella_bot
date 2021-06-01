@@ -7,6 +7,7 @@ import sys
 import asyncio
 import contextlib
 import typing
+import os
 from utils.decorators import pages, in_executor
 from discord.utils import maybe_coroutine
 from discord.ext import commands
@@ -232,3 +233,16 @@ async def cancel_gen(agen):
     with contextlib.suppress(asyncio.CancelledError):
         await task
     await agen.aclose() 
+
+
+def reading_recursive(root):
+    for x in os.listdir(root):
+        if os.path.isdir(x):
+            yield from reading_recursive(root + "/" + x)
+        else:
+            if x.endswith((".py", ".c")):
+                with open(f"{root}/{x}") as r:
+                    yield len(r.readlines())
+
+def count_python(root):
+    return sum(reading_recursive(root))

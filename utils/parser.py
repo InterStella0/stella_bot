@@ -15,7 +15,7 @@ from utils.useful import cancel_gen
 Indentor = namedtuple("Indentor", "space part func")
 IMPORT_REGEX = re.compile(r"(?P<import>[^\s.()]+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
 def get_import(d):
-    return operator.itemgetter(d, 'import')[:-1]
+    return d['import'][:-1]
 
 class ReplParser:
     def __init__(self, **kwargs):
