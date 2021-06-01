@@ -1,6 +1,9 @@
 import discord
+import re
 from discord.ext import menus
 from discord.ext.menus import First, Last
+
+PAGE_REGEX = r'(Page)?(\s)?((\[)?((?P<current>\d+)/(?P<last>\d+))(\])?)'
 
 class MenuBase(menus.MenuPages):
     """This is a MenuPages class that is used every single paginator menus. All it does is replace the default emoji
@@ -59,11 +62,11 @@ class MenuBase(menus.MenuPages):
             page = f"Page {self.current_page + 1}/{maximum}"
             if isinstance(content, discord.Embed):
                 if embed_dict := getattr(content, "_author", None):
-                    if "Page" not in embed_dict["name"]:
+                    if not re.match(PAGE_REGEX, embed_dict["name"]):
                         embed_dict["name"] += f"[{page.replace('Page ', '')}]"
                     return content
                 return content.set_author(name=page)
-            elif isinstance(content, str):
+            elif isinstance(content, str) and not re.match(PAGE_REGEX, content):
                 return f"{page}\n{content}"
         return content
 

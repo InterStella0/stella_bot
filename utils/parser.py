@@ -10,6 +10,7 @@ from utils.useful import cancel_gen
 
 
 Indentor = namedtuple("Indentor", "space part func")
+IMPORT_REGEX = re.compile(r"(?P<import>[^\s.()]+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
 
 
 class ReplParser:
@@ -36,7 +37,7 @@ class ReplParser:
         self.CLASS_DEF_REGEX = r"(\s+)?(?P<captured>class)(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)((\((?P<subclass>.*)\))?(\s+)?:)"
 
         self.FUNC_DEF_REGEX = rf"(\s+)?(?P<captured>{self.form_re_const(self.FUNCTION_DEF)})" \
-                              r"(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)()(\((?P<parameter>[^\)]+)\)(\s+)?(->(\s+)?(?P<returnhint>.*))?:)"
+                              r"(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)()(\((?P<parameter>[^\)]*)\)(\s+)?(->(\s+)?(?P<returnhint>.*))?:)"
         
         self.WITH_DEF_REGEX = r"(\s+)?(?P<captured>async with|with)(\s+)(?P<statement>[^\s]+)(\s+)?(as(\s+)(?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?(\s+)"\
                               r"?(((\s+)?\,(\s+)?(?P<statement2>[^\s]+)(\s+)?(as(\s+)(?P<var2>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?)+)?(\s+)?:(\s+)?"
@@ -297,12 +298,13 @@ class ReplReader:
 
     async def compiling(self, build_str, global_vars):
         compiled = "\n".join(build_str)
-        for ori in re.finditer(r"(?P<quote>(\"|\').*)?(?P<statement>[^\s]+\!)(?P<requote>(\"|\').*)?", compiled):
-            if ori["quote"] is None and ori["requote"] is None:
-                statement = ori["statement"]
-                x = statement[:-1]
-                compiled = compiled.replace(statement, x)
-                global_vars.update({x: __import__(x)})
+        for ori in re.finditer(IMPORT_REGEX, compiled):
+            print(ori['import'])
+            statement = ori["import"]
+            x = statement[:-1]
+            global_vars.update({x: __import__(x)})
+
+        compiled = re.sub(IMPORT_REGEX, lambda a: a['import'][:-1], compiled )
         str_io = io.StringIO()
         caller = exec
         if len(build_str) == 1: 

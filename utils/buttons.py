@@ -85,7 +85,7 @@ class MenuViewBase(ViewButtonIteration):
     async def interaction_check(self, interaction):
         """Only allowing the context author to interact with the view"""
         author = self.context.author
-        if interaction.user != author:
+        if not (interaction.user == author or await self.context.bot.is_owner(interaction.user)):
             await interaction.response.send_message(content=f"Only {author} can use this.", ephemeral=True)
             raise Exception("no")
         return True

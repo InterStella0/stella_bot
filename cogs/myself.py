@@ -24,7 +24,7 @@ from jishaku.codeblocks import codeblock_converter
 async def show_result(self, menu, entry):
     return f"```py\n{entry}```"
 
-class Myself(commands.Cog, command_attrs=dict(hidden=True)):
+class Myself(commands.Cog):
     """Commands for stella"""
     def __init__(self, bot):
         self.bot = bot
@@ -44,7 +44,7 @@ class Myself(commands.Cog, command_attrs=dict(hidden=True)):
         if message := flags.pop('message'):
             new_data['author_id'] = message.author.id
             new_data['reason'] = message.content
-            new_data['requested_at'] = message.created_at
+            new_data['requested_at'] = message.created_at.replace(tzinfo=None)
             new_data['jump_url'] = message.jump_url
 
         if auth := flags.pop('author'):
