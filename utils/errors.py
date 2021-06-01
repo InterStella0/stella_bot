@@ -60,10 +60,12 @@ class ConsumerUnableToConvert(ArgumentBaseError):
         super().__init__(message="Could not convert {} into {}".format(*args), **kwargs)
 
 class ReplParserDies(ArgumentBaseError):
-    def __init__(self, message, no, line):
+    def __init__(self, message, no, line, mode):
         super().__init__(message=message)
+        self.message = message
         self.line = line
         self.no = no
+        self.mode = mode
 
 class NotOwnerConvert(ArgumentBaseError):
     def __init__(self, converter):

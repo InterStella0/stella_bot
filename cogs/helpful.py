@@ -11,9 +11,8 @@ import itertools
 import more_itertools
 import typing
 from fuzzywuzzy import process
-from discord.ext import commands, menus
+from discord.ext import commands
 from utils.useful import BaseEmbed, plural, empty_page_format, unpack
-from utils.decorators import pages
 from utils.errors import CantRun
 from utils.parser import ReplReader
 from utils.greedy_parser import UntilFlag, command
@@ -420,7 +419,14 @@ class Helpful(commands.Cog):
     @command(help="Simulate a live python interpreter interface when given a python code.")
     async def repl(self, ctx, code: UntilFlag[codeblock_converter], *, flags: flg.ReplFlag):
         newline = "\n"
-        globals_ = {'ctx': ctx, 'author': ctx.author, 'guild': ctx.guild, 'bot': self.bot, 'discord': discord, 'commands': commands}
+        globals_ = {
+            'ctx': ctx, 
+            'author': ctx.author, 
+            'guild': ctx.guild, 
+            'bot': self.bot, 
+            'discord': discord, 
+            'commands': commands
+        }
         flags = dict(flags)
         if flags.get('exec') and not await self.bot.is_owner(ctx.author):
             flags.update({"exec": False, "inner_func_check": True})

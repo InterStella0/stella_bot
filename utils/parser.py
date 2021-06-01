@@ -4,6 +4,9 @@ import re
 import traceback
 import itertools
 import io
+import textwrap
+import operator
+import warnings
 from collections import namedtuple
 from utils.errors import ReplParserDies
 from utils.useful import cancel_gen
@@ -11,7 +14,8 @@ from utils.useful import cancel_gen
 
 Indentor = namedtuple("Indentor", "space part func")
 IMPORT_REGEX = re.compile(r"(?P<import>[^\s.()]+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
-
+def get_import(d):
+    return operator.itemgetter(d, 'import')[:-1]
 
 class ReplParser:
     def __init__(self, **kwargs):
@@ -48,7 +52,7 @@ class ReplParser:
         self.DECORATOR_REGEX = r"(\s+)?(?P<captured>\@)(?P<name>[^(]+)(?P<parameter>\(.*\))?(\s+)?"
 
         WITHARG_CONST = ["while", "if", "elif"]
-        self.WITHARG_REGEX = rf"(^(\s+)?(?P<captured>({self.form_re_const(WITHARG_CONST)})))(\s+).*((\s+)?:(\s+)?$)"
+        self.WITHARG_REGEX = rf"(^(\s+)?(?P<captured>({self.form_re_const(WITHARG_CONST)})))(\s+).*((\s+)?:(\s+)?)"
 
         self.UNCLOSED = rf".*(?P<unclosed>\()([^\)]+)?(?P<closed>\)?)"
         self.CLOSED = rf".*(?P<closed>\))"
@@ -66,7 +70,7 @@ class ReplParser:
         }
 
         self.CONNECT_REGEX = rf"(\s+)?(?P<captured>({self.form_re_const(self.COMBINATION, self.JOINER)}))(\s+)?:(\s+)?"
-        self.COLLON_DEC_REGEX = r"(^(@)|[^\)]+\)(:)(\s+)?$)"
+        self.COLLON_DEC_REGEX = r"(^(\s)*(@)|.*(:)(\s)*$)"
 
     @staticmethod
     def form_re_const(*iterables):
@@ -89,7 +93,7 @@ class ReplParser:
         if re.match(self.COLLON_DEC_REGEX, line):
             if (match := self.validation_syntax(no, line) or re.fullmatch(self.CONNECT_REGEX, line)) is not None:
                 return self.execute_inside_dent(no, line, match)
-            raise ReplParserDies("Invalid Syntax", no, line)
+            raise ReplParserDies("Invalid Syntax", no, line, self.indicator_mode)
 
     def execute_inside_dent(self, no, line, match):
         captured = match["captured"]
@@ -102,10 +106,10 @@ class ReplParser:
                 if match := re.match(self.FUNC_INNER_REGEX, line):
                     self.inside_function_statement(no, line, ind, match)
             else:
-                raise ReplParserDies("Invalid Syntax", no, line)
+                raise ReplParserDies("Invalid Syntax", no, line, self.indicator_mode)
         if expect := discord.utils.get(self.expecting_combo, space=self.space):
             if captured not in self.COMBINATION.get(expect.part):
-                raise ReplParserDies("Invalid Syntax", no, line)
+                raise ReplParserDies("Invalid Syntax", no, line, self.indicator_mode)
             if expect.part == '@':
                 self.indicator_mode = False
             self.expecting_combo.remove(expect)
@@ -125,7 +129,7 @@ class ReplParser:
             return
 
         if match := re.match(self.FUNC_INNER_REGEX, line):
-            raise ReplParserDies(f"'{match['captured']}' outside function.", no, line)
+            raise ReplParserDies(f"'{match['captured']}' outside function.", no, line, self.indicator_mode)
 
     def inside_function_statement(self, no, line, x_space, match):
         syntax = match["captured"]
@@ -137,15 +141,15 @@ class ReplParser:
             is_async = "async" in x_space.func
             if is_async: 
                 if value := discord.utils.find(lambda x: x == syntax, self.SYNC_FUNC_ONLY):
-                    raise ReplParserDies(f"'{value}' is inside async function.", no, line)
+                    raise ReplParserDies(f"'{value}' is inside async function.", no, line, self.indicator_mode)
             else:
                 if value := discord.utils.find(lambda x: x == syntax, self.ASYNC_FUNC_ONLY):
-                    raise ReplParserDies(f"'{value}' is outside async function.", no, line)
+                    raise ReplParserDies(f"'{value}' is outside async function.", no, line, self.indicator_mode)
             
             if not statement and syntax not in ("yield", "return"):
-                raise ReplParserDies("Syntax Error", no, line)
+                raise ReplParserDies("Syntax Error", no, line, self.indicator_mode)
         else:
-            raise ReplParserDies(f"'{syntax}' outside function.", no, line)
+            raise ReplParserDies(f"'{syntax}' outside function.", no, line, self.indicator_mode)
 
     def indentation_checker(self, no, line):
         if x_space := self.remove_until_true(lambda x_space: x_space.space > self.space, self.meet_collon):
@@ -155,11 +159,11 @@ class ReplParser:
                 if self.space > 0:
                     self.indicator_mode = False
             elif x_space.space < self.space:
-                raise ReplParserDies("Unindent does not match any outer indentation level", no, line)
+                raise ReplParserDies("Unindent does not match any outer indentation level", no, line, self.indicator_mode)
             else:
                 raise ReplParserDies("Unexpected Indent", no, line)
         else:
-            raise ReplParserDies("Unindent does not match any outer indentation level", no, line)
+            raise ReplParserDies("Unindent does not match any outer indentation level", no, line, self.indicator_mode)
 
     def __aiter__(self):
         return self._internal()
@@ -180,18 +184,18 @@ class ReplParser:
                 return
 
     async def _internal(self):
-        before = True
         for no in itertools.count(1):
             self.indicator_mode = True
             line = yield no
 
             if line == 0 or line is None: # End of line, check for syntax combination statement
                 if self.expecting_combo:
-                    raise ReplParserDies("Syntax Error", no, "")
+                    raise ReplParserDies("Syntax Error", no, "", self.indicator_mode)
                 self.space = 0
                 self.parsing(no, "")
                 return
             returning = True
+            # Check for incomplete parenthesis
             if match := re.match(self.UNCLOSED, line):
                 if match['closed'] == "":
                     if self.expected_indent:
@@ -230,9 +234,9 @@ class ReplParser:
                     self.expected_indent = None
                     self.expected_indent = self.check_if_indenting(no, line)
             else:
-                raise ReplParserDies("Expected Indent", no, line)
+                raise ReplParserDies("Expected Indent", no, line, self.indicator_mode)
         elif self.space > self.previous_space:
-            raise ReplParserDies("Unexpected Indent", no, line)
+            raise ReplParserDies("Unexpected Indent", no, line, self.indicator_mode)
         elif part := self.check_if_indenting(no, line):
             self.expected_indent = part
         elif is_empty and self.meet_collon:
@@ -264,7 +268,7 @@ class ReplReader:
                 yield compiled
                 return
             yield each
-        
+        # eof
         await cancel_gen(self.iterator)
         await cancel_gen(self.executor)
 
@@ -275,20 +279,33 @@ class ReplReader:
                 for x in (self.iterator, self.executor):
                     result.append(await x.__anext__())
                 yield tuple(result)
+        # eof or raised
         for x in (self.iterator, self.executor):
             await x.__anext__()
+
+    async def handle_repl(self, line):
+        try:
+            return await self.iterator.asend(line)
+        except ReplParserDies as e:
+            lines = traceback.format_exception(type(e), e, e.__traceback__)
+            return "".join(lines), e
+
 
     async def reading_codeblock(self):
         codes = self.codeblock.content.splitlines()
         no_lang = self.codeblock.language is not None
         async for line, no, ex in self.runner(codes[no_lang:]):
-            indent = await self.iterator.asend(line)
+            if isinstance(indent := await self.handle_repl(line), tuple):
+                _, error = indent
+                indicator = ("...", ">>>")[error.mode]
+                yield f"{indicator} {line}"
+                yield indent
             number = f"{no} " if self.counter else ""
             compiled = await self.executor.asend((line, indent))
             if ex and indent and compiled:
                 yield compiled
             yield f'{number}{("...", ">>>")[indent]} {line}'
-        else:
+        else: # eof or raise
             try:
                 if compiled := await self.executor.asend((0, True)):
                     yield compiled
@@ -296,41 +313,70 @@ class ReplReader:
             except StopAsyncIteration:
                 return
 
-    async def compiling(self, build_str, global_vars):
-        compiled = "\n".join(build_str)
-        for ori in re.finditer(IMPORT_REGEX, compiled):
-            print(ori['import'])
-            statement = ori["import"]
-            x = statement[:-1]
+    @staticmethod
+    def importer(compiled_str, global_vars):
+        for ori in re.finditer(IMPORT_REGEX, compiled_str):
+            x = get_import(ori)
             global_vars.update({x: __import__(x)})
 
-        compiled = re.sub(IMPORT_REGEX, lambda a: a['import'][:-1], compiled )
-        str_io = io.StringIO()
+        return re.sub(IMPORT_REGEX, get_import, compiled_str)
+
+    @staticmethod
+    def wrap_function(compiled):
+        is_one_line = len(compiled.splitlines()) == 1
+        get_local = "    yield {0}\n    yield locals()"
+        before = "async def __inner_function__():\n"
+        if is_one_line:
+            with contextlib.suppress(SyntaxError):
+                return compile(f"{before}{get_local.format(compiled)}", 'repl_command', 'exec')
+
+        return f"{before}{textwrap.indent(compiled, '    ')}\n{get_local.format('')}"
+
+
+    @staticmethod
+    def get_first_character(iterable):
+        for x in iterable:
+            no_space = re.match(r"(\s+)?", x).span()[-1]
+            if x[no_space:] in ("", "\n", " "):
+                continue
+            return x
+
+    def form_compiler(self, build_str, global_vars):
+        imported_compiled = self.importer("\n".join(build_str), global_vars)
         caller = exec
         if len(build_str) == 1: 
             # Only wrap with async functions when it's an async operation
-            get_local = "yield {0}\n    yield locals()"
-            if 'await' in compiled:
-                before = "async def __inner_function__():\n    "
-                try:
-                    compiled = compile(f"{before}{get_local.format(compiled)}", 'repl_command', 'exec')
-                except SyntaxError:
-                    compiled = f"{before}{compiled}\n    {get_local.format('')}"
+            if "await" in imported_compiled:
+                imported_compiled = self.wrap_function(imported_compiled)
             else:
                 with contextlib.suppress(SyntaxError):
-                    compiled = compile(compiled, 'repl_command', 'eval')
+                    imported_compiled = compile(imported_compiled, 'repl_command', 'eval')
                     caller = eval
+        elif any(x in self.get_first_character(build_str) for x in ("async for", "async with")):
+            imported_compiled = self.wrap_function(imported_compiled)
 
+        return caller, imported_compiled
+
+    @staticmethod
+    async def execution(caller, compiled, global_vars):
         output = None
-        with contextlib.redirect_stdout(str_io):
-            if (returned := caller(compiled, global_vars)) is not None:
+        if (returned := caller(compiled, global_vars)) is not None:
+            output = repr(returned)
+        if func := global_vars.get('__inner_function__'):
+            generator = func()
+            if (returned := await generator.__anext__()) is not None:
                 output = repr(returned)
-            if func := global_vars.get('__inner_function__'):
-                generator = func()
-                if (returned := await generator.__anext__()) is not None:
-                    output = repr(returned)
-                res = await generator.__anext__()
-                global_vars.update(res)
+            res = await generator.__anext__()
+            global_vars.update(res)
+        return output
+
+    async def compiling(self, build_str, global_vars):
+        str_io = io.StringIO()
+        caller, compiled = self.form_compiler(build_str, global_vars)
+        with contextlib.redirect_stdout(str_io), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            output = await self.execution(caller, compiled, global_vars)
+
         if print_out := str_io.getvalue():
             if output is None:
                 output = re.sub("[\n]{0,1}$", "", print_out)
