@@ -1,8 +1,30 @@
-import discord
+import asyncio
 import contextlib
+import copy
+import discord
 from discord.ext import commands, flags
-from utils.useful import BaseEmbed, print_exception, call
-from utils.errors import NotInDpy, ReplParserDies
+from utils.useful import BaseEmbed, print_exception
+from utils.errors import NotInDpy
+from utils.buttons import BaseButton, ViewIterationAuthor
+
+class MissingButton(BaseButton):
+    def __init__(self, error, embed, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.error = error
+        self.embed = embed
+
+    async def callback(self, interaction):
+        ctx = self.view.context
+        param = self.error.param
+        m = f"Please enter your argument for `{param.name}`."
+        await interaction.response.edit_message(content=m, embed=None, view=None)
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+        with contextlib.suppress(asyncio.TimeoutError):
+            message = await ctx.bot.wait_for('message', check=check, timeout=60)
+            new_message = copy.copy(ctx.message)
+            new_message.content += f" {message.content}"
+            await ctx.bot.process_commands(new_message)
 
 
 class ErrorHandler(commands.Cog):
@@ -18,6 +40,18 @@ class ErrorHandler(commands.Cog):
             if ctx.channel.permissions_for(ctx.me).manage_messages:
                 with contextlib.suppress(discord.NotFound):
                     await ctx.message.delete(delay=60)
+
+        async def handle_missing_param(template):
+            name = error.param.name
+            payload = {
+                "selected": name,
+                "label": f"Enter required argument for '{name}'",
+                "group": None,
+                "style": discord.ButtonStyle.success
+            }
+            button = MissingButton(error, template, **payload)
+            await send_del(embed=template, view=ViewIterationAuthor(ctx, [button]))
+
         if hasattr(ctx.command, 'on_error'):
             return
 
@@ -49,6 +83,8 @@ class ErrorHandler(commands.Cog):
             await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
         else:
             if template := await self.generate_signature_error(ctx, error):
+                if isinstance(error, commands.MissingRequiredArgument):
+                    return await handle_missing_param(template)
                 await send_del(embed=template)
             else:
                 await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
