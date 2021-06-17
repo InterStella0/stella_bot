@@ -1,6 +1,8 @@
+import discord
 import inspect
+import re
 from discord import ui
-from utils.menus import ListPageInteractionBase, MenuViewInteractionBase
+from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, MenuBase
 
 class BaseButton(ui.Button):
     def __init__(self, *, style, selected, group, label=None, **kwargs):
@@ -18,13 +20,28 @@ class ViewButtonIteration(ui.View):
         self.mapper=mapper
         for c, button_row in enumerate(args):
             for button_col in button_row:
-                if isinstance(button_col, dict):
+                if isinstance(button_col, button):
+                    self.add_item(button_col)
+                elif isinstance(button_col, dict):
                     self.add_item(button(style=style, group=c, **button_col))
                 elif isinstance(button_col, tuple):
                     selected, button_col = button_col
                     self.add_item(button(style=style, group=c, selected=selected, **button_col))
                 else:
                     self.add_item(button(style=style, group=c, selected=button_col))
+
+class ViewIterationAuthor(ViewButtonIteration):
+    def __init__(self, ctx, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.context = ctx
+
+    async def interaction_check(self, interaction):
+        """Only allowing the context author to interact with the view"""
+        author = self.context.author
+        if interaction.user != author and not await self.context.bot.is_owner(interaction.user):
+            await interaction.response.send_message(content=f"Only {author} can use this.", ephemeral=True)
+            raise Exception("no")
+        return True
 
 class MenuViewBase(ViewButtonIteration):
     """A Base Menu + View combination for all interaction that combines those two.
@@ -82,13 +99,6 @@ class MenuViewBase(ViewButtonIteration):
                         await interaction.message.add_reaction(emoji)
             menu._Menu__tasks.append(loop.create_task(add_reactions_task()))
 
-    async def interaction_check(self, interaction):
-        """Only allowing the context author to interact with the view"""
-        author = self.context.author
-        if not (interaction.user == author or await self.context.bot.is_owner(interaction.user)):
-            await interaction.response.send_message(content=f"Only {author} can use this.", ephemeral=True)
-            raise Exception("no")
-        return True
     async def on_timeout(self):
         """After a timeout it should disable all the buttons"""
         bot = self.context.bot
@@ -107,3 +117,65 @@ class MenuViewBase(ViewButtonIteration):
         for b in self.children:
             b.disabled = True
         await message.edit(view=self)
+
+class InteractionPages(ui.View, MenuBase):
+    def __init__(self, source, generate_page=False):
+        super().__init__(timeout=120)
+        self.ctx = None
+        self.message = None
+        self._generate_page = generate_page
+        self._source = source
+        self.current_page = 0
+        self.current_button = None
+        self.current_interaction = None
+
+    async def start(self, ctx):
+        self.ctx = ctx
+        self.message = await self.send_initial_message(ctx, ctx.channel)
+
+    def update_interaction_values(self, button, interaction):
+        # Yes, i'm lazy to edit the _get_kwargs_from_page to pass button, interaction
+        # Instead, i use this, i dont care cause i aint gonna copy paste code.
+        self.current_button = button
+        self.current_interaction = interaction
+
+    @ui.button(emoji='<:before_fast_check:754948796139569224>')
+    async def first_page(self, *args):
+        self.update_interaction_values(*args)
+        await self.show_page(0)
+
+    @ui.button(emoji='<:before_check:754948796487565332>')
+    async def before_page(self, *args):
+        self.update_interaction_values(*args)
+        await self.show_checked_page(self.current_page - 1)
+
+    @ui.button(emoji='<:stop_check:754948796365930517>')
+    async def stop_page(self, *args):
+        self.stop()
+        await self.message.delete()
+
+    @ui.button(emoji='<:next_check:754948796361736213>')
+    async def next_page(self, *args):
+        self.update_interaction_values(*args)
+        await self.show_checked_page(self.current_page + 1)
+
+    @ui.button(emoji='<:next_fast_check:754948796391227442>')
+    async def last_page(self, *args):
+        self.update_interaction_values(*args)
+        await self.show_page(self._source.get_max_pages() - 1)
+
+    async def _get_kwargs_from_page(self, page):
+        value = await super()._get_kwargs_from_page(page)
+        if 'view' not in value:
+            value.update({'view': self})
+        value.update({'allowed_mentions': discord.AllowedMentions(replied_user=False)})
+        return value
+
+    async def interaction_check(self, interaction):
+        """Only allowing the context author to interact with the view"""
+        ctx = self.ctx
+        author = ctx.author
+        if interaction.user != author and not await ctx.bot.is_owner(interaction.user):
+            await interaction.response.send_message(content=f"Only {author} can use this.", ephemeral=True)
+            raise Exception("no")
+        return True
