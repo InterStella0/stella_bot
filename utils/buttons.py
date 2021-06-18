@@ -1,12 +1,13 @@
 import discord
 import inspect
 from discord import ui
+from discord.ext import commands
 from utils.useful import BaseEmbed
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, MenuBase
 
 class BaseButton(ui.Button):
-    def __init__(self, *, style, selected, group, label=None, **kwargs):
-        super().__init__(style=style, label=label or selected, group=group, **kwargs)
+    def __init__(self, *, style, selected, row, label=None, **kwargs):
+        super().__init__(style=style, label=label or selected, row=row, **kwargs)
         self.selected = selected
 
     async def callback(self, interaction):
@@ -23,12 +24,12 @@ class ViewButtonIteration(ui.View):
                 if isinstance(button_col, button):
                     self.add_item(button_col)
                 elif isinstance(button_col, dict):
-                    self.add_item(button(style=style, group=c, **button_col))
+                    self.add_item(button(style=style, row=c, **button_col))
                 elif isinstance(button_col, tuple):
                     selected, button_col = button_col
-                    self.add_item(button(style=style, group=c, selected=selected, **button_col))
+                    self.add_item(button(style=style, row=c, selected=selected, **button_col))
                 else:
-                    self.add_item(button(style=style, group=c, selected=button_col))
+                    self.add_item(button(style=style, row=c, selected=button_col))
 
 class ViewIterationAuthor(ViewButtonIteration):
     def __init__(self, ctx, *args, **kwargs):
@@ -128,6 +129,7 @@ class InteractionPages(ui.View, MenuBase):
         self.current_page = 0
         self.current_button = None
         self.current_interaction = None
+        self.cooldown = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
 
     async def start(self, ctx):
         self.ctx = ctx
@@ -176,11 +178,13 @@ class InteractionPages(ui.View, MenuBase):
         ctx = self.ctx
         author = ctx.author
         if interaction.user != author:
-            h = ctx.bot.help_command
-            command = h.get_command_signature(ctx.command, ctx)
-            content = f"Only `{author}` can use this menu. If you want to use it, use `{command}`"
-            embed = BaseEmbed.to_error(description=content)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            bucket = self.cooldown.get_bucket(ctx.message)
+            if not bucket.update_rate_limit():
+                h = ctx.bot.help_command
+                command = h.get_command_signature(ctx.command, ctx)
+                content = f"Only `{author}` can use this menu. If you want to use it, use `{command}`"
+                embed = BaseEmbed.to_error(description=content)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
             return False
         return True
 

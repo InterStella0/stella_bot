@@ -52,9 +52,9 @@ class HelpSource(ListPageInteractionBase):
         _, list_commands = entry
         commands = [c.command_obj.name for c in list_commands]
         menu.view.clear_items()
-        menu.view.add_item(HomeButton(style=discord.ButtonStyle.success, selected="Home", group=None, emoji=home_emoji))
+        menu.view.add_item(HomeButton(style=discord.ButtonStyle.success, selected="Home", row=None, emoji=home_emoji))
         for c in commands:
-            menu.view.add_item(HelpSearchButton(style=discord.ButtonStyle.secondary, selected=c, group=None))
+            menu.view.add_item(HelpSearchButton(style=discord.ButtonStyle.secondary, selected=c, row=None))
 
         return menu.view
 
