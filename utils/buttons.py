@@ -1,7 +1,7 @@
 import discord
 import inspect
-import re
 from discord import ui
+from utils.useful import BaseEmbed
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, MenuBase
 
 class BaseButton(ui.Button):
@@ -121,10 +121,10 @@ class MenuViewBase(ViewButtonIteration):
 class InteractionPages(ui.View, MenuBase):
     def __init__(self, source, generate_page=False):
         super().__init__(timeout=120)
+        self._source = source
+        self._generate_page = generate_page
         self.ctx = None
         self.message = None
-        self._generate_page = generate_page
-        self._source = source
         self.current_page = 0
         self.current_button = None
         self.current_interaction = None
@@ -175,7 +175,14 @@ class InteractionPages(ui.View, MenuBase):
         """Only allowing the context author to interact with the view"""
         ctx = self.ctx
         author = ctx.author
-        if interaction.user != author and not await ctx.bot.is_owner(interaction.user):
-            await interaction.response.send_message(content=f"Only {author} can use this.", ephemeral=True)
-            raise Exception("no")
+        if interaction.user != author:
+            h = ctx.bot.help_command
+            command = h.get_command_signature(ctx.command, ctx)
+            content = f"Only `{author}` can use this menu. If you want to use it, use `{command}`"
+            embed = BaseEmbed.to_error(description=content)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return False
         return True
+
+    async def on_timeout(self):
+        await self.message.delete()

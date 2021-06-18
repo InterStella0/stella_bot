@@ -17,7 +17,7 @@ from discord.ext.commands import UserNotFound
 from discord.ext.menus import ListPageSource
 from utils import flags as flg
 from utils.new_converters import BotPrefixes, IsBot, BotCommands
-from utils.menus import MenuBase
+from utils.buttons import InteractionPages
 from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, default_date, plural, realign, search_commands
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
@@ -93,7 +93,7 @@ class AllPrefixes(ListPageSource):
         super().__init__(data, per_page=6)
         self.count_mode = count_mode
 
-    async def format_page(self, menu: MenuBase, entries):
+    async def format_page(self, menu: InteractionPages, entries):
         key = "(\u200b|\u200b)"
         offset = menu.current_page * self.per_page
         content = "`{no}. {prefix} {key} {b.count}`" if self.count_mode else "`{no}. {b} {key} {prefix}`"
@@ -104,7 +104,7 @@ class AllPrefixes(ListPageSource):
 
 
 @pages(per_page=10)
-async def all_bot_count(self, menu: MenuBase, entries):
+async def all_bot_count(self, menu: InteractionPages, entries):
     """Menu for botrank command."""
     key = "(\u200b|\u200b)"
     offset = menu.current_page * self.per_page
@@ -115,7 +115,7 @@ async def all_bot_count(self, menu: MenuBase, entries):
 
 
 @pages(per_page=6)
-async def bot_added_list(self, menu: MenuBase, entries):
+async def bot_added_list(self, menu: InteractionPages, entries):
     """Menu for recentbotadd command."""
     offset = menu.current_page * self.per_page
     contents = ((f"{b.author}", f'**{b}** `{humanize.precisedelta(b.joined_at)}`')
@@ -124,7 +124,7 @@ async def bot_added_list(self, menu: MenuBase, entries):
 
 
 @pages()
-async def bot_pending_list(self, menu: MenuBase, entry):
+async def bot_pending_list(self, menu: InteractionPages, entry):
     stellabot = menu.ctx.bot
     bot = menu.cached_bots.setdefault(entry["bot_id"], await stellabot.fetch_user(entry["bot_id"]))
     fields = (("Requested by", stellabot.get_user(entry["author_id"]) or "idk really"),
@@ -680,7 +680,7 @@ class FindBot(commands.Cog, name="Bots"):
             data = [PrefixCount(*a) for a in count_prefixes.items()]
 
         data.sort(key=lambda x: getattr(x, attr), reverse=count_mode is not reverse)
-        menu = MenuBase(source=AllPrefixes(data, count_mode))
+        menu = InteractionPages(source=AllPrefixes(data, count_mode))
         await menu.start(ctx)
 
     @commands.command(aliases=["bot_use", "bu", "botusage", "botuses"],
@@ -754,7 +754,7 @@ class FindBot(commands.Cog, name="Bots"):
         db_data = await self.bot.pool_pg.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
         member_data = [BotAdded.from_json(bot=members[data["bot_id"]], **data) for data in db_data]
         member_data.sort(key=lambda x: x.joined_at, reverse=not reverse)
-        menu = MenuBase(source=bot_added_list(member_data))
+        menu = InteractionPages(source=bot_added_list(member_data))
         await menu.start(ctx)
 
 
@@ -772,7 +772,7 @@ class FindBot(commands.Cog, name="Bots"):
         bot_data = [BotCommands(bots[r["bot_id"]], 0, 0, r["total_usage"]) for r in record]
         bot_data.sort(key=lambda x: x.total_usage, reverse=not reverse)
         if not bot:
-            menu = MenuBase(source=all_bot_count(bot_data))
+            menu = InteractionPages(source=all_bot_count(bot_data))
             await menu.start(ctx)
         else:
             key = "(\u200b|\u200b)"
@@ -790,7 +790,7 @@ class FindBot(commands.Cog, name="Bots"):
     @is_discordpy()
     async def pendingbots(self, ctx, **flags):
         bots = await self.bot.pool_pg.fetch("SELECT * FROM pending_bots")
-        menu = MenuBase(bot_pending_list(sorted(bots, key=lambda x: x["requested_at"], reverse=not flags.get("reverse", False))))
+        menu = InteractionPages(bot_pending_list(sorted(bots, key=lambda x: x["requested_at"], reverse=not flags.get("reverse", False))))
         menu.cached_bots = self.cached_bots
         await menu.start(ctx)
 
@@ -811,7 +811,7 @@ class FindBot(commands.Cog, name="Bots"):
                 embed.set_author(icon_url=owner_info.author.avatar.url, name=f"Owner {owner_info.author}")
 
             return embed.set_thumbnail(url=bot.bot.avatar.url)
-        menu = MenuBase(each_page(bot.commands))
+        menu = InteractionPages(each_page(bot.commands))
         await menu.start(ctx)
 
     @commands.group(name="bot",
@@ -879,7 +879,7 @@ class FindBot(commands.Cog, name="Bots"):
             to_show = "\n".join(f"{i}. `{x['prefix']}`" for i, x in enumerate(entry, start=menu.current_page * 10 + 1))
             return discord.Embed(title=f"{bot}'s raw prefixes", description=to_show)
 
-        await MenuBase(show_result(raw_prefixes)).start(ctx)
+        await InteractionPages(show_result(raw_prefixes)).start(ctx)
 
     @_bot.command(help="Removes prefix that is stored on a specific bot for bot owners")
     async def delprefix(self, ctx, bot: BotOwner, *prefixes):
@@ -921,7 +921,7 @@ class FindBot(commands.Cog, name="Bots"):
         data = await self.bot.pool_pg.fetch(query, ctx.guild.id)
         
         @pages(per_page=6)
-        async def each_commands_list(self, menu: MenuBase, entries):
+        async def each_commands_list(self, menu: InteractionPages, entries):
             offset = menu.current_page * self.per_page
             embed = BaseEmbed(title=f"All Commands")
             key = "(\u200b|\u200b)"
@@ -930,7 +930,7 @@ class FindBot(commands.Cog, name="Bots"):
             embed.description = "\n".join(realign(contents, key))
             return embed
 
-        menu = MenuBase(each_commands_list(data))
+        menu = InteractionPages(each_commands_list(data))
         await menu.start(ctx)
         
 

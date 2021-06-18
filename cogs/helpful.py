@@ -16,11 +16,10 @@ from utils.useful import BaseEmbed, plural, empty_page_format, unpack
 from utils.errors import CantRun
 from utils.parser import ReplReader
 from utils.greedy_parser import UntilFlag, command
-from utils.buttons import BaseButton, MenuViewBase, ViewButtonIteration
-from utils.menus import ListPageInteractionBase, MenuBase, HelpMenuBase, MenuViewInteractionBase
+from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration
+from utils.menus import ListPageInteractionBase, HelpMenuBase, MenuViewInteractionBase
 from utils import flags as flg
 from collections import namedtuple
-from discord.ext.menus import First, Last
 from jishaku.codeblocks import codeblock_converter
 
 CogHelp = namedtuple("CogAmount", 'name commands emoji description')
@@ -404,7 +403,7 @@ class Helpful(commands.Cog):
         if show_code:
             param = {"text": inspect.getsource(src), "width": 1900, "replace_whitespace": False}
             list_codeblock = [f"```py\n{cb}\n```" for cb in textwrap.wrap(**param)]
-            menu = MenuBase(empty_page_format(list_codeblock))
+            menu = InteractionPages(empty_page_format(list_codeblock))
             await menu.start(ctx)
         else:
             lines, firstlineno = inspect.getsourcelines(src)

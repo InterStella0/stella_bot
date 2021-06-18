@@ -13,7 +13,7 @@ from discord.ext import commands
 from utils import greedy_parser
 from utils.decorators import event_check, pages
 from utils.useful import call, empty_page_format, print_exception
-from utils.menus import MenuBase
+from utils.buttons import InteractionPages
 from utils.greedy_parser import GreedyParser, Separator, UntilFlag
 from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
 from utils import flags as flg
@@ -162,7 +162,7 @@ class Myself(commands.Cog):
                         kwargs.update({"mention_author": mention})
                     await sent(**kwargs)
                 else:
-                    menu = MenuBase(empty_page_format([*map("```{}```".format, text)]))
+                    menu = InteractionPages(empty_page_format([*map("```{}```".format, text)]))
                     await menu.start(ctx)
 
             if now:
@@ -344,7 +344,7 @@ class Myself(commands.Cog):
         else:
             to_display = textwrap.wrap(str(rows), 1000, replace_whitespace=False)
         
-        menu = MenuBase(show_result(to_display)) 
+        menu = InteractionPages(show_result(to_display)) 
         await menu.start(ctx)
 
     @greedy_parser.command()
@@ -382,7 +382,7 @@ class Myself(commands.Cog):
                         add()
                     break
             
-            await MenuBase(show_result(chunked)).start(ctx)
+            await InteractionPages(show_result(chunked)).start(ctx)
 
 def setup(bot):
     cog = Myself(bot)
