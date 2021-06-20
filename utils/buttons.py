@@ -35,20 +35,28 @@ class ViewIterationAuthor(ViewButtonIteration):
     def __init__(self, ctx, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.context = ctx
+        self.cooldown = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
 
     async def interaction_check(self, interaction):
         """Only allowing the context author to interact with the view"""
-        author = self.context.author
-        if interaction.user != author and not await self.context.bot.is_owner(interaction.user):
-            await interaction.response.send_message(content=f"Only {author} can use this.", ephemeral=True)
-            raise Exception("no")
+        ctx = self.context
+        author = ctx.author
+        if interaction.user != author:
+            bucket = self.cooldown.get_bucket(ctx.message)
+            if not bucket.update_rate_limit():
+                h = ctx.bot.help_command
+                command = h.get_command_signature(ctx.command, ctx)
+                content = f"Only `{author}` can use this menu. If you want to use it, use `{command}`"
+                embed = BaseEmbed.to_error(description=content)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            return False
         return True
 
-class MenuViewBase(ViewButtonIteration):
+class MenuViewBase(ViewIterationAuthor):
     """A Base Menu + View combination for all interaction that combines those two.
         It requires a page_source and an optional menu that must derived from MenuViewInteractionBase"""
     def __init__(self, ctx, page_source, *args, message=None, menu=MenuViewInteractionBase, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(ctx, *args, **kwargs)
         if not inspect.isclass(page_source):
             raise Exception(f"'page_source' must be a class")
         if not issubclass(page_source, ListPageInteractionBase):
@@ -59,7 +67,6 @@ class MenuViewBase(ViewButtonIteration):
             raise Exception(f"'menu' must subclass MenuViewInteractionBase, not '{menu}'")
 
         self.message = message
-        self.context = ctx
         self._class_page_source = page_source
         self._class_menu = menu
         self.menu = None
@@ -168,10 +175,18 @@ class InteractionPages(ui.View, MenuBase):
 
     async def _get_kwargs_from_page(self, page):
         value = await super()._get_kwargs_from_page(page)
+        self.format_view()
         if 'view' not in value:
             value.update({'view': self})
         value.update({'allowed_mentions': discord.AllowedMentions(replied_user=False)})
         return value
+
+    def format_view(self):
+        for i, b in enumerate(self.children):
+            b.disabled = any([self.current_page == 0 and i < 2,
+                             self.current_page == self._source.get_max_pages() - 1 and not i < 3]
+            )
+
 
     async def interaction_check(self, interaction):
         """Only allowing the context author to interact with the view"""

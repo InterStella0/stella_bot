@@ -259,7 +259,8 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             "mapper": command_data,
             "menu": HelpMenu
         }
-        args = [embed, self, ctx, HelpSource, cog_names]
+        cog_names = [*more_itertools.chunked(cog_names, 5)]
+        args = [embed, self, ctx, HelpSource, *cog_names]
         menu_view = HelpMenuView(*args, **loads)
         await ctx.reply(embed=embed, view=menu_view)
 

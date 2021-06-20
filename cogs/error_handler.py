@@ -46,7 +46,7 @@ class ErrorHandler(commands.Cog):
             payload = {
                 "selected": name,
                 "label": f"Enter required argument for '{name}'",
-                "group": None,
+                "row": None,
                 "style": discord.ButtonStyle.success
             }
             button = MissingButton(error, template, **payload)
