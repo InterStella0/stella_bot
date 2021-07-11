@@ -1,3 +1,4 @@
+from __future__ import annotations
 import discord
 import datetime
 import contextlib
@@ -7,29 +8,33 @@ import asyncio
 import traceback
 import io
 import textwrap
-import more_itertools
-from typing import Union, Optional
+from typing import Union, Optional, Any, Tuple, Coroutine, Generator, Dict, TYPE_CHECKING
 from discord.ext import commands
 from utils import greedy_parser
 from utils.decorators import event_check, pages
-from utils.useful import call, empty_page_format, print_exception
+from utils.useful import call, empty_page_format, print_exception, StellaContext
 from utils.buttons import InteractionPages
 from utils.greedy_parser import GreedyParser, Separator, UntilFlag
 from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
 from utils import flags as flg
-from jishaku.codeblocks import codeblock_converter
+from utils import menus
+from jishaku.codeblocks import codeblock_converter, Codeblock
+
+if TYPE_CHECKING:
+    from main import StellaBot
 
 
 @pages()
-async def show_result(self, menu, entry):
+async def show_result(self, menu: menus.MenuBase, entry: str) -> str:
     return f"```py\n{entry}```"
+
 
 class Myself(commands.Cog):
     """Commands for stella"""
-    def __init__(self, bot):
+    def __init__(self, bot: StellaBot):
         self.bot = bot
 
-    async def cog_check(self, ctx):
+    async def cog_check(self, ctx: StellaContext) -> bool:
         return await commands.is_owner().predicate(ctx)
 
     @greedy_parser.command()
@@ -39,7 +44,8 @@ class Myself(commands.Cog):
     @flg.add_flag("--reason", nargs="+")
     @flg.add_flag("--message", type=discord.Message)
     @flg.add_flag("--author", type=discord.Member)
-    async def addbot(self, ctx, bot: IsBot, **flags):
+    async def addbot(self, ctx: StellaContext, bot: IsBot,
+                     **flags: Union[datetime.datetime, discord.Member, discord.Message, str]):
         new_data = {'bot_id': bot.id}
         if message := flags.pop('message'):
             new_data['author_id'] = message.author.id
@@ -73,7 +79,7 @@ class Myself(commands.Cog):
         self.bot.confirmed_bots.add(bot.id)
 
     @commands.command()
-    async def su(self, ctx, member: Union[discord.Member, discord.User], *, content):
+    async def su(self, ctx: StellaContext, member: Union[discord.Member, discord.User], *, content: str):
         message = ctx.message
         message.author = member
         message.content = ctx.prefix + content
@@ -83,8 +89,8 @@ class Myself(commands.Cog):
     @greedy_parser.command()
     @flg.add_flag("--uses", type=int, default=1)
     @flg.add_flag("--code", type=codeblock_converter)
-    async def command(self, ctx, **flags):
-        coding = {
+    async def command(self, ctx: StellaContext, **flags: Union[int, Codeblock]):
+        coding: Dict[str, Any] = {
             "_bot": self.bot,
             "commands": commands
         }
@@ -98,7 +104,7 @@ class Myself(commands.Cog):
 
         uses = flags["uses"]
 
-        def check(ctx):
+        def check(ctx: StellaContext) -> bool:
             return ctx.command.qualified_name == coding[command].qualified_name and self.bot.stella == ctx.author
 
         await ctx.message.add_reaction("<:next_check:754948796361736213>")
@@ -109,11 +115,11 @@ class Myself(commands.Cog):
                 return self.bot.remove_command(c.command.qualified_name)
 
     @commands.command(name="eval", help="Eval for input/print feature", aliases=["e", "ev", "eva"])
-    async def _eval(self, ctx, *, code: codeblock_converter):
+    async def _eval(self, ctx: StellaContext, *, code: codeblock_converter):
         loop = ctx.bot.loop
         stdout = io.StringIO()
 
-        def sending_print():
+        def sending_print() -> None:
             nonlocal stdout
             content = stdout.getvalue()
             if content:
@@ -122,13 +128,13 @@ class Myself(commands.Cog):
                 stdout.seek(0)
 
         # Shittiest code I've ever wrote remind me to think of another way
-        def run_async(coro, wait_for_value=True):
+        def run_async(coro: Coroutine[Any, Any, Any], wait_for_value: Optional[bool] = True) -> Any:
             if wait_for_value:
                 sending_print()
                 ctx.waiting = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
                 ctx.result = None
 
-                async def getting_result():
+                async def getting_result() -> None:
                     ctx.result = await coro
 
                 run = run_async(getting_result(), wait_for_value=False)
@@ -140,14 +146,15 @@ class Myself(commands.Cog):
 
             task = loop.create_task(coro)
 
-            def coroutine_dies(target_task):
+            def coroutine_dies(target_task: asyncio.Task) -> None:
                 ctx.failed = target_task.exception()
 
             task.add_done_callback(coroutine_dies)
             return task
 
-        def printing(*content, now=False, channel=ctx, reply=True, mention=False, **kwargs):
-            async def sending(cont):
+        def printing(*content: str, now: Optional[bool] = False, channel: Optional[discord.abc.Messageable] = ctx,
+                     reply: Optional[bool] = True, mention: Optional[bool]=False, **kwargs: Any) -> None:
+            async def sending(cont: str) -> None:
                 nonlocal channel, reply, mention
                 if c := channel is not ctx:
                     channel = await commands.TextChannelConverter().convert(ctx, str(channel))
@@ -171,24 +178,25 @@ class Myself(commands.Cog):
             else:
                 print(*content, **kwargs)
 
-        def inputting(*content, channel=ctx, target=(ctx.author.id,), **kwargs):
+        def inputting(*content: str, channel: Optional[discord.abc.Messageable] = ctx,
+                      target: Tuple[int, ...] = (ctx.author.id,), **kwargs: Any) -> Optional[str]:
             target = discord.utils.SnowflakeList(target, is_sorted=True)
 
-            async def waiting_respond():
+            async def waiting_respond() -> discord.Message:
                 return await ctx.bot.wait_for("message", check=waiting, timeout=60)
 
-            def waiting(m):
+            def waiting(m: discord.Message) -> bool:
                 return target.has(m.author.id) and m.channel == ctx.channel_used
 
             printing(*content, channel=channel, **kwargs)
             if result := run_async(waiting_respond()):
                 return result.content
 
-        async def giving_emote(e):
+        async def giving_emote(e: str) -> None:
             if ctx.channel.permissions_for(ctx.me).external_emojis:
                 await ctx.message.add_reaction(e)
 
-        async def starting(startup):
+        async def starting(startup: datetime.datetime) -> None:
             ctx.running = True
             while ctx.running:
                 if datetime.datetime.utcnow() > startup + datetime.timedelta(seconds=5):
@@ -216,10 +224,10 @@ class Myself(commands.Cog):
         values = [f"{'':>4}{v}" for v in values]
         values.insert(0, "def _to_run():")
 
-        def running():
+        def running() -> Generator[Any, None, None]:
             yield (yield from variables['_to_run']())
 
-        def in_exec():
+        def in_exec() -> None:
             loop.create_task(starting(datetime.datetime.utcnow()))
             with contextlib.redirect_stdout(stdout):
                 for result in running():
@@ -243,7 +251,7 @@ class Myself(commands.Cog):
 
     @commands.Cog.listener()
     @event_check(lambda s, b, a: (b.content and a.content) or b.author.bot)
-    async def on_message_edit(self, before, after):
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
         if await self.bot.is_owner(before.author) and not before.embeds and not after.embeds:
             await self.bot.process_commands(after)
 
@@ -251,11 +259,11 @@ class Myself(commands.Cog):
     @flg.add_flag("--must", type=bool, action="store_true", default=False)
     @flg.add_flag("--messages", nargs='+', type=discord.Message)
     @commands.bot_has_permissions(read_message_history=True)
-    async def clear(self, ctx, amount: Optional[int]=50, **flag):
-        def check(m):
+    async def clear(self, ctx: StellaContext, amount: Optional[int] = 50, **flag: Union[bool, str]):
+        def check(m: discord.Message) -> bool:
             return m.author == ctx.me
 
-        def less_two_weeks(message):
+        def less_two_weeks(message: discord.Message) -> bool:
             return message.created_at > datetime.datetime.utcnow() - datetime.timedelta(days=14)
 
         must = flag["must"]
@@ -282,20 +290,20 @@ class Myself(commands.Cog):
                 if counter == amount:
                     break
             if purge_enable and to_delete:
-                for bulk in more_itertools.chunked(to_delete, 100):
+                for bulk in discord.utils.as_chunks(to_delete, 100):
                     await ctx.channel.delete_messages(bulk)
         
         await ctx.confirmed()
 
     @commands.command()
-    async def dispatch(self, ctx, message: discord.Message):
+    async def dispatch(self, ctx: StellaContext, message: discord.Message):
         self.bot.dispatch('message', message)
         await ctx.confirmed()
 
-    async def cogs_handler(self, ctx, extensions):
+    async def cogs_handler(self, ctx: StellaContext, extensions: ValidCog) -> None:
         method = ctx.command.name
 
-        def do_cog(exts):
+        def do_cog(exts: str) -> Any:
             func = getattr(self.bot, f"{method}_extension")
             return func(f"cogs.{exts}")
 
@@ -307,7 +315,7 @@ class Myself(commands.Cog):
     @flg.add_flag("--not_tabulate", "-NT", action="store_true", default=False)
     @flg.add_flag("--not_number", "-NN", action="store_true", default=False)
     @flg.add_flag("--max_row", "-MR", type=int, default=15)
-    async def sql(self, ctx, query: UntilFlag[str], **flags):
+    async def sql(self, ctx: StellaContext, query: UntilFlag[str], **flags: Union[int, bool]):
         dont_tabulate = flags.pop("not_tabulate", False)
         MR = flags.get("max_row")
         rows = await self.bot.pool_pg.fetch(query)
@@ -321,7 +329,8 @@ class Myself(commands.Cog):
             datarows = []
             last_row = [(" " * int(len(table[0]) / 2 - 5)) + "-- More --"] 
             was_size = 0
-            def check_content(size):
+
+            def check_content(size: int) -> bool:
                 nonlocal was_size
                 values = table[:size] + last_row
                 result = len("\n".join(values))
@@ -336,7 +345,7 @@ class Myself(commands.Cog):
                     delete_after=60
                 )
 
-            tabledata = [*more_itertools.chunked(table[3:], MR)]
+            tabledata = [*discord.utils.as_chunks(table[3:], MR)]
             for few_row in tabledata:
                 last_row = [] if few_row is tabledata[-1] else last_row
                 datarows.append(table[:3] + few_row + last_row)
@@ -348,7 +357,7 @@ class Myself(commands.Cog):
         await menu.start(ctx)
 
     @greedy_parser.command()
-    async def reinvoke(self, ctx, command: greedy_parser.UntilFlag[str], *, flags: flg.ReinvokeFlag):
+    async def reinvoke(self, ctx: StellaContext, command: greedy_parser.UntilFlag[str], *, flags: flg.ReinvokeFlag):
         message = ctx.message
         message.author = flags.user or ctx.author
         message.content = ctx.prefix + command
@@ -366,7 +375,8 @@ class Myself(commands.Cog):
             lines.reverse()
             chunked = []
             build = ""
-            def add():
+
+            def add() -> None:
                 nonlocal build
                 nonlocal chunked
                 chunked.append(build)
@@ -384,7 +394,8 @@ class Myself(commands.Cog):
             
             await InteractionPages(show_result(chunked)).start(ctx)
 
-def setup(bot):
+
+def setup(bot: StellaBot) -> None:
     cog = Myself(bot)
     for name in ("load", "unload", "reload"):
         @commands.command(name=name, aliases=["c"+name, name+"s"], cls=GreedyParser)

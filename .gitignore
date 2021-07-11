@@ -2,6 +2,7 @@
 *.json
 *.env
 *.so
+*.service
 venv
 .idea
 nppBackup

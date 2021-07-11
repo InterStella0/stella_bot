@@ -1,5 +1,4 @@
-from logging import PlaceHolder
-from typing import Optional
+from __future__ import annotations
 import discord
 import datetime
 import re
@@ -7,25 +6,31 @@ import asyncio
 import itertools
 import ctypes
 import contextlib
-import humanize
 import functools
 import collections
 import textwrap
 from dataclasses import dataclass
 from discord.ext import commands
 from discord.ext.commands import UserNotFound
+from discord.ext import menus
 from discord.ext.menus import ListPageSource
 from utils import flags as flg
 from utils.new_converters import BotPrefixes, IsBot, BotCommands
 from utils.buttons import InteractionPages
-from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, default_date, plural, realign, search_commands
+from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, default_date, plural, realign, search_commands, StellaContext
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
 from utils import greedy_parser
+from typing import Any, Optional, Union, List, Tuple, Callable, Dict, Coroutine, TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from main import StellaBot
 
 ReactRespond = collections.namedtuple("ReactRespond", "created_at author reference")
 
 DISCORD_PY = 336642139381301249
+
 
 @dataclass
 class BotAdded:
@@ -38,7 +43,8 @@ class BotAdded:
     joined_at: datetime.datetime = None
 
     @classmethod
-    def from_json(cls, bot=None, *, bot_id=None, **data):
+    def from_json(cls, bot: Optional[Union[discord.Member, discord.User]] = None, *, bot_id: Optional[int] = None,
+                  **data: Union[discord.Member, datetime.datetime, str]) -> "BotAdded":
         """factory method on data from a dictionary like object into BotAdded."""
         author = data.pop("author_id", None)
         join = data.pop("joined_at", None)
@@ -51,10 +57,10 @@ class BotAdded:
         return cls(author=author, bot=bot, joined_at=join, **data)
 
     @classmethod
-    async def convert(cls, ctx, argument):
+    async def convert(cls, ctx: StellaContext, argument: str) -> "BotAdded":
         """Invokes when the BotAdded is use as a typehint."""
         with contextlib.suppress(commands.BadArgument):
-            if user := await IsBot().convert(ctx, argument, cls=BotAdded):
+            if user := await IsBot().convert(ctx, argument):
                 for attribute in ("pending", "confirmed")[isinstance(user, discord.Member):]:
                     attribute += "_bots"
                     if user.id in getattr(ctx.bot, attribute):
@@ -63,14 +69,14 @@ class BotAdded:
                 raise NotInDatabase(user)
         raise BotNotFound(argument)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.bot or "")
 
 
 class BotOwner(BotAdded):
     """Raises an error if the bot does not belong to the context author"""
     @classmethod
-    async def convert(cls, ctx, argument):
+    async def convert(cls, ctx: StellaContext, argument: str) -> "BotOwner":
         botdata = await super().convert(ctx, argument)
         if botdata.author != ctx.author:
             raise commands.CommandError(f"Sorry you can only change your own bot's information. This bot belongs to {botdata.author}.")
@@ -79,9 +85,10 @@ class BotOwner(BotAdded):
             raise commands.CommandError("This bot must be in the server.")
         return botdata
 
-def pprefix(bot_guild, prefix):
+
+def pprefix(bot_guild: Union[StellaBot, discord.Guild], prefix: str) -> str:
     if content := re.search("<@(!?)(?P<id>[0-9]*)>", prefix):
-        method = getattr(bot_guild, ("get_user","get_member")[isinstance(bot_guild, discord.Guild)])
+        method = getattr(bot_guild, ("get_user", "get_member")[isinstance(bot_guild, discord.Guild)])
         if user := method(int(content["id"])):
             return f"@{user.display_name} "
     return prefix
@@ -89,11 +96,11 @@ def pprefix(bot_guild, prefix):
 
 class AllPrefixes(ListPageSource):
     """Menu for allprefix command."""
-    def __init__(self, data, count_mode):
+    def __init__(self, data: List[BotPrefixes], count_mode: bool):
         super().__init__(data, per_page=6)
         self.count_mode = count_mode
 
-    async def format_page(self, menu: InteractionPages, entries):
+    async def format_page(self, menu: InteractionPages, entries: List[BotPrefixes]) -> discord.Embed:
         key = "(\u200b|\u200b)"
         offset = menu.current_page * self.per_page
         content = "`{no}. {prefix} {key} {b.count}`" if self.count_mode else "`{no}. {b} {key} {prefix}`"
@@ -104,7 +111,7 @@ class AllPrefixes(ListPageSource):
 
 
 @pages(per_page=10)
-async def all_bot_count(self, menu: InteractionPages, entries):
+async def all_bot_count(self, menu: InteractionPages, entries: List[BotCommands]) -> discord.Embed:
     """Menu for botrank command."""
     key = "(\u200b|\u200b)"
     offset = menu.current_page * self.per_page
@@ -115,16 +122,16 @@ async def all_bot_count(self, menu: InteractionPages, entries):
 
 
 @pages(per_page=6)
-async def bot_added_list(self, menu: InteractionPages, entries):
+async def bot_added_list(self, menu: InteractionPages, entries: List[BotAdded]) -> discord.Embed:
     """Menu for recentbotadd command."""
     offset = menu.current_page * self.per_page
-    contents = ((f"{b.author}", f'**{b}** `{humanize.precisedelta(b.joined_at)}`')
+    contents = ((f"{b.author}", f'**{b}** `{discord.utils.format_dt(b.joined_at, "R")}`')
                 for i, b in enumerate(entries, start=offset))
     return BaseEmbed(title="Bots added today", fields=contents)
 
 
 @pages()
-async def bot_pending_list(self, menu: InteractionPages, entry):
+async def bot_pending_list(self, menu: InteractionPages, entry: Any) -> discord.Embed:
     stellabot = menu.ctx.bot
     bot = menu.cached_bots.setdefault(entry["bot_id"], await stellabot.fetch_user(entry["bot_id"]))
     fields = (("Requested by", stellabot.get_user(entry["author_id"]) or "idk really"),
@@ -137,26 +144,29 @@ async def bot_pending_list(self, menu: InteractionPages, entry):
     return embed
 
 
-def is_user():
+deco_event = Callable[[Callable], Callable]
+
+
+def is_user() -> deco_event:
     """Event check for returning true if it's a bot."""
     return event_check(lambda _, m: not m.author.bot)
 
 
-def prefix_cache_ready():
+def prefix_cache_ready() -> deco_event:
     """Event check for command_count"""
-    def predicate(self, message):
+    def predicate(self, message: discord.Message) -> bool:
         return self.compiled_prefixes and self.compiled_commands and not message.author.bot
     return event_check(predicate)
 
 
-def dpy_bot():
+def dpy_bot() -> deco_event:
     """Event check for dpy_bots"""
     return event_check(lambda _, member: member.bot and member.guild.id == DISCORD_PY)
 
 
 class FindBot(commands.Cog, name="Bots"):
     """Most bot related commands"""
-    def __init__(self, bot):
+    def __init__(self, bot: StellaBot):
         self.bot = bot
         valid_prefix = ("!", "?", "？", "<@(!?)80528701850124288> ")
         re_command = "(\{}|\{}|\{}|({}))addbot".format(*valid_prefix)
@@ -170,7 +180,7 @@ class FindBot(commands.Cog, name="Bots"):
         self.all_bot_commands = {}
         bot.loop.create_task(self.loading_all_prefixes())
 
-    async def loading_all_prefixes(self):
+    async def loading_all_prefixes(self) -> None:
         """Loads all unique prefix when it loads and set compiled_pref for C code."""
         await self.bot.wait_until_ready()
         prefix_data = await self.bot.pool_pg.fetch("SELECT DISTINCT bot_id, prefix FROM prefixes_list")
@@ -184,7 +194,7 @@ class FindBot(commands.Cog, name="Bots"):
                 commands.add(command["command"])
         self.update_compile()
 
-    def update_compile(self):
+    def update_compile(self) -> None:
         temp = [*{prefix for prefixes in self.all_bot_prefixes.values() for prefix in prefixes}]
         cmds = [*{command for commands in self.all_bot_commands.values() for command in commands}]
         self.compiled_prefixes = compile_array(sorted(temp))
@@ -193,7 +203,7 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.Cog.listener("on_member_join")
     @wait_ready()
     @dpy_bot()
-    async def join_bot_tracker(self, member):
+    async def join_bot_tracker(self, member: discord.Member):
         """Tracks when a bot joins in discord.py where it logs all the BotAdded information."""
         if member.id in self.bot.pending_bots:
             data = await self.bot.pool_pg.fetchrow("SELECT * FROM pending_bots WHERE bot_id = $1", member.id)
@@ -202,13 +212,15 @@ class FindBot(commands.Cog, name="Bots"):
         else:
             await self.update_confirm(BotAdded.from_json(member, joined_at=member.joined_at.replace(tzinfo=None)))
 
-    async def listen_for_bots_at(self, message, message_check):
+    async def listen_for_bots_at(self, message: discord.Message, message_check: Callable[[discord.Message], bool]) -> \
+            Tuple[Dict[int, Union[discord.Message, ReactRespond]], Dict[int, Union[discord.Message, ReactRespond]]]:
         """Listens for bots responding and terminating when a user respond"""
         bots = {}
         after_user = {}
         time_to_listen = message.created_at + datetime.timedelta(seconds=5)
         flip = 0
-        def reaction_add_check(reaction, user):
+
+        def reaction_add_check(reaction: discord.Reaction, user: discord.User) -> bool:
             return reaction.message == message
 
         stuff_here = locals()
@@ -217,7 +229,7 @@ class FindBot(commands.Cog, name="Bots"):
                 time_left = (time_to_listen - time_rn).total_seconds()
                 done, didnt = await asyncio.wait(
                     [self.bot.wait_for(event, check=stuff_here[f"{event}_check"], timeout=time_left) 
-                    for event in ("reaction_add", "message")]
+                     for event in ("reaction_add", "message")]
                     )
                 for coro in done:
                     coro.exception()
@@ -230,7 +242,7 @@ class FindBot(commands.Cog, name="Bots"):
                     coro.cancel()
 
                 if any(responded.author.id in respondance for respondance in (bots, after_user)):
-                        continue
+                    continue
                 flip |= not responded.author.bot
                 if not responded.author.bot:
                     continue
@@ -245,13 +257,14 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.Cog.listener("on_member_remove")
     @wait_ready()
     @dpy_bot()
-    async def remove_bot_tracker(self, member):
+    async def remove_bot_tracker(self, member: discord.Member):
         """Since there is no reason to store these bots after they left, best to delete them"""
         if member.id in self.bot.confirmed_bots:
             await self.bot.pool_pg.execute("DELETE FROM confirmed_bots WHERE bot_id=$1", member.id)
             self.bot.confirmed_bots.remove(member.id)
 
-    async def update_prefix_bot(self, message, func, prefix, command):
+    async def update_prefix_bot(self, message: discord.Message, func: Callable[[discord.Message], bool],
+                                prefix: str, command: str) -> None:
         """Updates the prefix of a bot, or multiple bot where it waits for the bot to respond. It updates in the database."""
         def setting(inner):
             def check(msg):
@@ -293,7 +306,7 @@ class FindBot(commands.Cog, name="Bots"):
     @wait_ready()
     @listen_for_guilds()
     @is_user()
-    async def find_bot_prefixes(self, message):
+    async def find_bot_prefixes(self, message: discord.Message):
         """This function is responsible for point of entry of the bot detection. All bot must went into here
            in order to be detected."""
         def check_jsk(m):
@@ -323,7 +336,11 @@ class FindBot(commands.Cog, name="Bots"):
                 if name not in match["prefix"]:
                     return await self.update_prefix_bot(message, func, match["prefix"], name)
 
-    async def search_respond(self, callback, message, word, type):
+    async def search_respond(
+            self,
+            callback: Callable[[Tuple[ctypes.c_char_p, int], ctypes.c_char_p], Coroutine[Any, Any, List[str]]],
+            message: discord.Message, word: str, type: str
+    ) -> Optional[Tuple[filter, List[str], Dict[int, discord.Message]]]:
         """Gets the prefix/command that are in this message, gets the bot that responded
            and return them."""
         content_compiled = ctypes.create_string_buffer(word.encode("utf-8"))
@@ -331,6 +348,7 @@ class FindBot(commands.Cog, name="Bots"):
             return
 
         singular = type[:len(type) - ((type != "commands") + 1)]
+
         def check(msg):
             return msg.channel == message.channel
 
@@ -346,7 +364,7 @@ class FindBot(commands.Cog, name="Bots"):
         responded = filter(lambda x: x["bot_id"] in bot_found, bots)
         return responded, result, bot_found
 
-    async def insert_both_prefix_command(self, prefixes, commands):
+    async def insert_both_prefix_command(self, prefixes: List[Union[int, str]], commands: List[Union[int, str]]) -> None:
         commands_query = "INSERT INTO commands_list VALUES($1, $2, $3, $4)"
         prefixes_query = "INSERT INTO prefixes_list VALUES($1, $2, $3, $4, $5) " \
                          "ON CONFLICT (guild_id, bot_id, prefix) DO " \
@@ -360,7 +378,7 @@ class FindBot(commands.Cog, name="Bots"):
     @listen_for_guilds()
     @prefix_cache_ready()
     @is_user()
-    async def find_bot_commands(self, message):
+    async def find_bot_commands(self, message: discord.Message):
         """Get a prefix based on known command used."""
         word, _, _ = message.content.partition("\n")
         to_find = textwrap.shorten(word, width=100, placeholder="")
@@ -397,7 +415,7 @@ class FindBot(commands.Cog, name="Bots"):
     @wait_ready()
     @listen_for_guilds()
     @prefix_cache_ready()
-    async def command_count(self, message):
+    async def command_count(self, message: discord.Message):
         """
         Checks if the message contains a valid prefix, which will wait for the bot to respond to count that message
         as a command.
@@ -427,11 +445,10 @@ class FindBot(commands.Cog, name="Bots"):
 
         await self.insert_both_prefix_command(prefixes_values, commands_values)
 
-
     @commands.Cog.listener("on_message")
     @wait_ready()
     @is_user()
-    async def addbot_command_tracker(self, message):
+    async def addbot_command_tracker(self, message: discord.Message):
         """Tracks ?addbot command. This is an exact copy of R. Danny code."""
         if message.channel.id not in (559455534965850142, 381963689470984203, 381963705686032394):
             return
@@ -460,13 +477,13 @@ class FindBot(commands.Cog, name="Bots"):
                 return
             await self.update_pending(result)
 
-    async def check_author(self, bot_id, author_id, mode):
+    async def check_author(self, bot_id: int, author_id: int, mode: str) -> Optional[bool]:
         """Checks if the author of a bot is the same as what is stored in the database."""
         if data := await self.bot.pool_pg.fetchrow(f"SELECT * FROM {mode} WHERE bot_id=$1", bot_id):
             old_author = data['author_id']
             return old_author == author_id
 
-    async def is_valid_addbot(self, message, check=False):
+    async def is_valid_addbot(self, message: discord.Message, check: Optional[bool] = False) -> Optional[BotAdded]:
         """Check if a message is a valid ?addbot command."""
         if result := re.match(self.re_addbot, message.content):
             reason = result["reason"]
@@ -512,7 +529,7 @@ class FindBot(commands.Cog, name="Bots"):
                                 jump_url=message.jump_url,
                                 joined_at=join)
 
-    async def update_pending(self, result):
+    async def update_pending(self, result: BotAdded) -> None:
         """Insert a new addbot request which is yet to enter the discord.py server."""
         query = """INSERT INTO pending_bots VALUES($1, $2, $3, $4, $5) 
                    ON CONFLICT (bot_id) DO
@@ -522,7 +539,7 @@ class FindBot(commands.Cog, name="Bots"):
         if result.bot.id not in self.bot.pending_bots:
             self.bot.pending_bots.add(result.bot.id)
 
-    async def update_confirm(self, result):
+    async def update_confirm(self, result: BotAdded) -> None:
         """Inserts a new confirmed bot with an author where the bot is actually in the discord.py server."""
         query = """INSERT INTO confirmed_bots VALUES($1, $2, $3, $4, $5, $6) 
                    ON CONFLICT (bot_id) DO
@@ -543,7 +560,7 @@ class FindBot(commands.Cog, name="Bots"):
                            "This is useful for flexing for no reason."
                       )
     @is_discordpy()
-    async def whatadd(self, ctx, *, author: IsBot(is_bot=False, user_check=False) = None):
+    async def whatadd(self, ctx: StellaContext, *, author: IsBot(is_bot=False, user_check=False) = None):
         author = author or ctx.author
         if author.bot:
             return await ctx.maybe_reply("That's a bot lol")
@@ -551,7 +568,7 @@ class FindBot(commands.Cog, name="Bots"):
         total_list = [await self.bot.pool_pg.fetch(query.format(x), author.id) for x in ("pending", "confirmed")]
         total_list = itertools.chain.from_iterable(total_list)
 
-        async def get_member(b_id):
+        async def get_member(b_id: int) -> Union[discord.Member, discord.User]:
             return ctx.guild.get_member(b_id) or await self.bot.fetch_user(b_id)
         list_bots = [BotAdded.from_json(await get_member(x["bot_id"]), **x) for x in total_list]
         embed = BaseEmbed.default(ctx, title=plural(f"{author}'s bot(s)", len(list_bots)))
@@ -577,13 +594,13 @@ class FindBot(commands.Cog, name="Bots"):
                       help="Shows who added the bot, when they requested it and when the bot was added including the "
                            "jump url to the original request message in discord.py.")
     @is_discordpy()
-    async def whoadd(self, ctx, *, bot: BotAdded):
+    async def whoadd(self, ctx: StellaContext, *, bot: BotAdded):
         data = bot
         author = await try_call(commands.UserConverter().convert, ctx, str(data.author), exception=UserNotFound)
         embed = discord.Embed(title=str(data.bot))
         embed.set_thumbnail(url=data.bot.avatar.url)
 
-        def or_none(condition, func):
+        def or_none(condition: bool, func: Callable[[bool], Any]) -> Optional[Any]:
             if condition:
                 return func(condition)
 
@@ -595,7 +612,7 @@ class FindBot(commands.Cog, name="Bots"):
 
         await ctx.embed(embed=embed, fields=fields)
 
-    def clean_prefix(self, ctx, prefix):
+    def clean_prefix(self, ctx: StellaContext, prefix: str) -> str:
         value = (ctx.guild, ctx.bot)[ctx.guild is None]
         prefix = pprefix(value, prefix)
         if prefix == "":
@@ -607,7 +624,7 @@ class FindBot(commands.Cog, name="Bots"):
                       help="Shows what the bot's prefix. This is sometimes inaccurate. Don't rely on it too much. "
                            "This also does not know it's aliases prefixes.")
     @commands.guild_only()
-    async def whatprefix(self, ctx, *, member: BotPrefixes):
+    async def whatprefix(self, ctx: StellaContext, *, member: BotPrefixes):
         show_prefix = functools.partial(self.clean_prefix, ctx)
         prefix = show_prefix(member.prefix)
         alias = '`, `'.join(map(show_prefix, member.aliases))
@@ -621,13 +638,13 @@ class FindBot(commands.Cog, name="Bots"):
                       brief="Shows the amount of bot that uses the same prefix.",
                       help="Shows the number of bot that shares a prefix between bots.")
     @commands.guild_only()
-    async def prefixuse(self, ctx, prefix):
+    async def prefixuse(self, ctx: StellaContext, prefix: str):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         prefix = self.clean_prefix(ctx, prefix)
         desk = plural(f"There (is/are) `{len(instance_bot)}` bot(s) that use `{prefix}` as prefix", len(instance_bot))
         await ctx.embed(description=desk)
 
-    async def get_all_prefix(self, guild, prefix):
+    async def get_all_prefix(self, guild: discord.Guild, prefix: str) -> List[discord.Member]:
         """Quick function that gets the amount of bots that has the same prefix in a server."""
         data = await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE guild_id=$1 AND prefix=$2", guild.id, prefix)
 
@@ -640,7 +657,7 @@ class FindBot(commands.Cog, name="Bots"):
                       brief="Shows the name of bot(s) have a given prefix.",
                       help="Shows a list of bot(s) name that have a given prefix.")
     @commands.guild_only()
-    async def prefixbot(self, ctx, prefix):
+    async def prefixbot(self, ctx: StellaContext, prefix: str):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
         list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
         prefix = self.clean_prefix(ctx, prefix)
@@ -657,7 +674,7 @@ class FindBot(commands.Cog, name="Bots"):
                        "defaults to False if not stated.")
     @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
                   help="Reverses the list. This flag accepts True or False, default to False if not stated.")
-    async def allprefix(self, ctx, **flags):
+    async def allprefix(self, ctx: StellaContext, **flags: bool):
         if not (bots := await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE guild_id=$1", ctx.guild.id)):
             return await ctx.embed(description="Looks like I don't have any data in this server on bot prefixes.")
 
@@ -688,7 +705,7 @@ class FindBot(commands.Cog, name="Bots"):
                       help="Show's how many command calls for a given bot. This works by counting how many times "
                            "a message is considered a command for that bot where that bot has responded in less than "
                            "2 seconds.")
-    async def botuse(self, ctx, *, bot: BotCommands):
+    async def botuse(self, ctx: StellaContext, *, bot: BotCommands):
         await ctx.embed(
             title=f"{bot}'s Usage",
             description=plural(f"`{bot.total_usage}` command(s) has been called for **{bot}**.", bot.total_usage)
@@ -700,7 +717,7 @@ class FindBot(commands.Cog, name="Bots"):
                            "been called, the reason on why it was added, the time it was requested and the time it "
                            "joined the server.")
     @is_discordpy()
-    async def botinfo(self, ctx, *, bot: IsBot):
+    async def botinfo(self, ctx: StellaContext, *, bot: IsBot):
         # TODO: I said this 3 months ago to redo this, but im lazy
         titles = (("Bot Prefix", "{0.allprefixes}", BotPrefixes),
                   ("Command Usage", "{0.total_usage}", BotCommands),
@@ -737,7 +754,7 @@ class FindBot(commands.Cog, name="Bots"):
     @is_discordpy()
     @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
                   help="Reverses the list. This flag accepts True or False, default to False if not stated.")
-    async def recentbotadd(self, ctx, **flags):
+    async def recentbotadd(self, ctx: StellaContext, **flags: bool):
         reverse = flags.pop("reverse", False)
 
         def predicate(m):
@@ -745,11 +762,11 @@ class FindBot(commands.Cog, name="Bots"):
         members = {m.id: m for m in filter(predicate, ctx.guild.members)}
         if not members:
             member = max(filter(lambda x: x.bot, ctx.guild.members), key=lambda x: x.joined_at)
-            time_add = humanize.precisedelta(member.joined_at.replace(tzinfo=None), minimum_unit="minutes")
+            time_add = discord.utils.format_dt(member.joined_at, "R")
             return await ctx.embed(
                             title="Bots added today",
                             description="Looks like there are no bots added in the span of 24 hours.\n"
-                                        f"The last time a bot was added was `{time_add}` for `{member}`"
+                                        f"The last time a bot was added was {time_add} for `{member}`"
             )
         db_data = await self.bot.pool_pg.fetch("SELECT * FROM confirmed_bots WHERE bot_id=ANY($1::BIGINT[])", list(members))
         member_data = [BotAdded.from_json(bot=members[data["bot_id"]], **data) for data in db_data]
@@ -757,12 +774,11 @@ class FindBot(commands.Cog, name="Bots"):
         menu = InteractionPages(source=bot_added_list(member_data))
         await menu.start(ctx)
 
-
     @greedy_parser.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
                            help="Shows all bot's command usage in the server on a sorted list.")
     @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
                   help="Reverses the list. This flag accepts True or False, default to False if not stated.")
-    async def botrank(self, ctx, bot: greedy_parser.UntilFlag[BotCommands] = None, **flags):
+    async def botrank(self, ctx: StellaContext, bot: greedy_parser.UntilFlag[BotCommands] = None, **flags: bool):
         reverse = flags.pop("reverse", False)
         bots = {x.id: x for x in ctx.guild.members if x.bot}
         query = "SELECT bot_id, COUNT(command) AS total_usage FROM commands_list " \
@@ -788,7 +804,7 @@ class FindBot(commands.Cog, name="Bots"):
                   help="Reverses the list based on the requested date. This flag accepts True or False, default to "
                        "False if not stated.")
     @is_discordpy()
-    async def pendingbots(self, ctx, **flags):
+    async def pendingbots(self, ctx: StellaContext, **flags: bool):
         bots = await self.bot.pool_pg.fetch("SELECT * FROM pending_bots")
         menu = InteractionPages(bot_pending_list(sorted(bots, key=lambda x: x["requested_at"], reverse=not flags.get("reverse", False))))
         menu.cached_bots = self.cached_bots
@@ -797,13 +813,13 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.command(aliases=["botcommand", "bc", "bcs"],
                       help="Predicting the bot's command based on the message history.")
     @commands.guild_only()
-    async def botcommands(self, ctx, *, bot: BotCommands):
+    async def botcommands(self, ctx: StellaContext, *, bot: BotCommands):
         owner_info = None
         if ctx.guild.id == DISCORD_PY:
             owner_info = await try_call(BotAdded.convert, ctx, str(int(bot)))
 
         @pages(per_page=6)
-        def each_page(self, menu, entries):
+        def each_page(self, menu: menus.MenuPages, entries: List[str]) -> discord.Embed:
             number = menu.current_page * self.per_page + 1
             list_commands = "\n".join(f"{x}. {c}[`{bot.get_command(c)}`]" for x, c in enumerate(entries, start=number))
             embed = BaseEmbed.default(ctx, title=f"{bot} Commands[`{bot.total_usage}`]", description=list_commands)
@@ -817,24 +833,24 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.group(name="bot",
                     help="A group command that are related to all the bot that is stored in my database.")
     @commands.guild_only()
-    async def _bot(self, ctx):
+    async def _bot(self, ctx: StellaContext):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
     @_bot.command(cls=greedy_parser.GreedyParser,
-                  aliases=[ "ci", "changeinfos"],
+                  aliases=["ci", "changeinfos"],
                   brief="Allows you to change your own bot's information in whoadd/whatadd command.",
-                  help="Allows you to change your own bot's information  in whoadd/whatadd command, "\
-                       "only applicable for discord.py server. The user is only allowed to change their own bot, "\
+                  help="Allows you to change your own bot's information  in whoadd/whatadd command, "
+                       "only applicable for discord.py server. The user is only allowed to change their own bot, "
                        "which they are able to change 'requested', 'reason' and 'jump url' values.")
     @is_discordpy()
-    async def changeinfo(self, ctx, bot: greedy_parser.UntilFlag[BotOwner], *, flags: flg.InfoFlag):
+    async def changeinfo(self, ctx: StellaContext, bot: greedy_parser.UntilFlag[BotOwner], *, flags: flg.InfoFlag):
         bot = bot.bot
         new_data = {'bot_id': bot.id}
         flags = dict(flags)
         if not any(flags.values()):
             ctx.current_parameter = [*self.changeinfo.params.values()][-1]
-            raise commands.CommandError("No value were passed, at least put a flag." \
+            raise commands.CommandError("No value were passed, at least put a flag."
                                         f" Type {ctx.prefix}help {ctx.invoked_with} for more information.")
         if message := flags.pop('message'):
             new_data['reason'] = message.content
@@ -871,25 +887,26 @@ class FindBot(commands.Cog, name="Bots"):
         await ctx.embed(title=f"{bot} Information Changes", fields=changes)
 
     @_bot.command(help="View raw prefix that is stored on a bot for bot owners")
-    async def viewprefix(self, ctx, *, bot: BotOwner):
+    async def viewprefix(self, ctx: StellaContext, *, bot: BotOwner):
         query = "SELECT * FROM prefixes_list WHERE bot_id=$1 AND guild_id=$2"
         raw_prefixes = await self.bot.pool_pg.fetch(query, bot.bot.id, ctx.guild.id)
+
         @pages(per_page=10)
-        async def show_result(self, menu, entry):
+        async def show_result(self, menu: menus.MenuPages, entry: List[Dict[str, str]]) -> discord.Embed:
             to_show = "\n".join(f"{i}. `{x['prefix']}`" for i, x in enumerate(entry, start=menu.current_page * 10 + 1))
             return discord.Embed(title=f"{bot}'s raw prefixes", description=to_show)
 
         await InteractionPages(show_result(raw_prefixes)).start(ctx)
 
     @_bot.command(help="Removes prefix that is stored on a specific bot for bot owners")
-    async def delprefix(self, ctx, bot: BotOwner, *prefixes):
+    async def delprefix(self, ctx: StellaContext, bot: BotOwner, *prefixes: str):
         query = "DELETE FROM prefixes_list WHERE guild_id=$1 AND bot_id=$2 AND prefix=$3"
         unique_prefixes = set(prefixes)
         await self.bot.pool_pg.executemany(query, [(ctx.guild.id, bot.bot.id, x) for x in unique_prefixes])
         await ctx.confirmed()
 
     @_bot.command(help="Add prefixes into a specific bot for bot owners")
-    async def addprefix(self, ctx, bot: BotOwner, *prefixes):
+    async def addprefix(self, ctx: StellaContext, bot: BotOwner, *prefixes: str):
         query = "INSERT INTO prefixes_list VALUES ($1, $2, $3, $4, $5)"
         unique_prefixes = set(prefixes)
         guild_id, bot_id = ctx.guild.id, bot.bot.id
@@ -902,13 +919,13 @@ class FindBot(commands.Cog, name="Bots"):
 
     @commands.command(cls=flg.SFlagCommand,
                       brief="Get all unique command for all bot in a server.",
-                      help="Get all unique command for all bot in a server that are shown in an "\
+                      help="Get all unique command for all bot in a server that are shown in an "
                            "descending order for the unique.",
                       aliases=["ac", "acc", "allcommand", "acktually", "act"])
     @commands.guild_only()
     @flg.add_flag("--reverse", default=False, action="store_true",
-                    help="Creates a list in an ascending order from the lowest usage to the highest.")
-    async def allcommands(self, ctx, **flags):
+                  help="Creates a list in an ascending order from the lowest usage to the highest.")
+    async def allcommands(self, ctx: StellaContext, **flags: bool):
         reverse = flags.get("reverse", False)
         query = "SELECT * FROM " \
                 "(SELECT command, COUNT(command) AS command_count FROM " \
@@ -919,21 +936,21 @@ class FindBot(commands.Cog, name="Bots"):
                 f"ORDER BY command_count {('DESC', '')[reverse]}"
 
         data = await self.bot.pool_pg.fetch(query, ctx.guild.id)
-        
+
         @pages(per_page=6)
-        async def each_commands_list(self, menu: InteractionPages, entries):
+        async def each_commands_list(self, menu: InteractionPages,
+                                     entries: List[Dict[str, Union[str, int]]]) -> discord.Embed:
             offset = menu.current_page * self.per_page
             embed = BaseEmbed(title=f"All Commands")
             key = "(\u200b|\u200b)"
             contents = ["`{i}. {command}{k}{command_count}`".format(i=i, k=key, **b)
-                         for i, b in enumerate(entries, start=offset + 1)]
+                        for i, b in enumerate(entries, start=offset + 1)]
             embed.description = "\n".join(realign(contents, key))
             return embed
 
         menu = InteractionPages(each_commands_list(data))
         await menu.start(ctx)
-        
 
 
-def setup(bot):
+def setup(bot: StellaBot) -> None:
     bot.add_cog(FindBot(bot))

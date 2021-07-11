@@ -5,15 +5,16 @@ import discord
 import argparse
 import sys
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Awaitable, Callable, Any
 from discord.ext import commands
 from discord.ext.flags import FlagCommand, _parser
 from discord.utils import MISSING
 from utils.new_converters import AuthorJump_url, AuthorMessage, DatetimeConverter, BooleanOwner
 
+
 class SFlagCommand(FlagCommand):
     """Legacy Flag parsing, only be used when i want to"""
-    async def _parse_flag_arguments(self, ctx):
+    async def _parse_flag_arguments(self, ctx: commands.Context) -> None:
         if not hasattr(self.callback, '_def_parser'):
             return
         arg = ctx.view.read_rest()
@@ -27,7 +28,7 @@ class SFlagCommand(FlagCommand):
         namespace = self.callback._def_parser.parse_args(arguments, ctx=ctx)
         flags = vars(namespace)
 
-        async def do_conversion(value):
+        async def do_conversion(value: _parser.ParserResult) -> Any:
             # Would only call if a value is from _get_value else it is already a value.
             if type(value) is _parser.ParserResult:
                 try:
@@ -64,7 +65,7 @@ class SFlagCommand(FlagCommand):
         ctx.kwargs.update(flags)
 
     @property
-    def signature(self):
+    def signature(self) -> str:
         # Due to command.old_signature uses _Greedy, this caused error
         return commands.Command.signature.__get__(self)
 
@@ -73,8 +74,8 @@ class SFlagGroup(SFlagCommand, commands.Group):
     pass
 
 
-def add_flag(*flag_names, **kwargs):
-    def inner(func):
+def add_flag(*flag_names: Any, **kwargs: Any):
+    def inner(func: Union[Awaitable, commands.Command]) -> Callable:
         if isinstance(func, commands.Command):
             nfunc = func.callback
         else:
@@ -107,12 +108,13 @@ class HelpFlag(commands.Flag):
     help: str = MISSING
 
 
-def flag(*,name: str = MISSING, aliases: List[str] = MISSING, default=MISSING,
-         max_args: int = MISSING, override: bool = MISSING, help=MISSING):
+def flag(*, name: str = MISSING, aliases: List[str] = MISSING, default=MISSING,
+         max_args: int = MISSING, override: bool = MISSING, help=MISSING) -> HelpFlag:
     return HelpFlag(name=name, aliases=aliases, default=default, max_args=max_args, 
                     override=override, help=help)
 
-def find_flag(command):
+
+def find_flag(command: commands.Command) -> Optional[commands.FlagConverter]:
     """Helper function to find the flag that is in a command"""
     last = [*command.params.values()][-1]
     if last.kind is last.KEYWORD_ONLY:
@@ -126,20 +128,24 @@ class InfoFlag(commands.FlagConverter):
     jump_url: Optional[AuthorJump_url] = flag(help="The jump url that will be displayed under 'Message Request'.")
     requested_at: Optional[DatetimeConverter] = flag(help="The date that is displayed under 'Requested'.")
     reason: Optional[str] = flag(help="The text that are displayed under 'Reason'.")
-    message: Optional[AuthorMessage] = flag(help="This flag will override 'reason', 'requested' and 'jump url' according to the target message.")
+    message: Optional[AuthorMessage] = flag(help="This flag will override 'reason', 'requested' and 'jump url'"
+                                                 " according to the target message.")
 
 
 class ReinvokeFlag(commands.FlagConverter):
     redirect_error: Optional[bool] = flag(help="Redirecting error into the command, defaults to False", default=False)
-    redirect: Optional[bool] = flag(help="Set redirect_error to True and setting dispatch to False. Defaults to True", default=True)
+    redirect: Optional[bool] = flag(help="Set redirect_error to True and setting dispatch to False. Defaults to True",
+                                    default=True)
     dispatch: Optional[bool] = flag(help="Allowing to dispatch the events. Defaults to True", default=True)
     call_once: Optional[bool] = flag(help="Calling the check once. Defaults to True", default=True)
     call_check: Optional[bool] = flag(help="Calling the check during invocation. Defaults to True", default=True)
     user: Optional[Union[discord.Member, discord.User]] = flag(help="Calling the command using another user's object.")
-    
+
+
 class ReplFlag(commands.FlagConverter):
     counter: Optional[bool] = flag(help="Showing the counter for each line, defaults to False", default=False)
     exec_: Optional[BooleanOwner] = flag(name='exec', aliases=['execute'],
-                                                 help="Allow execution of repl, defaults to True, unless a non owner.",
-                                                 default=True)
-    inner_func_check: Optional[bool] = flag(help="Check if return/yield is inside a function. Defaults to False for owner", default=False)
+                                         help="Allow execution of repl, defaults to True, unless a non owner.",
+                                         default=True)
+    inner_func_check: Optional[bool] = flag(help="Check if return/yield is inside a function. Defaults to False for owner",
+                                            default=False)

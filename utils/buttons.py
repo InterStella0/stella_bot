@@ -1,24 +1,33 @@
+from __future__ import annotations
 import discord
 import inspect
 from discord import ui
 from discord.ext import commands
+from typing import Optional, Any, Dict, Iterable, Union, Type, TYPE_CHECKING
 from utils.useful import BaseEmbed
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, MenuBase
 
+if TYPE_CHECKING:
+    from utils.useful import StellaContext
+
+
 class BaseButton(ui.Button):
-    def __init__(self, *, style, selected, row, label=None, **kwargs):
+    def __init__(self, *, style: discord.ButtonStyle, selected: Union[int, str], row: int,
+                 label: Optional[str] = None, **kwargs: Any):
         super().__init__(style=style, label=label or selected, row=row, **kwargs)
         self.selected = selected
 
-    async def callback(self, interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         raise NotImplementedError
+
 
 class ViewButtonIteration(ui.View):
     """A BaseView class that creates arrays of buttons, depending on the data type given on 'args',
         it will accept `mapper` as a dataset"""
-    def __init__(self, *args, mapper=None, button=BaseButton, style=None):
+    def __init__(self, *args: Any, mapper: Optional[Dict[str, Any]] = None,
+                 button: Optional[Type[BaseButton]] = BaseButton, style: Optional[discord.ButtonStyle] = None):
         super().__init__()
-        self.mapper=mapper
+        self.mapper = mapper
         for c, button_row in enumerate(args):
             for button_col in button_row:
                 if isinstance(button_col, button):
@@ -31,13 +40,14 @@ class ViewButtonIteration(ui.View):
                 else:
                     self.add_item(button(style=style, row=c, selected=button_col))
 
+
 class ViewIterationAuthor(ViewButtonIteration):
-    def __init__(self, ctx, *args, **kwargs):
+    def __init__(self, ctx: StellaContext, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.context = ctx
         self.cooldown = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
 
-    async def interaction_check(self, interaction):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Only allowing the context author to interact with the view"""
         ctx = self.context
         author = ctx.author
@@ -52,10 +62,13 @@ class ViewIterationAuthor(ViewButtonIteration):
             return False
         return True
 
+
 class MenuViewBase(ViewIterationAuthor):
     """A Base Menu + View combination for all interaction that combines those two.
         It requires a page_source and an optional menu that must derived from MenuViewInteractionBase"""
-    def __init__(self, ctx, page_source, *args, message=None, menu=MenuViewInteractionBase, **kwargs):
+    def __init__(self, ctx: StellaContext, page_source: Type[ListPageInteractionBase], *args: Any,
+                 message: Optional[discord.Message] = None,
+                 menu: Optional[Type[MenuViewInteractionBase]] = MenuViewInteractionBase, **kwargs: Any):
         super().__init__(ctx, *args, **kwargs)
         if not inspect.isclass(page_source):
             raise Exception(f"'page_source' must be a class")
@@ -72,7 +85,7 @@ class MenuViewBase(ViewIterationAuthor):
         self.menu = None
         self.__prepare = False
 
-    async def start(self, page_source):
+    async def start(self, page_source: ListPageInteractionBase) -> None:
         """Starts the menu if it has not yet started"""
         if not self.__prepare:
             message = self.message
@@ -81,7 +94,7 @@ class MenuViewBase(ViewIterationAuthor):
             await self.menu.show_page(0)
             self.__prepare = True
 
-    async def update(self, button, interaction, data):
+    async def update(self, button: discord.Button, interaction: discord.Interaction, data: Iterable[Any]) -> None:
         """Updates the view and menu, this method replace dataset that is bound to the menu,
             and changes it to a new page_source with a new dataset."""
         if self.message is None:
@@ -93,7 +106,7 @@ class MenuViewBase(ViewIterationAuthor):
             await self.menu.change_source(page_source)
         self.check_reactions(interaction)
 
-    def check_reactions(self, interaction):
+    def check_reactions(self, interaction: discord.Interaction) -> None:
         """This method is responsible for adding reactions to the button for the menu to
             operate. This should only trigger once."""
         menu = self.menu
@@ -101,13 +114,14 @@ class MenuViewBase(ViewIterationAuthor):
             loop = self.menu.ctx.bot.loop
             menu._Menu__tasks.append(loop.create_task(menu._internal_loop()))
             current_react = [*map(str, interaction.message.reactions)]
+
             async def add_reactions_task():
                 for emoji in menu.buttons:
                     if emoji not in current_react:
                         await interaction.message.add_reaction(emoji)
             menu._Menu__tasks.append(loop.create_task(add_reactions_task()))
 
-    async def on_timeout(self):
+    async def on_timeout(self) -> None:
         """After a timeout it should disable all the buttons"""
         bot = self.context.bot
         if self.message:
@@ -126,8 +140,9 @@ class MenuViewBase(ViewIterationAuthor):
             b.disabled = True
         await message.edit(view=self)
 
+
 class InteractionPages(ui.View, MenuBase):
-    def __init__(self, source, generate_page=False):
+    def __init__(self, source: ListPageInteractionBase, generate_page: Optional[bool] = False):
         super().__init__(timeout=120)
         self._source = source
         self._generate_page = generate_page
@@ -138,42 +153,42 @@ class InteractionPages(ui.View, MenuBase):
         self.current_interaction = None
         self.cooldown = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
 
-    async def start(self, ctx):
+    async def start(self, ctx: StellaContext) -> None:
         self.ctx = ctx
         self.message = await self.send_initial_message(ctx, ctx.channel)
 
-    def update_interaction_values(self, button, interaction):
+    def update_interaction_values(self, button: discord.Button, interaction: discord.Interaction) -> None:
         # Yes, i'm lazy to edit the _get_kwargs_from_page to pass button, interaction
         # Instead, i use this, i dont care cause i aint gonna copy paste code.
         self.current_button = button
         self.current_interaction = interaction
 
     @ui.button(emoji='<:before_fast_check:754948796139569224>')
-    async def first_page(self, *args):
+    async def first_page(self, *args: Any):
         self.update_interaction_values(*args)
         await self.show_page(0)
 
     @ui.button(emoji='<:before_check:754948796487565332>')
-    async def before_page(self, *args):
+    async def before_page(self, *args: Any):
         self.update_interaction_values(*args)
         await self.show_checked_page(self.current_page - 1)
 
     @ui.button(emoji='<:stop_check:754948796365930517>')
-    async def stop_page(self, *args):
+    async def stop_page(self, *_: Any):
         self.stop()
         await self.message.delete()
 
     @ui.button(emoji='<:next_check:754948796361736213>')
-    async def next_page(self, *args):
+    async def next_page(self, *args: Any):
         self.update_interaction_values(*args)
         await self.show_checked_page(self.current_page + 1)
 
     @ui.button(emoji='<:next_fast_check:754948796391227442>')
-    async def last_page(self, *args):
+    async def last_page(self, *args: Any):
         self.update_interaction_values(*args)
         await self.show_page(self._source.get_max_pages() - 1)
 
-    async def _get_kwargs_from_page(self, page):
+    async def _get_kwargs_from_page(self, page: Any) -> Dict[str, Any]:
         value = await super()._get_kwargs_from_page(page)
         self.format_view()
         if 'view' not in value:
@@ -181,14 +196,13 @@ class InteractionPages(ui.View, MenuBase):
         value.update({'allowed_mentions': discord.AllowedMentions(replied_user=False)})
         return value
 
-    def format_view(self):
+    def format_view(self) -> None:
         for i, b in enumerate(self.children):
-            b.disabled = any([self.current_page == 0 and i < 2,
-                             self.current_page == self._source.get_max_pages() - 1 and not i < 3]
+            b.disabled = any(
+                [self.current_page == 0 and i < 2, self.current_page == self._source.get_max_pages() - 1 and not i < 3]
             )
 
-
-    async def interaction_check(self, interaction):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Only allowing the context author to interact with the view"""
         ctx = self.ctx
         author = ctx.author
@@ -203,5 +217,5 @@ class InteractionPages(ui.View, MenuBase):
             return False
         return True
 
-    async def on_timeout(self):
+    async def on_timeout(self) -> None:
         await self.message.delete()

@@ -3,16 +3,21 @@ Copyright (C) by stella or something
 if you copy this but make your repository private, ur weird
 pls be nice to me if you do copy it that's all i want :pleading:
 """
+from __future__ import annotations
 import contextlib
 import itertools
 import inspect
 import typing
+from typing import Union, Any, Type, List, Optional, Callable, Set, Tuple, TypeVar
+from utils.useful import StellaContext
 from discord.ext.commands.errors import BadUnionArgument
 from utils.errors import ConsumerUnableToConvert
 from utils.flags import SFlagCommand, find_flag
 from utils.useful import isiterable
 from discord.ext import commands
 from discord.ext.commands import CommandError, ArgumentParsingError
+
+T = TypeVar('T')
 
 
 class WithCommaStringView(commands.view.StringView):
@@ -25,7 +30,7 @@ class WithCommaStringView(commands.view.StringView):
         """Update the current StringView value into this object""" 
         self.__dict__.update({key: getattr(self.old_view, key) for key in ["previous", "index", "end"]})
 
-    def get_parser(self, converter):
+    def get_parser(self, converter: "BaseGreedy") -> Optional[int]:
         """Tries to get a separator within an argument, return None if it can't find any."""
         if not hasattr(converter, "separators"):
             return
@@ -51,7 +56,7 @@ class WithCommaStringView(commands.view.StringView):
         if self.index + pos != self.end:
             return pos
 
-    def get_arg_parser(self, end):
+    def get_arg_parser(self, end: int) -> str:
         """Gets a word that ends with ','"""
         self.previous = self.index
         offset = 0
@@ -65,7 +70,7 @@ class WithCommaStringView(commands.view.StringView):
 
 
 class GreedyAllowStr(commands.converter.Greedy):
-    def __class_getitem__(cls, params):
+    def __class_getitem__(cls, params: Union[Tuple[T], T]) -> "GreedyAllowStr":
         try:
             return super().__class_getitem__(params)
         except TypeError as e:
@@ -77,12 +82,13 @@ class GreedyAllowStr(commands.converter.Greedy):
 class BaseGreedy(GreedyAllowStr):
     """A Base class for all Greedy subclass, basic attribute such as separators
        and escapes."""
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
         self.separators = {','}
         self.escapes = {'\\'}
 
-    def add_into_instance(self, instance, separators, escapes):
+    @staticmethod
+    def add_into_instance(instance: "BaseGreedy", separators: Set[str], escapes: Set[str]):
         if not hasattr(separators, "__iter__"):
             raise Exception("Separators passed must be an iterable.")
         if not hasattr(escapes, "__iter__"):
@@ -96,7 +102,7 @@ class BaseGreedy(GreedyAllowStr):
         instance.escapes |= set(escapes)
         return instance
 
-    def __class_getitem__(cls, param):
+    def __class_getitem__(cls, param: Any):
         new_param = param
         if isiterable(param):
             new_param = new_param[0]
@@ -106,11 +112,12 @@ class BaseGreedy(GreedyAllowStr):
             instance = cls.add_into_instance(instance, separators, escapes)
         return instance
 
-    def __call__(self, *separators, escapes={}):
+    def __call__(self, *separators: Any, escapes: Optional[Set[str]] = set()):
         instance = self.add_into_instance(self, separators, escapes)
         return instance
     
-    async def actual_greedy_parsing(self, command, ctx, param, required, converter, optional=False):
+    async def actual_greedy_parsing(self, command: commands.Command, ctx: commands.Context, param: inspect.Parameter,
+                                    required: bool, converter: T, optional: Optional[bool] = False) -> Union[List[T], T]:
         raise NotImplemented("Greedy subclass seems to not have this method. It dies.")
 
 
@@ -126,7 +133,8 @@ class Separator(BaseGreedy):
        
        Returns an empty list when none of the argument was valid."""
 
-    async def actual_greedy_parsing(self, command, ctx, param, required, converter, optional=False):
+    async def actual_greedy_parsing(self, command: commands.Command, ctx: commands.Context, param: inspect.Parameter,
+                                    required: bool, converter: T, optional: Optional[bool] = False) -> List[T]:
         view = ctx.view
         result = []
         while not view.eof:
@@ -159,7 +167,8 @@ class Consumer(RequiredGreedy):
 
        This Greedy raises an error if it can't find any valid conversion."""
 
-    async def actual_greedy_parsing(self, command, ctx, param, required, converter, optional=False):
+    async def actual_greedy_parsing(self, command: commands.Command, ctx: commands.Context, param: inspect.Parameter,
+                                    required: bool, converter: T, optional: Optional[bool] = False) -> T:
         view = ctx.view
         view.skip_ws()
         if pos := view.get_parser(param.annotation):
@@ -194,19 +203,20 @@ class UntilFlag(RequiredGreedy):
         super().__init__(**kwargs)
         self.separators = {"-"}
 
-    async def actual_greedy_parsing(self, command, ctx, param, required, converter):
+    async def actual_greedy_parsing(self, command: commands.Command, ctx: commands.Context, param: inspect.Parameter,
+                                    required: bool, converter: T) -> T:
         view = ctx.view
         view.skip_ws()
         argument = None
-        if (con := find_flag(command)):
+        if con := find_flag(command):
             regex = con.annotation.__commands_flag_regex__
-            if (match := regex.search(view.buffer)):
+            if match := regex.search(view.buffer):
                 maximum = match.span()[0]
-                while view.buffer[maximum - 1].isspace(): # Minus 1 to offset the extra space that it got
+                while view.buffer[maximum - 1].isspace():  # Minus 1 to offset the extra space that it got
                     maximum -= 1
                 argument = view.buffer[view.index: maximum]
             else:
-                argument = view.read_rest() # 
+                argument = view.read_rest()
         elif argument is None:
             if view.buffer[view.index] == '-':
                 if required:
@@ -225,9 +235,11 @@ class UntilFlag(RequiredGreedy):
         return await commands.converter.run_converters(ctx, converter, argument, param)
 
 
-#Subclass Flag so i can use flag lol
+# Subclass Flag so i can use flag lol
 class GreedyParser(SFlagCommand):
-    async def _transform_greedy_pos(self, ctx, param, required, greedy, converter, normal_greedy=False):
+    async def _transform_greedy_pos(self, ctx: StellaContext, param: inspect.Parameter, required: bool,
+                                    greedy: commands.converter.Greedy, converter: T,
+                                    normal_greedy: Optional[bool] = False) -> List[T]:
         """Allow Greedy subclass to have their own method of conversion by checking "actual_greedy_parsing"
            method, and invoking that method when it is available, else it will call the normal greedy method
            conversion."""
@@ -242,17 +254,17 @@ class GreedyParser(SFlagCommand):
         return result
 
     @staticmethod
-    def is_greedy_required(x):
+    def is_greedy_required(x: Any) -> bool:
         return isinstance(x, RequiredGreedy)
 
-    def get_optional_converter(self, converter):
+    def get_optional_converter(self, converter: Any) -> Type:
         if getattr(converter, "__args__", []):
             stored_converter = converter.__args__[0]
             if self.is_greedy_required(stored_converter):
                 return stored_converter
         return converter
 
-    async def transform(self, ctx, param):
+    async def transform(self, ctx: StellaContext, param: inspect.Parameter) -> List[Any]:
         """Because Danny literally only allow commands.converter._Greedy class to be pass here using
            'is' comparison, I have to override it to allow any other Greedy subclass.
            
@@ -279,10 +291,9 @@ class GreedyParser(SFlagCommand):
         return await super().transform(ctx, param)
 
     @property
-    def signature(self):
+    def signature(self) -> str:
         if self.usage is not None:
             return self.usage
-
 
         params = self.clean_params
         if not params:
@@ -329,7 +340,7 @@ class GreedyParser(SFlagCommand):
         return ' '.join(result)
 
 
-def command(name=None, *, bot=None, **attrs):
+def command(name: Optional[str] = None, *, bot: StellaBot = None, **attrs: Any) -> Callable:
     def decorator(func):
         if isinstance(func, commands.Command):
             raise TypeError('Callback is already a command.')

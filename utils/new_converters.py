@@ -5,16 +5,17 @@ import contextlib
 import datetime
 import humanize
 from collections import namedtuple, Counter
+from typing import Any, List, Optional, Union, Tuple, Generator
 from fuzzywuzzy import fuzz
 from discord.ext import commands
 from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound, MustMember, NotOwnerConvert
 from discord.utils import _unique
-from utils.useful import unpack, RenameClass
+from utils.useful import unpack, RenameClass, StellaContext
 
 
 class CleanListGreedy:
     @classmethod
-    async def after_greedy(cls, ctx, greedy_list):
+    async def after_greedy(cls, _: StellaContext, greedy_list: List[Any]) -> List[Any]:
         """
         This method will be called after greedy was processed. This will remove any duplicates of a list, putting list
         within a list into the current list. Set was not used to keep the original order.
@@ -29,7 +30,7 @@ class CleanListGreedy:
 class ValidCog(CleanListGreedy):
     """Tries to convert into a valid cog"""
     @classmethod
-    async def convert(cls, ctx, argument):
+    async def convert(cls, ctx: StellaContext, argument: str) -> List[str]:
         Valid = namedtuple("Valid", "ratio key")
         loaded_cog = {re.sub("(cogs)|\.|(cog)", "", x.__module__) for _, x in ctx.bot.cogs.items()}
         valid_cog = {x[:-3] for x in os.listdir("cogs") if x[-3:] == ".py"} | loaded_cog
@@ -44,12 +45,13 @@ class ValidCog(CleanListGreedy):
 
 class IsBot(commands.Converter, metaclass=RenameClass, name="Bot"):
     """Raises an error if the member is not a bot"""
-    def __init__(self, is_bot=True, user_check=True, dont_fetch=False):
+    def __init__(self, is_bot: Optional[bool] = True, user_check: Optional[bool] = True,
+                 dont_fetch: Optional[bool] = False):
         self.is_bot = is_bot
         self.user_check = user_check
         self.dont_fetch = dont_fetch
 
-    async def convert(self, ctx, argument, cls=None):
+    async def convert(self, ctx: StellaContext, argument: str) -> Union[discord.Member, discord.User]:
         for converter in ("Member", "User")[:(not self.dont_fetch) + 1]:
             with contextlib.suppress(commands.BadArgument):
                 user = await getattr(commands, f"{converter}Converter")().convert(ctx, argument)
@@ -65,22 +67,22 @@ class BotData:
     """BotData Base for Bot data that was fetch from the database. It checks if it's a member and gets it's data."""
     __slots__ = ("bot",)
 
-    def __init__(self, member):
+    def __init__(self, member: discord.Member):
         self.bot = member
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.bot)
 
     @classmethod
-    async def convert(cls, ctx, argument):
-        member = await IsBot().convert(ctx, argument, cls=cls)
+    async def convert(cls, ctx: StellaContext, argument: str) -> Tuple[discord.Member, Any]:
+        member = await IsBot().convert(ctx, argument)
         table = cls.__name__.replace("Bot", "").lower()
         query = f"SELECT * FROM {table}_list WHERE guild_id=$1 AND bot_id=$2"
         if data := await ctx.bot.pool_pg.fetch(query, ctx.guild.id, member.id):
             return member, data
         raise NotInDatabase(member)
 
-    def __int__(self):
+    def __int__(self) -> int:
         return self.bot.id
 
 
@@ -88,29 +90,29 @@ class BotPrefixes(BotData):
     """Bot data for prefix"""
     __slots__ = ("prefixes",)
 
-    def __init__(self, member, prefixes):
+    def __init__(self, member: discord.Member, prefixes: dict):
         super().__init__(member)
         self.prefixes = prefixes
 
     @classmethod
-    async def convert(cls, ctx, argument):
+    async def convert(cls, ctx: StellaContext, argument: str) -> "BotPrefixes":
         member, data = await super().convert(ctx, argument)
         prefixes = {payload['prefix']: payload['usage'] for payload in data}
         return cls(member, prefixes)
 
     @property
-    def prefix(self):
+    def prefix(self) -> int:
         return max(self.prefixes, key=lambda x: self.prefixes[x])
 
     @property
-    def aliases(self):
+    def aliases(self) -> str:
         alias = {x: y for x, y in self.prefixes.items() if x != self.prefix}
         total = sum(alias.values())
         highest = self.prefixes[self.prefix]
         return [p for p, v in alias.items() if v / total > 0.5 and v / highest > 0.05]
 
     @property
-    def allprefixes(self):
+    def allprefixes(self) -> str:
         return ", ".join(map("`{0}`".format, [self.prefix, *self.aliases]))
 
 
@@ -118,14 +120,14 @@ class BotCommands(BotData):
     """Bot data for command counts"""
     __slots__ = ("_commands", "total_usage", "command_usages")
 
-    def __init__(self, member, commands, command_usages, total_usage):
+    def __init__(self, member: discord.Member, commands: dict, command_usages: dict, total_usage: int):
         super().__init__(member)
         self._commands = commands
         self.command_usages = command_usages
         self.total_usage = total_usage
 
     @classmethod
-    async def convert(cls, ctx, argument):
+    async def convert(cls, ctx: StellaContext, argument: str) -> "BotCommands":
         member, data = await super().convert(ctx, argument)
         command_usages = {}
         for payload in data:
@@ -139,26 +141,27 @@ class BotCommands(BotData):
         total_usage = sum(v for v in commands.values())
         return cls(member, commands, command_usages, total_usage)
 
-    def get_command(self, command):
+    def get_command(self, command: str) -> str:
         return self._commands.get(command)
 
     @property
-    def commands(self):
+    def commands(self) -> List[tuple]:
         total = sum(self._commands.values())
         pair = [(c, v) for c, v in self._commands.items() if v / total > 0.001]
         return [c[0] for c in sorted(pair, key=lambda x: x[1], reverse=True)]
 
     @property
-    def highest_command(self):
+    def highest_command(self) -> int:
         return max(self._commands, key=lambda x: self._commands[x])
+
 
 class DatetimeConverter(commands.Converter):
     """Will try to convert into a valid datetime object based on a specific format"""
-    async def convert(self, ctx, argument):
-        def valid_replace(argument):
+    async def convert(self, ctx: StellaContext, argument: str) -> str:
+        def valid_replace(a: str) -> Generator[str]:
             multiple = {x: 1 for x in (" ", ":", "/")}
             multiple.update({"Y": 4})
-            for x in argument.replace("%", ""):
+            for x in a.replace("%", ""):
                 yield x * multiple.get(x, 2)
         valid_conversion = ("%d/%m/%Y %H", "%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%Y/%m/%d", "%Y/%d/%m", "%m/%d/%Y")
         for _format in valid_conversion:
@@ -166,14 +169,14 @@ class DatetimeConverter(commands.Converter):
                 return datetime.datetime.strptime(argument, _format)
         newline = "\n"
         raise commands.CommandError(
-            f"I couldn't convert {argument} into a valid date time. Here's a list of valid format for date: \n"\
+            f"I couldn't convert {argument} into a valid date time. Here's a list of valid format for date: \n"
             f"{newline.join(''.join(valid_replace(x)) for x in valid_conversion)}"
         )
 
 
 class JumpValidator(commands.Converter):
     """Will get the jump_url of a message"""
-    async def convert(self, ctx, argument):
+    async def convert(self, ctx: StellaContext, argument: str) -> str:
         with contextlib.suppress(commands.MessageNotFound):
             message = await commands.MessageConverter().convert(ctx, argument)
             return message.jump_url
@@ -181,17 +184,19 @@ class JumpValidator(commands.Converter):
 
 
 time_regex = re.compile(r"(\d{1,5}(?:[.,]?\d{1,5})?)([smhd])")
-time_dict = {"h":3600, "s":1, "m":60, "d":86400}
+time_dict = {"h": 3600, "s": 1, "m": 60, "d": 86400}
+
+
 class TimeConverter(commands.Converter):
     """Stole from discord.py because lazy, i'll make a better one later"""
-    def __init__(self, minimum_time=None, maximum_time=None):
+    def __init__(self, minimum_time: Optional[datetime.datetime] = None, maximum_time: Optional[datetime.datetime] = None):
         self.minimum_time = minimum_time
         self.maximum_time = maximum_time
 
-    async def __call__(self, argument):
+    async def __call__(self, argument: str) -> datetime.datetime:
         return await self.convert(0, argument)
 
-    async def convert(self, ctx, argument):
+    async def convert(self, ctx: StellaContext, argument: str) -> datetime.datetime:
         matches = time_regex.findall(argument.lower())
         time = 0
         for v, k in matches:
@@ -211,22 +216,25 @@ class TimeConverter(commands.Converter):
 
         return time_converted
 
+
 class AuthorMessage(commands.MessageConverter):
     """Only allows messages that belong to the context author"""
-    async def convert(self, ctx, argument):
+    async def convert(self, ctx: StellaContext, argument: str) -> discord.Message:
         message = await super().convert(ctx, argument)
         if message.author != ctx.author:
             raise commands.CommandError("The author of this message must be your own message.")
         return message
 
+
 class AuthorJump_url(JumpValidator):
     """Yes i fetch message twice, I'm lazy to copy paste."""
-    async def convert(self, ctx, argument):
+    async def convert(self, ctx: StellaContext, argument: str) -> str:
         message = await AuthorMessage().convert(ctx, await super().convert(ctx, argument))
         return message.jump_url
 
+
 class BooleanOwner(commands.Converter):
-    async def convert(self, ctx, argument):
+    async def convert(self, ctx: StellaContext, argument: str) -> bool:
         if await ctx.bot.is_owner(ctx.author):
             return commands.converter._convert_to_bool(argument)
         raise NotOwnerConvert('Boolean')

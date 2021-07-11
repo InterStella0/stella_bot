@@ -15,10 +15,9 @@ import sys
 import asyncio
 import subprocess
 import re
-import typing
 import inspect
 from jishaku.functools import AsyncSender
-from typing import Union
+from typing import Union, AsyncGenerator, Callable
 from collections import namedtuple
 from discord.ext import commands
 
@@ -30,11 +29,12 @@ class FakeEmote(discord.PartialEmoji):
     Due to the nature of jishaku checking if an emoji object is the reaction, passing raw str into it will not work.
     Creating a PartialEmoji object is needed instead.
     """
+
     @classmethod
-    def from_name(cls, name):
+    def from_name(cls, name: str) -> "FakeEmote":
         emoji_name = re.sub("|<|>", "", name)
-        a, name, id = emoji_name.split(":")
-        return cls(name=name, id=int(id), animated=bool(a))
+        a, name, _id = emoji_name.split(":")
+        return cls(name=name, id=int(_id), animated=bool(a))
 
 
 emote = EmojiSettings(
@@ -47,7 +47,7 @@ emote = EmojiSettings(
 jishaku.paginators.EMOJI_DEFAULT = emote  # Overrides jishaku emojis
 
 
-async def attempt_add_reaction(msg: discord.Message, reaction: Union[str, discord.Emoji]):
+async def attempt_add_reaction(msg: discord.Message, reaction: Union[str, discord.Emoji]) -> None:
     """
     This is responsible for every add reaction happening in jishaku. Instead of replacing each emoji that it uses in
     the source code, it will try to find the corresponding emoji that is being used instead.
@@ -67,7 +67,7 @@ async def attempt_add_reaction(msg: discord.Message, reaction: Union[str, discor
 jishaku.exception_handling.attempt_add_reaction = attempt_add_reaction
 
 
-async def traverse(self, func):
+async def traverse(self, func: Callable) -> AsyncGenerator[str, None]:
     std = io.StringIO()
     with contextlib.redirect_stdout(std):
         if inspect.isasyncgenfunction(func):
@@ -81,35 +81,40 @@ async def traverse(self, func):
             yield await func(*self.args)
             if content := std.getvalue():
                 yield content
+
+
 jishaku.repl.compilation.AsyncCodeExecutor.traverse = traverse
 
 WINDOWS = sys.platform == "win32"
 SHELL = os.getenv("SHELL") or "/bin/bash"
+
+
 def shell_init(self, code: str, timeout: int = 90, loop: asyncio.AbstractEventLoop = None):
-        if WINDOWS:
-            if pathlib.Path(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe").exists():
-                sequence = [r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", code]
-                self.ps1 = "PS >"
-                self.highlight = "powershell"
-            else:
-                sequence = ['cmd', '/c', code]
-                self.ps1 = "cmd >"
-                self.highlight = "cmd"
+    if WINDOWS:
+        if pathlib.Path(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe").exists():
+            sequence = [r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", code]
+            self.ps1 = "PS >"
+            self.highlight = "powershell"
         else:
-            sequence = [SHELL, '-c', code]
-            self.ps1 = "$"
-            self.highlight = "sh"
+            sequence = ['cmd', '/c', code]
+            self.ps1 = "cmd >"
+            self.highlight = "cmd"
+    else:
+        sequence = [SHELL, '-c', code]
+        self.ps1 = "$"
+        self.highlight = "sh"
 
-        self.process = subprocess.Popen(sequence, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.close_code = None
+    self.process = subprocess.Popen(sequence, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    self.close_code = None
 
-        self.loop = loop or asyncio.get_event_loop()
-        self.timeout = timeout
+    self.loop = loop or asyncio.get_event_loop()
+    self.timeout = timeout
 
-        self.stdout_task = self.make_reader_task(self.process.stdout, self.stdout_handler)
-        self.stderr_task = self.make_reader_task(self.process.stderr, self.stderr_handler)
+    self.stdout_task = self.make_reader_task(self.process.stdout, self.stdout_handler)
+    self.stderr_task = self.make_reader_task(self.process.stderr, self.stderr_handler)
 
-        self.queue = asyncio.Queue(maxsize=250)
+    self.queue = asyncio.Queue(maxsize=250)
+
 
 # This override is to fix ShellReader.__init__ unable to find powershell path.
 jishaku.shell.ShellReader.__init__ = shell_init

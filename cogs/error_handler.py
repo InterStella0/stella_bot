@@ -1,24 +1,33 @@
+from __future__ import annotations
 import asyncio
 import contextlib
 import copy
 import discord
+from typing import Any, TYPE_CHECKING
 from discord.ext import commands, flags
 from utils.useful import BaseEmbed, print_exception
 from utils.errors import NotInDpy
 from utils.buttons import BaseButton, ViewIterationAuthor
 
+
+if TYPE_CHECKING:
+    from main import StellaBot
+    from utils.useful import StellaContext
+
+
 class MissingButton(BaseButton):
-    def __init__(self, error, embed, *args, **kwargs):
+    def __init__(self, error: commands.MissingRequiredArgument, embed: discord.Embed, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.error = error
         self.embed = embed
 
-    async def callback(self, interaction):
+    async def callback(self, interaction: discord.Interaction) -> None:
         ctx = self.view.context
         param = self.error.param
         m = f"Please enter your argument for `{param.name}`."
         await interaction.response.edit_message(content=m, embed=None, view=None)
-        def check(m):
+
+        def check(m: discord.Message) -> bool:
             return m.author == ctx.author and m.channel == ctx.channel
         with contextlib.suppress(asyncio.TimeoutError):
             message = await ctx.bot.wait_for('message', check=check, timeout=60)
@@ -28,20 +37,20 @@ class MissingButton(BaseButton):
 
 
 class ErrorHandler(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: StellaBot):
         self.bot = bot
         self.error_cooldown = commands.CooldownMapping.from_cooldown(1, 20, commands.BucketType.user)
 
     @commands.Cog.listener()
-    async def on_command_error(self, ctx, error):
+    async def on_command_error(self, ctx: StellaContext, error: commands.CommandError) -> None:
         """The event triggered when an error is raised while invoking a command."""
-        async def send_del(*args, **kwargs):
+        async def send_del(*args: Any, **kwargs: Any) -> None:
             await ctx.reply(*args, delete_after=60, **kwargs)
             if ctx.channel.permissions_for(ctx.me).manage_messages:
                 with contextlib.suppress(discord.NotFound):
                     await ctx.message.delete(delay=60)
 
-        async def handle_missing_param(template):
+        async def handle_missing_param(template: discord.Embed) -> None:
             name = error.param.name
             payload = {
                 "selected": name,
@@ -100,7 +109,7 @@ class ErrorHandler(commands.Cog):
                                     f"```"
                     await self.bot.error_channel.send(embed=BaseEmbed.default(ctx, description=error_message))
 
-    async def generate_signature_error(self, ctx, error):
+    async def generate_signature_error(self, ctx: StellaContext, error: commands.CommandError):
         command = ctx.command
         help_com = self.bot.help_command
         help_com.context = ctx
@@ -116,7 +125,7 @@ class ErrorHandler(commands.Cog):
         list_sig = real_signature.split()
         try:
             pos += list_sig.index(ctx.invoked_with)
-        except ValueError:# It errors if a prefix does not have space, causing not in list error
+        except ValueError:  # It errors if a prefix does not have space, causing not in list error
             try:
                 pos += list_sig.index(ctx.prefix + ctx.invoked_with)
             except ValueError:
@@ -146,5 +155,5 @@ class ErrorHandler(commands.Cog):
         return embed
 
 
-def setup(bot):
+def setup(bot: StellaBot) -> None:
     bot.add_cog(ErrorHandler(bot))

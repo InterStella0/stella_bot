@@ -1,5 +1,5 @@
+from __future__ import annotations
 import datetime
-import enum
 import discord
 import matplotlib
 import math
@@ -8,28 +8,36 @@ import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 from scipy.interpolate import make_interp_spline
 from matplotlib import pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 import matplotlib.dates as mdates
 import matplotlib.colors as mcolors
 import matplotlib.patheffects as peffects
-from typing import Union, Literal
+from typing import Union, Literal, Optional, List, Any, Coroutine, TYPE_CHECKING
 from matplotlib.patches import Polygon
 from utils import flags as flg
-from utils.greedy_parser import UntilFlag, command, Consumer
+from utils.greedy_parser import UntilFlag, command
 from utils.new_converters import TimeConverter, IsBot
 from utils.decorators import in_executor
+from utils.useful import StellaContext
 from discord.ext import commands
+
+if TYPE_CHECKING:
+    from main import StellaBot
 
 matplotlib.use('Agg')
 TimeConvert = TimeConverter(datetime.timedelta(days=2), datetime.timedelta(weeks=8))
 
-def create_gradient_array(color, *, alpha_min=0, alpha_max=1):
+
+def create_gradient_array(color: str, *, alpha_min: Optional[int] = 0, alpha_max: Optional[int] = 1) -> np.array:
     z = np.empty((100, 1, 4), dtype=float)
-    z[:,:,:3] = mcolors.colorConverter.to_rgb(color)
-    z[:,:,-1] = np.linspace(alpha_min, alpha_max, 100)[:,None]
+    z[:, :, :3] = mcolors.colorConverter.to_rgb(color)
+    z[:, :, -1] = np.linspace(alpha_min, alpha_max, 100)[:, None]
     return z
 
+
 @in_executor()
-def create_graph(x, y, **kwargs):
+def create_graph(x: List[datetime.datetime], y: List[int], **kwargs: int):
     color = str(kwargs.get("color"))
     fig, axes = plt.subplots()
     date_np = np.array(sorted(x))
@@ -76,7 +84,8 @@ def create_graph(x, y, **kwargs):
     del line
     return value
 
-def hilo(a, b, c):
+
+def hilo(a: int, b: int, c: int) -> int:
     if c < b: 
         b, c = c, b
     if b < a: 
@@ -85,16 +94,18 @@ def hilo(a, b, c):
         b, c = c, b
     return a + c
 
-def complement_color(r, g, b):
-    k = hilo(r, g, b)
-    return discord.Color.from_rgb(*tuple(k - u for u in (r, g, b)))
+
+def complement_color(*rgb: int) -> discord.Color:
+    k = hilo(*rgb)
+    return discord.Color.from_rgb(*tuple(k - u for u in rgb))
 
 
-def inverse_color(r, g, b):
-    return [*map(lambda x: 255 - x, (r, g, b))]
+def inverse_color(*rgb: int) -> List[int]:
+    return [*map(lambda x: 255 - x, rgb)]
+
 
 @in_executor()
-def create_bar(x_val, y_val, color, **kwargs):
+def create_bar(x_val: List[Any], y_val: List[Any], color: str, **kwargs: Any) -> Coroutine[Any, Any, io.BytesIO]:
     fig, axes = plt.subplots()
     bars = axes.barh(x_val, y_val, edgecolor=color)
 
@@ -103,7 +114,7 @@ def create_bar(x_val, y_val, color, **kwargs):
     inverse = str(discord.Color.from_rgb(*inverse_color(*comp_color.to_rgb())))
     maximum_size = max(y_val)
 
-    def percent(per):
+    def percent(per: int) -> int:
         return maximum_size * per
 
     for i, v in enumerate(y_val):
@@ -112,8 +123,8 @@ def create_bar(x_val, y_val, color, **kwargs):
         offset = pixel * text_size
         actual_val = v - offset
         actual_val += ((pixel + percent(0.010)) * text_size) * (actual_val <= (0 + percent(0.01)))
-        axes.text(actual_val, i - .15, f"{v:,}", color=comp, fontweight='bold', 
-                    path_effects=[peffects.withStroke(linewidth=0.8, foreground=inverse)])
+        axes.text(actual_val, i - .15, f"{v:,}", color=comp, fontweight='bold',
+                  path_effects=[peffects.withStroke(linewidth=0.8, foreground=inverse)])
         
     for attr, value in kwargs.items():
         getattr(axes, f"set_{attr}")(value, color='w')
@@ -143,18 +154,19 @@ def create_bar(x_val, y_val, color, **kwargs):
     return save_matplotlib(fig, axes)
 
 
-def save_matplotlib(fig, axes):
+def save_matplotlib(fig: Figure, axes: Axes) -> io.BytesIO:
     fig.delaxes(axes)
     fig.add_axes(axes)
     buffer = io.BytesIO()
-    fig.savefig(buffer, transparent=True , bbox_inches = "tight")
+    fig.savefig(buffer, transparent=True, bbox_inches="tight")
     axes.clear()
     fig.clf()
     plt.close(fig)
     return buffer
 
+
 @in_executor()
-def process_image(avatar_bytes, target):
+def process_image(avatar_bytes: io.BytesIO, target: io.BytesIO) -> Coroutine[Any, Any, io.BytesIO]:
     with Image.open(avatar_bytes).convert('RGBA') as avatar, Image.open(target) as target:
         side = max(avatar.size)
         avatar = avatar.crop((0, 0, side, side)) 
@@ -166,9 +178,9 @@ def process_image(avatar_bytes, target):
         background = reducer.enhance(0.378)
         background = background.filter(ImageFilter.GaussianBlur(8))
         gray_back = Image.new('RGBA', avatar.size, (*discord.Color.dark_theme().to_rgb(), 255))
-        gray_back.paste(background, [0,0], mask=background)
+        gray_back.paste(background, [0, 0], mask=background)
         background = gray_back
-        background.paste(target, [0,0], mask=target)
+        background.paste(target, [0, 0], mask=target)
         to_send = io.BytesIO()
         background.save(to_send, format="PNG")
         gray_back.close()
@@ -177,21 +189,23 @@ def process_image(avatar_bytes, target):
 
 
 @in_executor()
-def get_majority_color(bytes):
-    with Image.open(bytes) as target:
+def get_majority_color(b: io.BytesIO) -> Coroutine[Any, Any, discord.Color]:
+    with Image.open(b) as target:
         smol = target.quantize(4)
         return discord.Color.from_rgb(*smol.getpalette()[:3])
 
 
-def islight(r, g, b):
+def islight(r: int, g: int, b: int) -> bool:
     # Found this equation in http://alienryderflex.com/hsp.html, fucking insane i tell ya
     hsp = math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b))
-    return (hsp > 127.5)
+    return hsp > 127.5
+
 
 class ElseConverter(commands.Converter):
     valid_conversion = {"all": ["al", "a", "guild", "g", "guilds"],
                         "this": ["thi", "th", "me", "myself"]}
-    async def convert(self, ctx, argument):
+
+    async def convert(self, ctx: StellaContext, argument: str) -> Union[discord.Guild, discord.Member, discord.User, str]:
         found = None
         for k, v in self.valid_conversion.items():
             if k == argument or argument in v:
@@ -207,23 +221,24 @@ class ElseConverter(commands.Converter):
 
 class Stat(commands.Cog, name="Statistic"):
     """Statistic related commands"""
-    def __init__(self, bot):
+    def __init__(self, bot: StellaBot):
         self.bot = bot
 
     @command(aliases=["botactivitys", "ba"], 
-             help="Creates a graph that represents the bot's usage in a server, which shows the command " \
+             help="Creates a graph that represents the bot's usage in a server, which shows the command "
                   "invoke happening for a bot.")
     @commands.guild_only()
     @flg.add_flag("--time", "-T", type=TimeConvert, 
-                  help="Time given for the bot, this flag must be more than 2 days and less than 2 months. " \
+                  help="Time given for the bot, this flag must be more than 2 days and less than 2 months. "
                        "Defaults to 2 days when not given.")
     @flg.add_flag("--accurate", "-A", action="store_true", default=False,
                   help="Makes the graph the exact value, rather than a smooth curve. Defaults to False.")
     @flg.add_flag("--color", "--colour", "-C", type=discord.Color, default=None, 
-                  help="Changes the graph's color depending on the hex given. " \
+                  help="Changes the graph's color depending on the hex given. "
                        "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
     @commands.cooldown(1, 30, commands.BucketType.user)
-    async def botactivity(self, ctx, member: UntilFlag[Union[Literal["guild", "me"], IsBot]], **flags):
+    async def botactivity(self, ctx: StellaContext, member: UntilFlag[Union[Literal["guild", "me"], IsBot]],
+                          **flags: Union[datetime.datetime, bool, discord.Color]):
         target = member
         if isinstance(target, str):
             target = await ElseConverter().convert(ctx, target)
@@ -288,9 +303,10 @@ class Stat(commands.Cog, name="Statistic"):
     @commands.guild_only()
     @commands.cooldown(1, 30, commands.BucketType.user)
     @flg.add_flag("--color", "--colour", "-C", type=discord.Color, default=None, 
-                  help="Changes the graph's color depending on the hex given. " \
+                  help="Changes the graph's color depending on the hex given. "
                        "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
-    async def topcommands(self, ctx, member: UntilFlag[Union[Literal["guild", "me"], IsBot]], **flags):
+    async def topcommands(self, ctx: StellaContext, member: UntilFlag[Union[Literal["guild", "me"], IsBot]],
+                          **flags: discord.Color):
         target = member
         if isinstance(target, discord.Member):
             query = "SELECT bot_id, command, COUNT(command) AS usage FROM commands_list " \
@@ -341,5 +357,5 @@ class Stat(commands.Cog, name="Statistic"):
         to_send.close()
 
 
-def setup(bot):
+def setup(bot: StellaBot) -> None:
     bot.add_cog(Stat(bot))

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import discord
 import base64
 import datetime
@@ -6,16 +7,19 @@ import itertools
 import functools
 from discord.ext import commands
 from collections import namedtuple
-from utils.useful import try_call, call
-from typing import Union
+from utils.useful import try_call, call, StellaContext
+from typing import Union, Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from main import StellaBot
 
 
 class Useful(commands.Cog):
     """Command what I think is useful."""
-    def __init__(self, bot):
+    def __init__(self, bot: StellaBot):
         self.bot = bot
 
-    def parse_date(self, token):
+    def parse_date(self, token: str) -> datetime.datetime:
         token_epoch = 1293840000
         bytes_int = base64.standard_b64decode(token + "==")
         decoded = int.from_bytes(bytes_int, "big")
@@ -32,12 +36,12 @@ class Useful(commands.Cog):
                            "First part is a user id where it was decoded from base 64 into str. The second part "
                            "is the creation of the token, which is converted from base 64 into int. The last part "
                            "cannot be decoded due to discord encryption.")
-    async def parse_token(self, ctx, token):
+    async def parse_token(self, ctx: StellaContext, token: str):
         token_part = token.split(".")
         if len(token_part) != 3:
             return await ctx.maybe_reply("Invalid token")
 
-        def decode_user(user):
+        def decode_user(user: str) -> str:
             user_bytes = user.encode()
             user_id_decoded = base64.b64decode(user_bytes)
             return user_id_decoded.decode("ascii")
@@ -68,7 +72,7 @@ class Useful(commands.Cog):
                            "This works by encoding the user id into base 64 str. While the current datetime in utc "
                            "is converted into timestamp and gets converted into base64 using the standard b64 encoding. "
                            "The final part of the token is randomly generated.")
-    async def generate_token(self, ctx, member: Union[discord.Member, discord.User] = None):
+    async def generate_token(self, ctx: StellaContext, member: Union[discord.Member, discord.User] = None):
         if not member:
             member = ctx.author
         byte_first = str(member.id).encode('ascii')
@@ -107,8 +111,9 @@ class Useful(commands.Cog):
                       help="Finds the original message of a thread. This shows the amount of reply counts, the message itself, "
                            "the url message of the thread and the author.",
                       brief="Finds the original message of a thread.")
-    async def replycount(self, ctx, message: discord.Message):
-        def count_reply(m, replies=0):
+    async def replycount(self, ctx: StellaContext, message: discord.Message):
+        def count_reply(m: Optional[Union[discord.MessageReference, discord.Message]],
+                        replies: Optional[int] = 0) -> Tuple[discord.Message, int]:
             if isinstance(m, discord.MessageReference):
                 return count_reply(m.cached_message, replies)
             if isinstance(m, discord.Message):
@@ -130,16 +135,16 @@ class Useful(commands.Cog):
     @commands.command(aliases=["find_type", "findtypes", "idtype", "id_type", "idtypes"],
                       help="Try to find the type of an ID.")
     @commands.cooldown(1, 60, commands.BucketType.user)
-    async def findtype(self, ctx, id: discord.Object):
+    async def findtype(self, ctx: StellaContext, id: discord.Object):
         bot = self.bot
 
-        async def found_message(type_id):
+        async def found_message(type_id: str) -> None:
             await ctx.embed(title="Type Finder",
                             description=f"**ID**: `{id.id}`\n"
                                         f"**Type:** `{type_id.capitalize()}`\n"
                                         f"**Created:** `{id.created_at}`")
 
-        async def find(w, t):
+        async def find(w: str, t: str) -> Optional[bool]:
             try:
                 method = getattr(bot, f"{w}_{t}")
                 if result := await discord.utils.maybe_coroutine(method, id.id):
@@ -161,6 +166,11 @@ class Useful(commands.Cog):
                 return await found_message(typeobj)
         await ctx.maybe_reply("idk")
 
+    @commands.command(help="Gives a timestamp format based on the discord ID given.")
+    async def timestamp(self, ctx: StellaContext, id: discord.Object, mode: Optional[str] = 'R'):
+        content = discord.utils.format_dt(id.created_at, mode)
+        await ctx.maybe_reply(f"```py\n{content}\n```")
 
-def setup(bot):
+
+def setup(bot: StellaBot) -> None:
     bot.add_cog(Useful(bot))

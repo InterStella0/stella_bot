@@ -6,6 +6,7 @@ import os
 import copy
 import discord
 import contextlib
+from typing import Union, List
 from utils.useful import StellaContext, ListCall, count_python
 from utils.decorators import event_check, wait_ready 
 from discord.ext import commands
@@ -18,6 +19,7 @@ load_dotenv(dotenv_path)
 
 import utils.library_override
 to_call = ListCall()
+
 
 class StellaBot(commands.Bot):
     def __init__(self, **kwargs):
@@ -38,17 +40,17 @@ class StellaBot(commands.Bot):
         self.existing_prefix = {}
         super().__init__(self.get_prefix, **kwargs)
 
-    async def after_db(self):
+    async def after_db(self) -> None:
         """Runs after the db is connected"""
         await to_call.call(self)
 
-    def add_command(self, command):
+    def add_command(self, command: commands.Command) -> None:
         super().add_command(command)
         command.cooldown_after_parsing = True
         if not getattr(command._buckets, "_cooldown", None):
             command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
 
-    async def invoke(self, ctx, **flags):
+    async def invoke(self, ctx: StellaContext, **flags) -> None:
         dispatch = flags.pop("dispatch", True)
         if ctx.command is not None:
             if dispatch:
@@ -77,17 +79,17 @@ class StellaBot(commands.Bot):
                 raise exc
 
     @property
-    def stella(self):
+    def stella(self) -> str:
         """Returns discord.User of the owner"""
         return self.get_user(self.owner_id)
 
     @property
-    def error_channel(self):
+    def error_channel(self) -> discord.TextChannel:
         """Gets the error channel for the bot to log."""
         return self.get_guild(int(environ.get("BOT_GUILD"))).get_channel(int(environ.get("ERROR_CHANNEL")))
 
     @to_call.append
-    def loading_cog(self):
+    def loading_cog(self) -> None:
         """Loads the cog"""
         cogs = ()
         for file in os.listdir("cogs"):
@@ -103,7 +105,7 @@ class StellaBot(commands.Bot):
                 print(f"cog {cog} is loaded")
 
     @to_call.append
-    async def fill_bots(self):
+    async def fill_bots(self) -> None:
         """Fills the pending/confirmed bots in discord.py"""
         for attr in "pending", "confirmed":
             record = await self.pool_pg.fetch(f"SELECT bot_id FROM {attr}_bots")
@@ -112,12 +114,12 @@ class StellaBot(commands.Bot):
         print("Bots list are now filled.")
 
     @to_call.append
-    async def fill_blacklist(self):
+    async def fill_blacklist(self) -> None:
         """Loading up the blacklisted users."""
         records = await self.pool_pg.fetch("SELECT snowflake_id FROM blacklist")
         self.blacklist = {r["snowflake_id"] for r in records}
 
-    async def get_prefix(self, message):
+    async def get_prefix(self, message: discord.Message) -> Union[List[str], str]:
         """Handles custom prefixes, this function is invoked every time process_command method is invoke thus returning
         the appropriate prefixes depending on the guild."""
         query = "SELECT prefix FROM internal_prefix WHERE snowflake_id=$1"
@@ -135,17 +137,18 @@ class StellaBot(commands.Bot):
             return match.group(1)
         return prefix
 
-    def get_message(self, message_id):
+    def get_message(self, message_id: int) -> discord.Message:
         """Gets the message from the cache"""
         return self._connection._get_message(message_id)
 
-    async def get_context(self, message, *, cls=None):
+    async def get_context(self, message: discord.Message, *,
+                          cls: commands.Context = None) -> Union[StellaContext, commands.Context]:
         """Override get_context to use a custom Context"""
         context = await super().get_context(message, cls=StellaContext)
         context.view.update_values()
         return context
 
-    async def process_commands(self, message):
+    async def process_commands(self, message: discord.Message) -> None:
         """Override process_commands to call typing every invoke"""
         if message.author.bot:
             return
@@ -155,7 +158,7 @@ class StellaBot(commands.Bot):
             await ctx.trigger_typing()
         await self.invoke(ctx)
 
-    def starter(self):
+    def starter(self) -> None:
         """Starts the bot properly"""
         try:
             print("Connecting to database...")
