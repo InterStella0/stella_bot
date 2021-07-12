@@ -1,9 +1,11 @@
 from __future__ import annotations
 import discord
 import inspect
+from copy import copy
+from functools import partial
 from discord import ui
 from discord.ext import commands
-from typing import Optional, Any, Dict, Iterable, Union, Type, TYPE_CHECKING
+from typing import Optional, Any, Dict, Iterable, Union, Type, TYPE_CHECKING, Coroutine, Callable
 from utils.useful import BaseEmbed
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, MenuBase
 
@@ -99,7 +101,7 @@ class MenuViewBase(ViewIterationAuthor):
             and changes it to a new page_source with a new dataset."""
         if self.message is None:
             self.message = interaction.message
-        page_source = self._class_page_source(button, interaction, data, per_page=1)
+        page_source = self._class_page_source(button, data, per_page=1)
         if not self.__prepare:
             await self.start(page_source)
         else:
@@ -157,35 +159,36 @@ class InteractionPages(ui.View, MenuBase):
         self.ctx = ctx
         self.message = await self.send_initial_message(ctx, ctx.channel)
 
-    def update_interaction_values(self, button: discord.Button, interaction: discord.Interaction) -> None:
-        # Yes, i'm lazy to edit the _get_kwargs_from_page to pass button, interaction
-        # Instead, i use this, i dont care cause i aint gonna copy paste code.
+    def add_item(self, item: discord.ui.Item) -> None:
+        coro = copy(item.callback)
+        item.callback = partial(self.handle_callback, coro)
+        super().add_item(item)
+
+    async def handle_callback(self, coro: Callable[[discord.ui.Button, discord.Interaction], Coroutine[None, None, None]],
+                              button: discord.ui.Button, interaction: discord.Interaction) -> None:
         self.current_button = button
         self.current_interaction = interaction
+        await coro(button, interaction)
 
     @ui.button(emoji='<:before_fast_check:754948796139569224>')
-    async def first_page(self, *args: Any):
-        self.update_interaction_values(*args)
+    async def first_page(self, *_: Union[discord.ui.Button, discord.Interaction]):
         await self.show_page(0)
 
     @ui.button(emoji='<:before_check:754948796487565332>')
-    async def before_page(self, *args: Any):
-        self.update_interaction_values(*args)
+    async def before_page(self, *_: Union[discord.ui.Button, discord.Interaction]):
         await self.show_checked_page(self.current_page - 1)
 
     @ui.button(emoji='<:stop_check:754948796365930517>')
-    async def stop_page(self, *_: Any):
+    async def stop_page(self, *_: Union[discord.ui.Button, discord.Interaction]):
         self.stop()
         await self.message.delete()
 
     @ui.button(emoji='<:next_check:754948796361736213>')
-    async def next_page(self, *args: Any):
-        self.update_interaction_values(*args)
+    async def next_page(self, *_: Union[discord.ui.Button, discord.Interaction]):
         await self.show_checked_page(self.current_page + 1)
 
     @ui.button(emoji='<:next_fast_check:754948796391227442>')
-    async def last_page(self, *args: Any):
-        self.update_interaction_values(*args)
+    async def last_page(self, *_: Union[discord.ui.Button, discord.Interaction]):
         await self.show_page(self._source.get_max_pages() - 1)
 
     async def _get_kwargs_from_page(self, page: Any) -> Dict[str, Any]:

@@ -132,7 +132,6 @@ class ListPageInteractionBase(menus.ListPageSource):
     def __init__(self, button: Button, entries: Iterable[Any], **kwargs: Any):
         super().__init__(entries, **kwargs)
         self.button = button
-        self.interaction = None
 
     async def format_view(self, menu: menus.MenuPages, entry: Any) -> None:
         """Method that handles views, it must return a View"""
