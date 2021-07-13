@@ -394,11 +394,29 @@ class Myself(commands.Cog):
             
             await InteractionPages(show_result(chunked)).start(ctx)
 
+    @commands.command()
+    async def restart(self, ctx, reason="No reason"):
+        m = await ctx.maybe_reply("Restarting...")
+        self.bot.global_variable.update(
+            {
+                "restart": True,
+                "restart_channel_id": ctx.channel.id,
+                "restart_message_id": m.id
+             }
+        )
+        payload = {
+            "id": ctx.bot.user.id,
+            "reason": reason,
+            "variable": self.bot.global_variable
+        }
+        await self.bot.ipc_client.request("bot_restarting", **payload)
+        await self.bot.close()
+
 
 def setup(bot: StellaBot) -> None:
     cog = Myself(bot)
     for name in ("load", "unload", "reload"):
-        @commands.command(name=name, aliases=["c"+name, name+"s"], cls=GreedyParser)
+        @commands.command(name=name, aliases=["c" + name, name + "s"], cls=GreedyParser)
         async def _cog_load(self, ctx, extension: Separator[ValidCog]):
             await self.cogs_handler(ctx, extension)
 

@@ -453,7 +453,7 @@ class Helpful(commands.Cog):
         flags = dict(flags)
         if flags.get('exec') and not await self.bot.is_owner(ctx.author):
             flags.update({"exec": False, "inner_func_check": True})
-        code = "\n".join(o async for o in ReplReader(code, _globals=globals_, **flags))
+        code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
         await ctx.maybe_reply(f"```py\n{code}```")
 
     def cog_unload(self) -> None:

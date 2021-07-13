@@ -55,7 +55,7 @@ class BaseEmbed(discord.Embed):
         return cls(title=title, color=color, **kwargs)
 
 
-def unpack(li: List[Union[list, Any]]) -> List[Any]:
+def unpack(li: List[Union[list, Any]], /) -> List[Any]:
     """Flattens list of list where it is a list, while leaving alone any other element."""
     for item in li:
         if isinstance(item, list):
@@ -82,7 +82,7 @@ class RESULT(ctypes.Structure):
                 ('size', ctypes.c_int)]
 
 
-def compile_array(string_list: List[str]) -> Tuple[ctypes.c_char_p, int]:
+def compile_array(string_list: List[str], /) -> Tuple[ctypes.c_char_p, int]:
     """Converts a list of strings that are sorted into binary that will be accepted by C code."""
     ArrString = ctypes.c_char_p * len(string_list)
     binary_array = (x.encode('utf-8') for x in string_list)
@@ -90,7 +90,7 @@ def compile_array(string_list: List[str]) -> Tuple[ctypes.c_char_p, int]:
     return array_string, len(string_list)
 
 
-def decode_result(return_result: int) -> List[Any]:
+def decode_result(return_result: int, /) -> List[Any]:
     """Creates a RESULT structure from address given and return a list of the address"""
     result = RESULT.from_address(return_result)
     to_return = [x.decode("utf-8") for x in result.found_array[:result.size]]
@@ -98,7 +98,7 @@ def decode_result(return_result: int) -> List[Any]:
     return to_return
 
 
-def actually_calls(param: tuple, callback: Callable) -> List[Any]:
+def actually_calls(param: tuple, callback: Callable, /) -> List[Any]:
     """Handles C functions and return value."""
     array_stuff, content_buffer = param
     if array_stuff:
@@ -245,7 +245,7 @@ async def cancel_gen(agen: AsyncGenerator) -> None:
     await agen.aclose() 
 
 
-def reading_recursive(root: str) -> int:
+def reading_recursive(root: str, /) -> int:
     for x in os.listdir(root):
         if os.path.isdir(x):
             yield from reading_recursive(root + "/" + x)

@@ -6,10 +6,11 @@ import os
 import copy
 import discord
 import contextlib
+import humanize
 from typing import Union, List
 from utils.useful import StellaContext, ListCall, count_python
 from utils.decorators import event_check, wait_ready 
-from discord.ext import commands
+from discord.ext import commands, ipc
 from dotenv import load_dotenv
 from os.path import join, dirname
 from utils.useful import call, print_exception
@@ -29,8 +30,10 @@ class StellaBot(commands.Bot):
         self.user_db = kwargs.pop("user_db", None)
         self.pass_db = kwargs.pop("pass_db", None)
         self.color = kwargs.pop("color", None)
+        self.ipc_client = ipc.Client(secret_key=kwargs.pop("ipc_key"), port=kwargs.pop("ipc_port"))
         self.pool_pg = None
         self.uptime = None
+        self.global_variable = None
         self.all_bot_prefixes = {}
         self.pending_bots = set()
         self.confirmed_bots = set()
@@ -43,6 +46,7 @@ class StellaBot(commands.Bot):
     async def after_db(self) -> None:
         """Runs after the db is connected"""
         await to_call.call(self)
+        self.loop.create_task(self.greet_server())
 
     def add_command(self, command: commands.Command) -> None:
         super().add_command(command)
@@ -87,6 +91,32 @@ class StellaBot(commands.Bot):
     def error_channel(self) -> discord.TextChannel:
         """Gets the error channel for the bot to log."""
         return self.get_guild(int(environ.get("BOT_GUILD"))).get_channel(int(environ.get("ERROR_CHANNEL")))
+
+    async def greet_server(self):
+        await self.wait_until_ready()
+        payload = {
+            "id": self.user.id,
+            "name": str(self.user),
+            "color": self.color,
+            "variable": {"restart": False}
+        }
+        global_variable = await self.ipc_client.request("bot_started", **payload)
+        self.global_variable = global_variable
+        if global_variable.get("restart"):
+            if channel := self.get_channel(global_variable.get("restart_channel_id")):
+                message_id = global_variable.get("restart_message_id")
+                message = await channel.fetch_message(message_id)
+                message_time = discord.utils.utcnow() - message.created_at
+                time_taken = humanize.precisedelta(message_time)
+                await message.edit(content=f"Restart lasted {time_taken}")
+
+            global_variable.update({"restart": False, "restart_channel_id": None})
+            payload = {
+                "id": self.user.id,
+                "variable": global_variable
+            }
+            await self.ipc_client.request("bot_variable_update", **payload)
+        print("Server connected.", global_variable)
 
     @to_call.append
     def loading_cog(self) -> None:
@@ -185,6 +215,8 @@ bot_data = {"token": environ.get("TOKEN"),
             "pass_db": environ.get("PASSWORD"),
             "tester": bool(environ.get("TEST")),
             "help_src": environ.get("HELP_SRC"),
+            "ipc_port": int(environ.get("IPC_PORT")),
+            "ipc_key": environ.get("IPC_KEY"),
             "intents": intents,
             "owner_id": 591135329117798400,
             "description": "{}'s personal bot that is partially for the public. "

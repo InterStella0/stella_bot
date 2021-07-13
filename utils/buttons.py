@@ -155,7 +155,7 @@ class InteractionPages(ui.View, MenuBase):
         self.current_interaction = None
         self.cooldown = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
 
-    async def start(self, ctx: StellaContext) -> None:
+    async def start(self, ctx: StellaContext, /) -> None:
         self.ctx = ctx
         self.message = await self.send_initial_message(ctx, ctx.channel)
 
@@ -165,7 +165,7 @@ class InteractionPages(ui.View, MenuBase):
         super().add_item(item)
 
     async def handle_callback(self, coro: Callable[[discord.ui.Button, discord.Interaction], Coroutine[None, None, None]],
-                              button: discord.ui.Button, interaction: discord.Interaction) -> None:
+                              button: discord.ui.Button, interaction: discord.Interaction, /) -> None:
         self.current_button = button
         self.current_interaction = interaction
         await coro(button, interaction)
