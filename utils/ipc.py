@@ -3,39 +3,39 @@ import aiohttp
 import json
 import os
 from discord.ext import ipc
-
+from typing import Any, AsyncGenerator, Callable, Optional, Union, Dict
 
 class StellaClient(ipc.Client):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.bot_id = kwargs.pop("bot_id", None)
         self._listeners = {}
         self.events = {}
         self.connect = None
 
-    def  __call__(self, bot_id):
+    def __call__(self, bot_id: int) -> None:
         self.bot_id = bot_id
 
-    async def check_init(self):
+    async def check_init(self) -> None:
         if not self.session:
             await self.init_sock()
             if not self.connect:
                 self.connect = asyncio.create_task(self.connection())
 
-    def listen(self):
-        def inner(coro):
+    def listen(self) -> Callable[[], Callable]:
+        def inner(coro) -> Callable[..., None]:
             name = coro.__name__
             listeners = self.events.setdefault(name, [])
             listeners.append(coro)
         return inner
 
-    def wait_for(self, event, request_id, timeout=None):
+    def wait_for(self, event: str, request_id: str, timeout: Optional[int] = None) -> Any:
         future = asyncio.get_event_loop().create_future()
         listeners = self._listeners.setdefault("on_" + event, {})
         listeners.update({request_id: future})
         return asyncio.wait_for(future, timeout)
 
-    async def do_request(self, endpoint, **data):
+    async def do_request(self, endpoint: str, **data: Dict[str, Any]):
         await self.check_init()
         request_id = os.urandom(32).hex()
         payload = self.create_payload(endpoint, data)
@@ -43,24 +43,24 @@ class StellaClient(ipc.Client):
         await self.websocket.send_json(payload)
         return await self.wait_for(endpoint, request_id)
 
-    def create_payload(self, endpoint, data):
+    def create_payload(self, endpoint: str, data: Dict[str, Any]) -> Dict[str, Union[int, str, Dict[str, Any]]]:
         return {
             "endpoint": endpoint,
             "data": data,
             "headers": {"Authorization": self.secret_key, "Bot_id": self.bot_id}
         }
 
-    async def request(self, endpoint, **kwargs):
+    async def request(self, endpoint: str, **kwargs: Any) -> Dict[str, Any]:
         return await self.do_request(endpoint, **kwargs)
 
-    async def subscribe(self):
+    async def subscribe(self) -> Dict[str, Any]:
         data = await self.do_request("start_connection")
         if data.get("error") is not None:
             self.connect.cancel()
             raise Exception(f"Unable to get event from server: {data['error']}")
         return data
 
-    async def get_response(self):
+    async def get_response(self) -> AsyncGenerator[Dict[str, Any], None]:
         while True:
             recv = await self.websocket.receive()
             if recv.type == aiohttp.WSMsgType.PING:
@@ -76,7 +76,7 @@ class StellaClient(ipc.Client):
             else:
                 yield recv
 
-    async def connection(self):
+    async def connection(self) -> None:
         async for data in self.get_response():
             respond = json.loads(data.data)
             event = "on_" + respond.pop("endpoint")
