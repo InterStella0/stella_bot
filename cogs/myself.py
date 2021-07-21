@@ -395,21 +395,14 @@ class Myself(commands.Cog):
             await InteractionPages(show_result(chunked)).start(ctx)
 
     @commands.command()
-    async def restart(self, ctx, reason="No reason"):
+    async def restart(self, ctx: StellaContext, *, reason: Optional[str] = "No reason"):
         m = await ctx.maybe_reply("Restarting...")
-        self.bot.global_variable.update(
-            {
-                "restart": True,
-                "restart_channel_id": ctx.channel.id,
-                "restart_message_id": m.id
-             }
-        )
         payload = {
-            "id": ctx.bot.user.id,
             "reason": reason,
-            "variable": self.bot.global_variable
+            "channel_id": ctx.channel.id,
+            "message_id": m.id
         }
-        await self.bot.ipc_client.request("bot_restarting", **payload)
+        await self.bot.ipc_client.request("restart_connection", **payload)
         await self.bot.close()
 
 

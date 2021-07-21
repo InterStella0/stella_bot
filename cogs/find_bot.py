@@ -44,7 +44,7 @@ class BotAdded:
 
     @classmethod
     def from_json(cls, bot: Optional[Union[discord.Member, discord.User]] = None, *, bot_id: Optional[int] = None,
-                  **data: Union[discord.Member, datetime.datetime, str]) -> "BotAdded":
+                  **data: Union[discord.Member, datetime.datetime, str]) -> BotAdded:
         """factory method on data from a dictionary like object into BotAdded."""
         author = data.pop("author_id", None)
         join = data.pop("joined_at", None)
@@ -57,7 +57,7 @@ class BotAdded:
         return cls(author=author, bot=bot, joined_at=join, **data)
 
     @classmethod
-    async def convert(cls, ctx: StellaContext, argument: str) -> "BotAdded":
+    async def convert(cls, ctx: StellaContext, argument: str) -> BotAdded:
         """Invokes when the BotAdded is use as a typehint."""
         with contextlib.suppress(commands.BadArgument):
             if user := await IsBot().convert(ctx, argument):
@@ -76,7 +76,7 @@ class BotAdded:
 class BotOwner(BotAdded):
     """Raises an error if the bot does not belong to the context author"""
     @classmethod
-    async def convert(cls, ctx: StellaContext, argument: str) -> "BotOwner":
+    async def convert(cls, ctx: StellaContext, argument: str) -> BotOwner:
         botdata = await super().convert(ctx, argument)
         if botdata.author != ctx.author:
             raise commands.CommandError(f"Sorry you can only change your own bot's information. This bot belongs to {botdata.author}.")
@@ -596,7 +596,10 @@ class FindBot(commands.Cog, name="Bots"):
     @is_discordpy()
     async def whoadd(self, ctx: StellaContext, *, bot: BotAdded):
         data = bot
-        author = await try_call(commands.UserConverter().convert, ctx, str(data.author), exception=UserNotFound)
+        author = bot.author
+        if not isinstance(author, discord.User):
+            author = await try_call(commands.UserConverter().convert, ctx, str(data.author), exception=UserNotFound)
+
         embed = discord.Embed(title=str(data.bot))
         embed.set_thumbnail(url=data.bot.avatar.url)
 
