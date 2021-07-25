@@ -457,28 +457,31 @@ class Myself(commands.Cog):
 
     @commands.command()
     async def report_end(self, ctx, message: discord.Message):
-        query = "SELECT report_id, user_id " \
-                "FROM reports WHERE report_id=(" \
-                "SELECT report_id " \
-                "FROM report_respond " \
-                "WHERE message_id=$1" \
-                "LIMIT 1" \
-                ")"
+        query = """SELECT report_id, user_id 
+                   FROM reports WHERE report_id=(
+                    SELECT report_id 
+                    FROM report_respond 
+                    WHERE message_id=$1
+                    LIMIT 1
+                   )"""
         data = await self.bot.pool_pg.fetchrow(query, message.id)
         report_id = data["report_id"]
         user_id = data["user_id"]
         await self.bot.pool_pg.execute("UPDATE reports SET finish='t' WHERE report_id=$1", report_id)
 
-        query_interface = "SELECT user_id, MAX(interface_id) \"interface_id\" " \
-                          "FROM report_respond WHERE report_id=$1 " \
-                          "GROUP BY user_id " \
-                          "HAVING user_id=$2"
-
-        interface_id = await self.bot.pool_pg.fetchval(query_interface, report_id, self.bot.stella.id, column="interface_id")
+        # Remove the view from the other user
+        query_interface = """SELECT user_id, MAX(interface_id) "recent_interface_id"
+                             FROM report_respond WHERE report_id=$1
+                             GROUP BY user_id
+                             HAVING user_id=$2"""
+        values_interface = (report_id, self.bot.stella.id)
+        interface_id = await self.bot.pool_pg.fetchval(query_interface, *values_interface, column="recent_interface_id")
         user = self.bot.get_user(user_id)
         channel = await user.create_dm()
         msg = channel.get_partial_message(interface_id)
         await msg.edit(view=None)
+
+        # Send to myself
         desc_opposite = f"{ctx.author} has ended the report."
         embed = BaseEmbed.to_error(title="End of Report", description=desc_opposite)
         await msg.reply(embed=embed)
