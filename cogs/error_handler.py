@@ -6,7 +6,7 @@ import discord
 from typing import Any, TYPE_CHECKING
 from discord.ext import commands, flags
 from utils.useful import BaseEmbed, print_exception
-from utils.errors import NotInDpy
+from utils.errors import NotInDpy, BypassError
 from utils.buttons import BaseButton, ViewIterationAuthor
 
 
@@ -61,12 +61,11 @@ class ErrorHandler(commands.Cog):
             button = MissingButton(error, template, **payload)
             await send_del(embed=template, view=ViewIterationAuthor(ctx, [button]))
 
-        if hasattr(ctx.command, 'on_error'):
+        if ctx.command.has_error_handler() and not isinstance(error, BypassError):
             return
 
-        cog = ctx.cog
-        if cog:
-            if cog._get_overridden_method(cog.cog_command_error) is not None:
+        if cog := ctx.cog:
+            if cog.has_error_handler():
                 return
 
         ignored = (commands.CommandNotFound,)

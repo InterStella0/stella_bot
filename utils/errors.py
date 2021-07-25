@@ -75,3 +75,9 @@ class ReplParserDies(ArgumentBaseError):
 class NotOwnerConvert(ArgumentBaseError):
     def __init__(self, converter: str):
         super().__init__(message=f"You're not the owner of this bot. You can't use {converter}")
+
+
+class BypassError(ArgumentBaseError):
+    def __init__(self, error):
+        super().__init__()
+        self.original = error

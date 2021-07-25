@@ -8,7 +8,7 @@ import contextlib
 import itertools
 import inspect
 import typing
-from typing import Union, Any, Type, List, Optional, Callable, Set, Tuple, TypeVar
+from typing import Union, Any, Type, List, Optional, Callable, Set, Tuple, TypeVar, TYPE_CHECKING
 from utils.useful import StellaContext
 from discord.ext.commands.errors import BadUnionArgument
 from utils.errors import ConsumerUnableToConvert
@@ -18,6 +18,8 @@ from discord.ext import commands
 from discord.ext.commands import CommandError, ArgumentParsingError
 
 T = TypeVar('T')
+if TYPE_CHECKING:
+    from main import StellaBot
 
 
 class WithCommaStringView(commands.view.StringView):

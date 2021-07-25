@@ -7,12 +7,14 @@ import tabulate
 import asyncio
 import traceback
 import io
+import pytz
 import textwrap
-from typing import Union, Optional, Any, Tuple, Coroutine, Generator, Dict, TYPE_CHECKING
+from typing import Union, Optional, Any, Tuple, Coroutine, Generator, Dict, TYPE_CHECKING, List
 from discord.ext import commands
+from discord.ext.commands import Greedy
 from utils import greedy_parser
 from utils.decorators import event_check, pages
-from utils.useful import call, empty_page_format, print_exception, StellaContext
+from utils.useful import call, empty_page_format, print_exception, StellaContext, BaseEmbed
 from utils.buttons import InteractionPages
 from utils.greedy_parser import GreedyParser, Separator, UntilFlag
 from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
@@ -394,6 +396,54 @@ class Myself(commands.Cog):
             
             await InteractionPages(show_result(chunked)).start(ctx)
 
+    @commands.group(invoke_without_command=True)
+    async def blacklist(self, ctx, snowflake_id: Optional[Union[discord.Guild, discord.User]]):
+        E = Union[discord.User, discord.Guild, int]
+
+        def user_guild(data: Dict[str, Union[int, str]]) -> E:
+            uid = data["snowflake_id"]
+            if not (ob := ctx.bot.get_user(uid)):
+                if not (ob := ctx.bot.get_guild(uid)):
+                    return uid
+
+            return ob
+
+        @pages(per_page=10)
+        async def blacklist_result(self, menu: InteractionPages, entries: List[E]) -> discord.Embed:
+            s = menu.current_page * self.per_page + 1
+            content = "\n".join(f"{i}. {uid}" for i, uid in enumerate(entries, start=s))
+            return discord.Embed(title="blacklist", description=content)
+
+        query = "SELECT * FROM blacklist"
+        if snowflake_id is None:
+            data = await self.bot.pool_pg.fetch(query)
+            ip = InteractionPages(blacklist_result([*map(user_guild, data)]))
+            await ip.start(ctx)
+        else:
+            if data := await self.bot.pool_pg.fetchrow(query + " WHERE snowflake_id=$1", snowflake_id.id):
+                uid = user_guild(data)
+                reason = data["reason"]
+                timestamp = data["timestamp"].replace(tzinfo=pytz.UTC)
+                embed = BaseEmbed.default(ctx, title=f"Blacklist for {uid}", description=f"**Reason:**\n{reason}")
+                embed.add_field(name="Time of blacklist", value=discord.utils.format_dt(timestamp, "F"))
+                await ctx.maybe_reply(embed=embed)
+            else:
+                await ctx.maybe_reply(f"`{snowflake_id}` is not blacklisted.")
+
+    @blacklist.command(name="add")
+    async def blaclist_add(self, ctx, snowflake_ids: Greedy[Union[discord.Guild, discord.User]], *, reason: str):
+        for uid in snowflake_ids:
+            await self.bot.add_blacklist(uid.id, reason)
+        names = ", ".join(map(str, snowflake_ids))
+        await ctx.maybe_reply(f"{names} are now blacklisted.")
+
+    @blacklist.command(name="remove")
+    async def blaclist_remove(self, ctx, snowflake_ids: Greedy[Union[discord.Guild, discord.User]]):
+        for uid in snowflake_ids:
+            await self.bot.remove_blacklist(uid.id)
+        names = ", ".join(map(str, snowflake_ids))
+        await ctx.maybe_reply(f"{names} are no longer blacklisted.")
+
     @commands.command()
     async def restart(self, ctx: StellaContext, *, reason: Optional[str] = "No reason"):
         m = await ctx.maybe_reply("Restarting...")
@@ -404,6 +454,35 @@ class Myself(commands.Cog):
         }
         await self.bot.ipc_client.request("restart_connection", **payload)
         await self.bot.close()
+
+    @commands.command()
+    async def report_end(self, ctx, message: discord.Message):
+        query = "SELECT report_id, user_id " \
+                "FROM reports WHERE report_id=(" \
+                "SELECT report_id " \
+                "FROM report_respond " \
+                "WHERE message_id=$1" \
+                "LIMIT 1" \
+                ")"
+        data = await self.bot.pool_pg.fetchrow(query, message.id)
+        report_id = data["report_id"]
+        user_id = data["user_id"]
+        await self.bot.pool_pg.execute("UPDATE reports SET finish='t' WHERE report_id=$1", report_id)
+
+        query_interface = "SELECT user_id, MAX(interface_id) \"interface_id\" " \
+                          "FROM report_respond WHERE report_id=$1 " \
+                          "GROUP BY user_id " \
+                          "HAVING user_id=$2"
+
+        interface_id = await self.bot.pool_pg.fetchval(query_interface, report_id, self.bot.stella.id, column="interface_id")
+        user = self.bot.get_user(user_id)
+        channel = await user.create_dm()
+        msg = channel.get_partial_message(interface_id)
+        await msg.edit(view=None)
+        desc_opposite = f"{ctx.author} has ended the report."
+        embed = BaseEmbed.to_error(title="End of Report", description=desc_opposite)
+        await msg.reply(embed=embed)
+        await message.reply(f"You've forcefully ended the report. (`{report_id}`)")
 
 
 def setup(bot: StellaBot) -> None:

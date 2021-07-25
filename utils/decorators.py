@@ -49,7 +49,7 @@ def wait_ready(bot: Optional[Union[StellaBot, commands.Bot]] = None) -> Callable
     return event_check(predicate)
 
 
-def pages(per_page: Optional[int] = 1, show_page: Optional[bool] = True) -> Callable:
+def pages(per_page: Optional[int] = 1, show_page: Optional[bool] = True) -> Type[menus.ListPageSource]:
     """Compact ListPageSource that was originally made teru but was modified"""
     def page_source(coro: Callable[[MenuBase, Any], Coroutine[Any, Any, discord.Embed]]) -> Type[menus.ListPageSource]:
         async def create_page_header(self, menu: MenuBase, entry: Any) -> Union[discord.Embed, str]:

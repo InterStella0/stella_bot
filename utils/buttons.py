@@ -1,6 +1,9 @@
 from __future__ import annotations
 import discord
 import inspect
+import time
+import asyncio
+import contextlib
 from copy import copy
 from functools import partial
 from discord import ui
@@ -23,6 +26,24 @@ class BaseButton(ui.Button):
         raise NotImplementedError
 
 
+class CallbackView(ui.View):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for b in self.children:
+            self.wrap(b)
+
+    def wrap(self, b):
+        callback = b.callback
+        b.callback = partial(self.handle_callback, callback, b)
+
+    async def handle_callback(self, callback, item, interaction):
+        pass
+
+    def add_item(self, item: ui.Item) -> None:
+        self.wrap(item)
+        super().add_item(item)
+
+
 class ViewButtonIteration(ui.View):
     """A BaseView class that creates arrays of buttons, depending on the data type given on 'args',
         it will accept `mapper` as a dataset"""
@@ -43,10 +64,11 @@ class ViewButtonIteration(ui.View):
                     self.add_item(button(style=style, row=c, selected=button_col))
 
 
-class ViewIterationAuthor(ViewButtonIteration):
+class ViewAuthor(ui.View):
     def __init__(self, ctx: StellaContext, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.context = ctx
+        self.is_command = ctx.command is not None
         self.cooldown = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -56,13 +78,20 @@ class ViewIterationAuthor(ViewButtonIteration):
         if interaction.user != author:
             bucket = self.cooldown.get_bucket(ctx.message)
             if not bucket.update_rate_limit():
-                h = ctx.bot.help_command
-                command = h.get_command_signature(ctx.command, ctx)
-                content = f"Only `{author}` can use this menu. If you want to use it, use `{command}`"
+                if self.is_command:
+                    h = ctx.bot.help_command
+                    command = h.get_command_signature(ctx.command, ctx)
+                    content = f"Only `{author}` can use this. If you want to use it, use `{command}`"
+                else:
+                    content = f"Only `{author}` can use this."
                 embed = BaseEmbed.to_error(description=content)
                 await interaction.response.send_message(embed=embed, ephemeral=True)
             return False
         return True
+
+
+class ViewIterationAuthor(ViewAuthor, ViewButtonIteration):
+    pass
 
 
 class MenuViewBase(ViewIterationAuthor):
@@ -159,36 +188,36 @@ class InteractionPages(ui.View, MenuBase):
         self.ctx = ctx
         self.message = await self.send_initial_message(ctx, ctx.channel)
 
-    def add_item(self, item: discord.ui.Item) -> None:
+    def add_item(self, item: ui.Item) -> None:
         coro = copy(item.callback)
         item.callback = partial(self.handle_callback, coro)
         super().add_item(item)
 
-    async def handle_callback(self, coro: Callable[[discord.ui.Button, discord.Interaction], Coroutine[None, None, None]],
-                              button: discord.ui.Button, interaction: discord.Interaction, /) -> None:
+    async def handle_callback(self, coro: Callable[[ui.Button, discord.Interaction], Coroutine[None, None, None]],
+                              button: ui.Button, interaction: discord.Interaction, /) -> None:
         self.current_button = button
         self.current_interaction = interaction
         await coro(button, interaction)
 
     @ui.button(emoji='<:before_fast_check:754948796139569224>')
-    async def first_page(self, *_: Union[discord.ui.Button, discord.Interaction]):
+    async def first_page(self, *_: Union[ui.Button, discord.Interaction]):
         await self.show_page(0)
 
     @ui.button(emoji='<:before_check:754948796487565332>')
-    async def before_page(self, *_: Union[discord.ui.Button, discord.Interaction]):
+    async def before_page(self, *_: Union[ui.Button, discord.Interaction]):
         await self.show_checked_page(self.current_page - 1)
 
     @ui.button(emoji='<:stop_check:754948796365930517>')
-    async def stop_page(self, *_: Union[discord.ui.Button, discord.Interaction]):
+    async def stop_page(self, *_: Union[ui.Button, discord.Interaction]):
         self.stop()
         await self.message.delete()
 
     @ui.button(emoji='<:next_check:754948796361736213>')
-    async def next_page(self, *_: Union[discord.ui.Button, discord.Interaction]):
+    async def next_page(self, *_: Union[ui.Button, discord.Interaction]):
         await self.show_checked_page(self.current_page + 1)
 
     @ui.button(emoji='<:next_fast_check:754948796391227442>')
-    async def last_page(self, *_: Union[discord.ui.Button, discord.Interaction]):
+    async def last_page(self, *_: Union[ui.Button, discord.Interaction]):
         await self.show_page(self._source.get_max_pages() - 1)
 
     async def _get_kwargs_from_page(self, page: Any) -> Dict[str, Any]:
@@ -222,3 +251,150 @@ class InteractionPages(ui.View, MenuBase):
 
     async def on_timeout(self) -> None:
         await self.message.delete()
+
+
+class ConfirmView(ViewAuthor, CallbackView):
+    def __init__(self, ctx: StellaContext, delete_after: Optional[bool] = False):
+        super().__init__(ctx)
+        self.hold = asyncio.Event()
+        self.result = None
+        self.message = None
+        self.delete_after = delete_after
+
+    async def handle_callback(self, callback, item, interaction):
+        self.result = await callback(interaction)
+        self.hold.set()
+        if not interaction.response._responded:
+            await interaction.response.defer()
+
+    async def send(self, content: str, **kwargs: Any) -> Optional[bool]:
+        return await self.start(content=content, **kwargs)
+
+    async def start(self, message: Optional[discord.Message] = None, **kwargs: Any) -> Optional[bool]:
+        if not message:
+            self.message = await self.context.reply(view=self, **kwargs)
+        else:
+            self.message = message
+
+        await self.hold.wait()
+        if not self.delete_after:
+            for x in self.children:
+                x.disabled = True
+            await self.message.edit(view=self)
+        else:
+            await self.message.delete()
+        return self.result
+
+    async def confirmed(self, button: ui.Button, interaction: discord.Interaction):
+        pass
+
+    async def denied(self, button: ui.Button, interaction: discord.Interaction):
+        pass
+
+    @ui.button(emoji="<:checkmark:753619798021373974>", style=discord.ButtonStyle.green)
+    async def confirmed_action(self, button: ui.Button, interaction: discord.Interaction):
+        await self.confirmed(button, interaction)
+        return True
+
+    @ui.button(emoji="<:crossmark:753620331851284480>", style=discord.ButtonStyle.danger)
+    async def denied_action(self, button: ui.Button, interaction: discord.Interaction):
+        await self.denied(button, interaction)
+        return False
+
+    async def on_timeout(self):
+        self.hold.set()
+
+
+class PersistentRespondView(ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=None)
+        self.bot = bot
+
+    class ConfirmationView(ConfirmView):
+        def __init__(self, ctx):
+            super().__init__(ctx, delete_after=True)
+
+        async def confirmed(self, button: ui.Button, interaction: discord.Interaction):
+            await interaction.response.send_message("Message has been sent.", ephemeral=True)
+
+        async def denied(self, button: ui.Button, interaction: discord.Interaction):
+            msg = "Message was not sent, please click on Respond button again to respond."
+            await interaction.response.send_message(msg, ephemeral=True)
+
+    @ui.button(label="Respond", style=discord.ButtonStyle.primary, custom_id="persistent_report_reply")
+    async def res_action(self, button: ui.Button, interaction: discord.Interaction):
+        message = interaction.message
+        bot = self.bot
+
+        msg = await interaction.user.send("Please enter your message to respond. You have 60 seconds.")
+        await self.clean_up(message)
+        try:
+            respond = await bot.wait_for("message", check=lambda m: m.channel.id == msg.channel.id, timeout=60)
+        except asyncio.TimeoutError:
+            await msg.edit(content="Timeout. Please click Respond if you want to respond again.", delete_after=60)
+            return await message.edit(view=self)
+        else:
+            await msg.delete()
+        ctx = await bot.get_context(respond)
+        data = await self.get_interface_data(interaction)
+        report_id = data["report_id"]
+        destination = await self.get_destination(interaction, report_id)
+
+        usure = f"Are you sure, you want to send this message to `{destination}`?"
+        if await self.ConfirmationView(ctx).send(usure):
+            # Send to the opposite person
+            dm = await destination.create_dm()
+            msg = dm.get_partial_message(data["message_id"])
+            embed = BaseEmbed.default(ctx, title=f"Respond from {ctx.author}", description=respond.content)
+            interface_msg = await msg.reply(embed=embed, view=self)
+
+            query_insert = "INSERT INTO report_respond VALUES($1, $2, $3, $4, $5)"
+            values = (report_id, respond.author.id, interface_msg.id, respond.id, respond.content)
+            await bot.pool_pg.execute(query_insert, *values)
+            await self.clean_up(message)
+        else:
+            await message.edit(view=self)
+
+    @ui.button(label="End Report", style=discord.ButtonStyle.danger, custom_id="persistent_end_report")
+    async def end_action(self, button: ui.Button, interaction: discord.Interaction):
+        message = interaction.message
+        bot = self.bot
+        interaction_data = await self.get_interface_data(interaction)
+        report_id = interaction_data["report_id"]
+        # Update to database
+        query = "UPDATE reports SET finish=True WHERE report_id=$1"
+        await bot.pool_pg.execute(query, report_id)
+
+        # Send to author
+        desc_user = "You will no longer receive any respond nor able to respond."
+        embed = BaseEmbed.to_error(title="End of Report", description=desc_user)
+        channel = await interaction.user.create_dm()
+        pmessage = channel.get_partial_message(message.id)
+        await pmessage.reply(embed=embed)
+        destination = await self.get_destination(interaction, report_id)
+
+        # Send to the opposite person
+        query_m = "SELECT message_id FROM report_respond WHERE interface_id=$1"
+        data = await bot.pool_pg.fetchval(query_m, message.id, column='message_id')
+        desc_opposite = f"{interaction.user} has ended the report."
+        embed = BaseEmbed.to_error(title="End of Report", description=desc_opposite)
+
+        dm = await destination.create_dm()
+        msg = dm.get_partial_message(data)
+        await msg.reply(embed=embed)
+        await self.clean_up(message)
+
+    async def get_destination(self, interaction, report_id):
+        bot = self.bot
+        stella = bot.stella
+        if interaction.user == stella:
+            report = await bot.pool_pg.fetchrow("SELECT user_id FROM reports WHERE report_id=$1", report_id)
+            return bot.get_user(report["user_id"])
+        return stella
+
+    async def get_interface_data(self, interaction: discord.Interaction) -> Dict[str, int]:
+        old_query = "SELECT report_id, interface_id, message_id FROM report_respond WHERE interface_id=$1"
+        return await self.bot.pool_pg.fetchrow(old_query, interaction.message.id)
+
+    async def clean_up(self, message: discord.Message) -> None:
+        await message.edit(view=None)

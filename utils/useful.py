@@ -39,18 +39,18 @@ class BaseEmbed(discord.Embed):
     """Main purpose is to get the usual setup of Embed for a command or an error embed"""
     def __init__(self, color: Union[discord.Color, int] = 0xffcccb, timestamp: datetime.datetime = None,
                  fields: Tuple[Tuple[str, bool]] = (), field_inline: bool = False, **kwargs):
-        super().__init__(color=color, timestamp=timestamp or datetime.datetime.utcnow(), **kwargs)
+        super().__init__(color=color, timestamp=timestamp or discord.utils.utcnow(), **kwargs)
         for n, v in fields:
             self.add_field(name=n, value=v, inline=field_inline)
 
     @classmethod
     def default(cls, ctx: commands.Context, **kwargs) -> "BaseEmbed":
         instance = cls(**kwargs)
-        instance.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar.url)
+        instance.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar)
         return instance
 
     @classmethod
-    def to_error(cls, title: str = "Error",
+    def to_error(cls, title: Optional[str] = "Error",
                  color: Union[discord.Color, int] = discord.Color.red(), **kwargs) -> "BaseEmbed":
         return cls(title=title, color=color, **kwargs)
 
@@ -187,7 +187,7 @@ class StellaContext(commands.Context):
         return await to_send(content, mention_author=mention_author, embed=ori_embed, **send_dict)
 
     def confirmed(self, message_id: Optional[int] = None) -> Coroutine:
-        message = self.message if not message_id else self.bot.get_partial_message(message_id)
+        message = self.message if not message_id else self.channel.get_partial_message(message_id)
         return message.add_reaction("<:checkmark:753619798021373974>")
 
 

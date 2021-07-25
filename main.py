@@ -7,7 +7,7 @@ import copy
 import discord
 import contextlib
 import humanize
-from typing import Union, List
+from typing import Union, List, Optional
 from utils.useful import StellaContext, ListCall, count_python
 from utils.decorators import event_check, wait_ready
 from utils.ipc import StellaClient
@@ -15,11 +15,12 @@ from discord.ext import commands, ipc
 from dotenv import load_dotenv
 from os.path import join, dirname
 from utils.useful import call, print_exception
+from utils.buttons import PersistentRespondView
 from os import environ
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
 
-import utils.library_override
+# import utils.library_override
 to_call = ListCall()
 
 
@@ -45,6 +46,23 @@ class StellaBot(commands.Bot):
         self.cached_users = {}
         self.existing_prefix = {}
         super().__init__(self.get_prefix, **kwargs)
+
+    async def add_blacklist(self, snowflake_id, reason):
+        timed = datetime.datetime.utcnow()
+        values = (snowflake_id, reason, timed)
+        await self.pool_pg.execute("INSERT INTO blacklist VALUES($1, $2, $3)", *values)
+        self.blacklist.add(snowflake_id)
+        payload = {
+            "snowflake_id": snowflake_id,
+            "reason": reason,
+            "time": timed.timestamp()
+        }
+        await self.ipc_client.request("global_blacklist_id", **payload)
+
+    async def remove_blacklist(self, snowflake_id):
+        await self.pool_pg.execute("DELETE FROM blacklist WHERE snowflake_id=$1", snowflake_id)
+        self.blacklist.remove(snowflake_id)
+        await self.ipc_client.request("global_unblacklist_id", snowflake_id=snowflake_id)
 
     async def after_db(self) -> None:
         """Runs after the db is connected"""
@@ -85,7 +103,7 @@ class StellaBot(commands.Bot):
                 raise exc
 
     @property
-    def stella(self) -> str:
+    def stella(self) -> Optional[discord.User]:
         """Returns discord.User of the owner"""
         return self.get_user(self.owner_id)
 
@@ -96,27 +114,30 @@ class StellaBot(commands.Bot):
         channel_id = int(environ.get("ERROR_CHANNEL"))
         return self.get_guild(guild_id).get_channel(channel_id)
 
-    async def greet_server(self):
+    async def after_ready(self):
         await self.wait_until_ready()
+        self.add_view(PersistentRespondView(self))
+        await self.greet_server()
+
+    async def greet_server(self):
         self.ipc_client(self.user.id)
-        await self.ipc_client.subscribe()
-        if data := await self.ipc_client.request("get_restart_data"):
-            channel = self.get_channel(data["channel_id"])
-            message = await channel.fetch_message(data["message_id"])
-            message_time = discord.utils.utcnow() - message.created_at
-            time_taken = humanize.precisedelta(message_time)
-            await message.edit(content=f"Restart lasted {time_taken}")
-        print("Server connected.")
+        try:
+            await self.ipc_client.subscribe()
+        except Exception as e:
+            print_exception("Failure to connect to server.", e)
+        else:
+            if data := await self.ipc_client.request("get_restart_data"):
+                if (channel := self.get_channel(data["channel_id"])) and isinstance(channel, discord.abc.Messageable):
+                    message = await channel.fetch_message(data["message_id"])
+                    message_time = discord.utils.utcnow() - message.created_at
+                    time_taken = humanize.precisedelta(message_time)
+                    await message.edit(content=f"Restart lasted {time_taken}")
+            print("Server connected.")
 
     @to_call.append
     def loading_cog(self) -> None:
         """Loads the cog"""
-        cogs = ()
-        for file in os.listdir("cogs"):
-            if file.endswith(".py"):
-                cogs += (file[:-3],)
-
-        cogs += ("jishaku",)
+        cogs = *(file[:-3] for file in os.listdir("cogs") if file.endswith(".py")), "jishaku"
         for cog in cogs:
             ext = "cogs." if cog != "jishaku" else ""
             if error := call(self.load_extension, f"{ext}{cog}", ret=True):
@@ -183,9 +204,11 @@ class StellaBot(commands.Bot):
         try:
             print("Connecting to database...")
             start = time.time()
-            pool_pg = self.loop.run_until_complete(asyncpg.create_pool(database=self.db,
-                                                                       user=self.user_db,
-                                                                       password=self.pass_db))
+            pool_pg = self.loop.run_until_complete(asyncpg.create_pool(
+                database=self.db,
+                user=self.user_db,
+                password=self.pass_db)
+            )
         except Exception as e:
             print_exception("Could not connect to database:", e)
         else:
@@ -193,7 +216,7 @@ class StellaBot(commands.Bot):
             self.pool_pg = pool_pg
             print(f"Connected to the database ({time.time() - start})s")
             self.loop.run_until_complete(self.after_db())
-            self.loop.create_task(self.greet_server())
+            self.loop.create_task(self.after_ready())
             self.run(self.token)
 
 
@@ -234,7 +257,6 @@ async def on_connect():
 
 @bot.event
 @wait_ready(bot=bot)
-@event_check(lambda m: not bot.tester or m.author == bot.stella)
 async def on_message(message):
     if re.fullmatch("<@(!)?661466532605460530>", message.content):
         await message.channel.send(f"My prefix is `{await bot.get_prefix(message)}`")
