@@ -17,10 +17,12 @@ from os.path import join, dirname
 from utils.useful import call, print_exception
 from utils.buttons import PersistentRespondView
 from os import environ
+
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
 
-# import utils.library_override
+import utils.library_override
+
 to_call = ListCall()
 
 
@@ -83,7 +85,13 @@ class StellaBot(commands.Bot):
                 check = await self.can_run(ctx, call_once=flags.pop("call_once", True))
 
                 if check or not flags.pop("call_check", True):
-                    await ctx.command.invoke(ctx)
+                    if ctx.command.name == "jishaku":
+                        maximum = self._connection.max_messages
+                        self._connection.max_messages = "<:uwuqueen:785765496393433129>"
+                        await ctx.command.invoke(ctx)
+                        self._connection.max_messages = maximum
+                    else:
+                        await ctx.command.invoke(ctx)
                 else:
                     raise commands.CheckFailure('The global check once functions failed.')
             except commands.CommandError as exc:
@@ -98,7 +106,7 @@ class StellaBot(commands.Bot):
             exc = commands.CommandNotFound('Command "{}" is not found'.format(ctx.invoked_with))
             if dispatch:
                 self.dispatch('command_error', ctx, exc)
-            
+
             if flags.pop("redirect_error", False):
                 raise exc
 
@@ -183,9 +191,9 @@ class StellaBot(commands.Bot):
         return self._connection._get_message(message_id)
 
     async def get_context(self, message: discord.Message, *,
-                          cls: commands.Context = None) -> Union[StellaContext, commands.Context]:
+                          cls: Optional[commands.Context] = StellaContext) -> Union[StellaContext, commands.Context]:
         """Override get_context to use a custom Context"""
-        context = await super().get_context(message, cls=StellaContext)
+        context = await super().get_context(message, cls=cls)
         context.view.update_values()
         return context
 
@@ -222,20 +230,21 @@ class StellaBot(commands.Bot):
 
 intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions')}
 intents = discord.Intents(**intent_data)
-bot_data = {"token": environ.get("TOKEN"),
-            "color": 0xffcccb,
-            "db": environ.get("DATABASE"),
-            "user_db": environ.get("USER"),
-            "pass_db": environ.get("PASSWORD"),
-            "tester": bool(environ.get("TEST")),
-            "help_src": environ.get("HELP_SRC"),
-            "ipc_port": int(environ.get("IPC_PORT")),
-            "ipc_key": environ.get("IPC_KEY"),
-            "intents": intents,
-            "owner_id": 591135329117798400,
-            "description": "{}'s personal bot that is partially for the public. "
-                           f"Written with only `{count_python('.'):,}` lines. plz be nice"
-        }
+bot_data = {
+    "token": environ.get("TOKEN"),
+    "color": 0xffcccb,
+    "db": environ.get("DATABASE"),
+    "user_db": environ.get("USER"),
+    "pass_db": environ.get("PASSWORD"),
+    "tester": bool(environ.get("TEST")),
+    "help_src": environ.get("HELP_SRC"),
+    "ipc_port": int(environ.get("IPC_PORT")),
+    "ipc_key": environ.get("IPC_KEY"),
+    "intents": intents,
+    "owner_id": 591135329117798400,
+    "description": "{}'s personal bot that is partially for the public. "
+                   f"Written with only `{count_python('.'):,}` lines. plz be nice"
+}
 
 bot = StellaBot(**bot_data)
 
@@ -257,6 +266,7 @@ async def on_connect():
 
 @bot.event
 @wait_ready(bot=bot)
+@event_check(lambda m: not bot.tester or m.author == bot.stella)
 async def on_message(message):
     if re.fullmatch("<@(!)?661466532605460530>", message.content):
         await message.channel.send(f"My prefix is `{await bot.get_prefix(message)}`")
@@ -264,7 +274,7 @@ async def on_message(message):
 
     if message.author.id in bot.blacklist or getattr(message.guild, "id", None) in bot.blacklist:
         return
-    
+
     if message.author == bot.stella and message.attachments:
         ctx = await bot.get_context(message)
         if ctx.valid:
@@ -284,7 +294,8 @@ async def on_message(message):
                 else:
                     new_message.content = attachment.decode('utf-8')
                 await bot.process_commands(new_message)
-            
+
     await bot.process_commands(message)
+
 
 bot.starter()
