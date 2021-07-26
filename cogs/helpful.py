@@ -14,18 +14,18 @@ from discord.ext import commands
 from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader
-from utils.greedy_parser import UntilFlag, command
+from utils.greedy_parser import UntilFlag, command, GreedyParser
 from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, ConfirmView, PersistentRespondView
 from utils.menus import ListPageInteractionBase, HelpMenuBase, MenuViewInteractionBase
 from utils import flags as flg
 from collections import namedtuple
 from jishaku.codeblocks import codeblock_converter
-from typing import Any, Tuple, List, Union, Optional, Literal, Dict, TYPE_CHECKING, Type
+from typing import Any, Tuple, List, Union, Optional, Literal, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from main import StellaBot
 
-CommandGroup = Union[commands.Command, commands.Group]
+CommandGroup = Union[commands.Command, commands.Group, GreedyParser]
 CogHelp = namedtuple("CogAmount", 'name commands emoji description')
 CommandHelp = namedtuple("CommandHelp", 'command brief command_obj')
 emoji_dict = {"Bots": '<:robot_mark:848257366587211798>',
@@ -41,7 +41,7 @@ class HelpSource(ListPageInteractionBase):
     """This ListPageSource is meant to be used with view, format_page method is called first
        after that would be the format_view method which must return a View, or None to remove."""
 
-    async def format_page(self, menu: "HelpMenu", entry: Tuple[commands.Cog, List[CommandHelp]]) -> discord.Embed:
+    async def format_page(self, menu: HelpMenu, entry: Tuple[commands.Cog, List[CommandHelp]]) -> discord.Embed:
         """This is for the help command ListPageSource"""
         cog, list_commands = entry
         new_line = "\n"
@@ -52,7 +52,7 @@ class HelpSource(ListPageInteractionBase):
         author = menu.ctx.author
         return embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar.url)
 
-    async def format_view(self, menu: "HelpMenu", entry: Tuple[Optional[commands.Cog], List[CommandHelp]]) -> "HelpMenuView":
+    async def format_view(self, menu: "HelpMenu", entry: Tuple[Optional[commands.Cog], List[CommandHelp]]) -> HelpMenuView:
         if not menu._running:
             return
         _, list_commands = entry
@@ -108,7 +108,7 @@ class HelpButton(BaseButton):
 class HelpSearchView(ViewButtonIteration):
     """This view class is specifically for command_callback method"""
 
-    def __init__(self, help_object: commands.HelpCommand, *args: Any, **kwargs: Any):
+    def __init__(self, help_object: StellaBotHelp, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.help_command = help_object
         self.ctx = help_object.context
@@ -257,33 +257,33 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         bot = ctx.bot
         EACH_PAGE = 4
         command_data = {}
-        for cog, unfiltered_commands in mapping.items():
-            if list_commands := await self.filter_commands(unfiltered_commands, sort=True):
+        for cog, unfiltered in mapping.items():
+            if list_commands := await self.filter_commands(unfiltered, sort=True):
                 lists = command_data.setdefault(cog, [])
                 for chunks in discord.utils.as_chunks(list_commands, EACH_PAGE):
                     lists.append([*map(get_command_help, chunks)])
 
-        sort_cog = [*itertools.starmap(get_cog_help, command_data.items())]
-        sort_cog.sort(key=lambda c: c.commands, reverse=True)
-        cog_names = [dict(selected=ch.name, emoji=ch.emoji) for ch in sort_cog]
-        fields = (("{0.emoji} {0.name} [`{0.commands}`]".format(ch), ch.description) for ch in sort_cog)
+        mapped = itertools.starmap(get_cog_help, command_data.items())
+        sort_cog = [*sorted(mapped, key=lambda c: c.commands, reverse=True)]
         stella = bot.stella
         embed = BaseEmbed.default(
             ctx,
             title=f"{home_emoji} Help Command",
             description=f"{bot.description.format(stella)}\n\n**Select a Category:**",
-            fields=fields
+            fields=(("{0.emoji} {0.name} [`{0.commands}`]".format(ch), ch.description) for ch in sort_cog)
         )
         embed.set_thumbnail(url=bot.user.avatar)
         embed.set_author(name=f"By {stella}", icon_url=stella.avatar)
+
         loads = {
             "embed": embed,
             "help_object": self,
             "context": ctx,
             "mapper": command_data
         }
-        cog_names = [*discord.utils.as_chunks(cog_names, 5)]
-        menu_view = HelpMenuView(*cog_names, **loads)
+        cog_names = [{"selected": ch.name, "emoji": ch.emoji} for ch in sort_cog]
+        buttons = discord.utils.as_chunks(cog_names, 5)
+        menu_view = HelpMenuView(*buttons, **loads)
         await ctx.reply(embed=embed, view=menu_view)
 
     def get_command_help(self, command: commands.Command) -> discord.Embed:
@@ -335,27 +335,26 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             await pages.start(self.context, wait=True)
             await self.context.confirmed()
 
-    async def command_callback(self, ctx, search: Optional[Literal['search', 'select']], *,
-                               command: Optional[str] = None) -> Optional[Any]:
-        if search:
-            bot = ctx.bot
-            if command is not None:
-                iterator = filter(lambda x: x[1] > 50,
-                                  process.extract(command, [x.name for x in bot.commands], limit=5))
-                result = [*discord.utils.as_chunks(map(lambda x: x[0], iterator), 2)]
-                if result:
-                    button_view = HelpSearchView(self, *result, button=HelpSearchButton,
-                                                 style=discord.ButtonStyle.secondary)
-                    await ctx.send("**Searched Command:**", view=button_view, delete_after=180)
-                else:
-                    await self.send_error_message(f'Unable to find any command that is even close to "{command}"')
-            else:
-                param = bot.get_command('help').params['command']
-                ctx.current_parameter = param
-                raise commands.MissingRequiredArgument(param)
+    def command_not_found(self, string: str) -> Tuple[str, str]:
+        return super().command_not_found(string), string
 
+    def subcommand_not_found(self, command: commands.Group, string: str) -> Tuple[str, str, commands.Group]:
+        return super().subcommand_not_found(command, string), string, command
+
+    async def send_error_message(self, error: Tuple[str, str, Optional[commands.Group]]) -> None:
+        await self.handle_error_message(*error)
+
+    async def handle_error_message(self, error: str, command: str, group: Optional[commands.Group] = None) -> None:
+        ctx = self.context
+        to_search = group.commands if group else ctx.bot.commands
+        filtered = filter(lambda x: x[1] > 50, process.extract(command, [x.name for x in to_search], limit=5))
+        mapped = itertools.starmap(lambda x, *_: f"{group} {x}" if group else x, filtered)
+        if result := list(discord.utils.as_chunks(mapped, 2)):
+            button_view = HelpSearchView(self, *result, button=HelpSearchButton, style=discord.ButtonStyle.secondary)
+            message = f"{error}.\nShowing results for the closest command to `{command}`:"
+            await ctx.reply(message, view=button_view, delete_after=180)
         else:
-            return await super().command_callback(ctx, command=command)
+            await super().send_error_message(error)
 
 
 class Helpful(commands.Cog):
