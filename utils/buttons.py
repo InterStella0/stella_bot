@@ -252,29 +252,26 @@ class InteractionPages(ui.View, MenuBase):
 
 
 class ConfirmView(ViewAuthor, CallbackView):
+    """ConfirmView literally handles confirmation where it asks the user at start() and returns a Tribool"""
     def __init__(self, ctx: StellaContext, delete_after: Optional[bool] = False):
         super().__init__(ctx)
-        self.hold = asyncio.Event()
         self.result = None
         self.message = None
         self.delete_after = delete_after
 
     async def handle_callback(self, callback, item, interaction):
         self.result = await callback(interaction)
-        self.hold.set()
-        if not interaction.response._responded:
+        if not interaction.response.is_done():
             await interaction.response.defer()
+        self.stop()
 
     async def send(self, content: str, **kwargs: Any) -> Optional[bool]:
         return await self.start(content=content, **kwargs)
 
     async def start(self, message: Optional[discord.Message] = None, **kwargs: Any) -> Optional[bool]:
-        if not message:
-            self.message = await self.context.reply(view=self, **kwargs)
-        else:
-            self.message = message
+        self.message = message or await self.context.reply(view=self, **kwargs)
 
-        await self.hold.wait()
+        await self.wait()
         if not self.delete_after:
             for x in self.children:
                 x.disabled = True
@@ -289,18 +286,15 @@ class ConfirmView(ViewAuthor, CallbackView):
     async def denied(self, button: ui.Button, interaction: discord.Interaction):
         pass
 
-    @ui.button(emoji="<:checkmark:753619798021373974>", style=discord.ButtonStyle.green)
+    @ui.button(emoji="<:checkmark:753619798021373974>", label="Confirm", style=discord.ButtonStyle.green)
     async def confirmed_action(self, button: ui.Button, interaction: discord.Interaction):
         await self.confirmed(button, interaction)
         return True
 
-    @ui.button(emoji="<:crossmark:753620331851284480>", style=discord.ButtonStyle.danger)
+    @ui.button(emoji="<:crossmark:753620331851284480>", label="Cancel", style=discord.ButtonStyle.danger)
     async def denied_action(self, button: ui.Button, interaction: discord.Interaction):
         await self.denied(button, interaction)
         return False
-
-    async def on_timeout(self):
-        self.hold.set()
 
 
 class PersistentRespondView(ui.View):

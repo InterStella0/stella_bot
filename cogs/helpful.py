@@ -16,7 +16,7 @@ from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader
 from utils.greedy_parser import UntilFlag, command, GreedyParser
 from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, PersistentRespondView
-from utils.menus import ListPageInteractionBase, MenuViewInteractionBase
+from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMenuBase
 from utils import flags as flg
 from collections import namedtuple
 from jishaku.codeblocks import codeblock_converter
@@ -127,13 +127,7 @@ class HelpSearchButton(BaseButton):
         await interaction.response.send_message(content=f"Help for **{self.selected}**", embed=embed, ephemeral=True)
 
 
-class HelpMenu(MenuViewInteractionBase):
-    """MenuPages class that is specifically for the help command."""
-    def __init__(self, *args: Any, description: Optional[str] = None, **kwargs: Any):
-        super().__init__(*args, **kwargs)
-        self.description = description or """This shows each commands in this bot. Each page is a category that shows 
-                                             what commands that the category have."""
-
+class Information(HelpMenuBase):
     async def on_information_show(self, payload: discord.RawReactionActionEvent) -> None:
         ctx = self.ctx
         embed = BaseEmbed.default(ctx, title="Information", description=self.description)
@@ -143,6 +137,20 @@ class HelpMenu(MenuViewInteractionBase):
         nav = '\n'.join(f"{e} {b.action.__doc__}" for e, b in super().buttons.items())
         embed.add_field(name="Navigation:", value=nav)
         await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
+
+
+class HelpMenu(MenuViewInteractionBase, Information):
+    """MenuPages class that is specifically for the help command."""
+    def __init__(self, *args: Any, description: Optional[str] = None, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.description = description or """This shows each commands in this bot. Each page is a category that shows 
+                                             what commands that the category have."""
+
+
+class CogMenu(Information):
+    def __init__(self, *args: Any, description: Optional[str] = None, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.description = description
 
 
 class StellaBotHelp(commands.DefaultHelpCommand):
@@ -242,9 +250,13 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             ctx,
             title=f"{home_emoji} Help Command",
             description=f"{bot.description.format(stella)}\n\n**Select a Category:**",
-            fields=(("{0.emoji} {0.name} [`{0.commands}`]".format(ch), ch.description) for ch in sort_cog)
+            fields=map(lambda ch: ("{0.emoji} {0.name} [`{0.commands}`]".format(ch), ch.description), sort_cog)
         )
-        embed.set_thumbnail(url=bot.user.avatar)
+        payload = {
+            "bot_name": str(bot.user),
+            "name": str(bot.stella)
+        }
+        embed.set_image(url=await bot.ipc_client.request("generate_banner", **payload))
         embed.set_author(name=f"By {stella}", icon_url=stella.avatar)
 
         loads = {
@@ -304,7 +316,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         cog_commands = [self.get_command_help(c) for c in await self.filter_commands(cog.walk_commands(), sort=True)]
         description = """This shows each commands in this category. Each page is a command 
                          that shows what's the command is about and a demonstration of usage."""
-        pages = HelpMenu(empty_page_format(cog_commands), description)
+        pages = CogMenu(source=empty_page_format(cog_commands), description=description)
         with contextlib.suppress(discord.NotFound, discord.Forbidden):
             await pages.start(self.context, wait=True)
             await self.context.confirmed()

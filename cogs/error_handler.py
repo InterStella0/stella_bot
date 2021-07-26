@@ -61,7 +61,7 @@ class ErrorHandler(commands.Cog):
             button = MissingButton(error, template, **payload)
             await send_del(embed=template, view=ViewIterationAuthor(ctx, [button]))
 
-        if ctx.command.has_error_handler() and not isinstance(error, BypassError):
+        if ctx.command and ctx.command.has_error_handler() and not isinstance(error, BypassError):
             return
 
         if cog := ctx.cog:

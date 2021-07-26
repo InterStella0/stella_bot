@@ -39,7 +39,7 @@ def call(func: Callable, *args: Tuple[Any], exception: Exception = Exception, re
 class BaseEmbed(discord.Embed):
     """Main purpose is to get the usual setup of Embed for a command or an error embed"""
     def __init__(self, color: Union[discord.Color, int] = 0xffcccb, timestamp: datetime.datetime = None,
-                 fields: Tuple[Tuple[str, bool]] = (), field_inline: bool = False, **kwargs):
+                 fields: Tuple[Tuple[str, str]] = (), field_inline: Optional[bool] = False, **kwargs):
         super().__init__(color=color, timestamp=timestamp or discord.utils.utcnow(), **kwargs)
         for n, v in fields:
             self.add_field(name=n, value=v, inline=field_inline)
