@@ -191,6 +191,10 @@ class StellaContext(commands.Context):
         message = self.message if not message_id else self.channel.get_partial_message(message_id)
         return message.add_reaction("<:checkmark:753619798021373974>")
 
+    async def confirmation(self, content: str, delete_after: Optional[bool] = False, **kwargs: Any) -> Optional[bool]:
+        from utils.buttons import ConfirmView
+        return await ConfirmView(self, delete_after).send(content, **kwargs)
+
 
 async def maybe_method(func: Union[Awaitable, Callable], cls: Optional[Type] = None, *args: Any, **kwargs: Any) -> Any:
     """Pass the class if func is not a method."""

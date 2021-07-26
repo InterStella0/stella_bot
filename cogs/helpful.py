@@ -15,7 +15,7 @@ from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaCon
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader
 from utils.greedy_parser import UntilFlag, command, GreedyParser
-from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, ConfirmView, PersistentRespondView
+from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, PersistentRespondView
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase
 from utils import flags as flg
 from collections import namedtuple
@@ -436,7 +436,8 @@ class Helpful(commands.Cog):
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def report(self, ctx: StellaContext, *, message: str):
         usure = f"Are you sure you wanna send this message to `{self.bot.stella}`?"
-        if not await ConfirmView(ctx).send(usure):
+        if not await ctx.confirmation(usure, delete_after=True):
+            await ctx.confirmed()
             return
 
         try:
