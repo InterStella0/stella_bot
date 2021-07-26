@@ -17,7 +17,7 @@ from discord.ext.menus import ListPageSource
 from utils import flags as flg
 from utils.new_converters import BotPrefixes, IsBot, BotCommands
 from utils.buttons import InteractionPages
-from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, default_date, plural, realign, search_commands, StellaContext
+from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, default_date, plural, realign, search_commands, StellaContext, aware_utc
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
 from utils import greedy_parser
@@ -131,13 +131,16 @@ async def bot_added_list(self, menu: InteractionPages, entries: List[BotAdded]) 
 
 
 @pages()
-async def bot_pending_list(self, menu: InteractionPages, entry: Any) -> discord.Embed:
+async def bot_pending_list(self, menu: InteractionPages, entry: Dict[str, Union[datetime.datetime, int, str]]) -> discord.Embed:
     stellabot = menu.ctx.bot
-    bot = menu.cached_bots.setdefault(entry["bot_id"], await stellabot.fetch_user(entry["bot_id"]))
+    bot_id = entry["bot_id"]
+    if not (bot := menu.cached_bots.get(bot_id)):
+        bot = stellabot.get_user(bot_id) or await stellabot.fetch_user(bot_id)
+        menu.cached_bots.update({bot_id: bot})
     fields = (("Requested by", stellabot.get_user(entry["author_id"]) or "idk really"),
               ("Reason", textwrap.shorten(entry["reason"], width=1000, placeholder="...")),
-              ("Created at", default_date(bot.created_at)),
-              ("Requested at", default_date(entry["requested_at"])),
+              ("Created at", aware_utc(bot.created_at)),
+              ("Requested at", aware_utc(entry["requested_at"])),
               ("Message", f"[jump]({entry['jump_url']})"))
     embed = BaseEmbed(title=f"{bot}(`{bot.id}`)", fields=fields)
     embed.set_thumbnail(url=bot.avatar.url)
@@ -808,8 +811,9 @@ class FindBot(commands.Cog, name="Bots"):
                        "False if not stated.")
     @is_discordpy()
     async def pendingbots(self, ctx: StellaContext, **flags: bool):
-        bots = await self.bot.pool_pg.fetch("SELECT * FROM pending_bots")
-        menu = InteractionPages(bot_pending_list(sorted(bots, key=lambda x: x["requested_at"], reverse=not flags.get("reverse", False))))
+        ordered = " DESC" if not flags.get("reverse", False) else ""
+        bots = await self.bot.pool_pg.fetch("SELECT * FROM pending_bots ORDER BY requested_at" + ordered)
+        menu = InteractionPages(bot_pending_list(bots))
         menu.cached_bots = self.cached_bots
         await menu.start(ctx)
 

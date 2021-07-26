@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import typing
 import os
+import pytz
 from typing import Callable, Any, Awaitable, Union, Tuple, List, Iterable, Coroutine, Optional, Type, AsyncGenerator
 from utils.decorators import pages, in_executor
 from discord.utils import maybe_coroutine
@@ -257,3 +258,10 @@ def reading_recursive(root: str, /) -> int:
 
 def count_python(root: str) -> int:
     return sum(reading_recursive(root))
+
+
+def aware_utc(dt: datetime.datetime, format: Optional[bool] = True, mode: Optional[str] = 'F') -> datetime.datetime:
+    new_dt = dt.replace(tzinfo=pytz.UTC)
+    if format:
+        return discord.utils.format_dt(new_dt, mode)
+    return dt.replace(tzinfo=pytz.UTC)
