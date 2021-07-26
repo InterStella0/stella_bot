@@ -16,11 +16,11 @@ from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader
 from utils.greedy_parser import UntilFlag, command, GreedyParser
 from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, ConfirmView, PersistentRespondView
-from utils.menus import ListPageInteractionBase, HelpMenuBase, MenuViewInteractionBase
+from utils.menus import ListPageInteractionBase, MenuViewInteractionBase
 from utils import flags as flg
 from collections import namedtuple
 from jishaku.codeblocks import codeblock_converter
-from typing import Any, Tuple, List, Union, Optional, Literal, Dict, TYPE_CHECKING
+from typing import Any, Tuple, List, Union, Optional, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -52,7 +52,7 @@ class HelpSource(ListPageInteractionBase):
         author = menu.ctx.author
         return embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar.url)
 
-    async def format_view(self, menu: "HelpMenu", entry: Tuple[Optional[commands.Cog], List[CommandHelp]]) -> HelpMenuView:
+    async def format_view(self, menu: HelpMenu, entry: Tuple[Optional[commands.Cog], List[CommandHelp]]) -> HelpMenuView:
         if not menu._running:
             return
         _, list_commands = entry
@@ -129,38 +129,17 @@ class HelpSearchButton(BaseButton):
 
 class HelpMenu(MenuViewInteractionBase):
     """MenuPages class that is specifically for the help command."""
+    def __init__(self, *args: Any, description: Optional[str] = None, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.description = description or """This shows each commands in this bot. Each page is a category that shows 
+                                             what commands that the category have."""
 
     async def on_information_show(self, payload: discord.RawReactionActionEvent) -> None:
         ctx = self.ctx
-        embed = BaseEmbed.default(
-            ctx,
-            title="Information",
-            description="This shows each commands in this bot. Each page is a category that shows "
-                        "what commands that the category have."
-        )
+        embed = BaseEmbed.default(ctx, title="Information", description=self.description)
         curr = self.current_page + 1 if (p := self.current_page > -1) else "cover page"
-        pa = "page" if p else "the"
-        embed.set_author(icon_url=ctx.bot.user.avatar.url,
-                         name=f"You were on {pa} {curr}")
-        nav = '\n'.join(f"{e} {b.action.__doc__}" for e, b in super().buttons.items())
-        embed.add_field(name="Navigation:", value=nav)
-        await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
-
-
-class CogMenu(HelpMenuBase):
-    """This is a MenuPages class that is used only in Cog help command. All it has is custom information and
-       custom initial message."""
-
-    async def on_information_show(self, payload: discord.RawReactionActionEvent) -> None:
-        ctx = self.ctx
-        embed = BaseEmbed.default(ctx,
-                                  title="Information",
-                                  description="This shows each commands in this category. Each page is a command that shows "
-                                              "what's the command is about and a demonstration of usage.")
-        curr = self.current_page + 1 if (p := self.current_page > -1) else "cover page"
-        pa = "page" if p else "the"
-        embed.set_author(icon_url=ctx.bot.user.avatar.url,
-                         name=f"You were on {pa} {curr}")
+        pa = ("page", "the")[not p]
+        embed.set_author(icon_url=ctx.bot.user.avatar, name=f"You were on {pa} {curr}")
         nav = '\n'.join(f"{e} {b.action.__doc__}" for e, b in super().buttons.items())
         embed.add_field(name="Navigation:", value=nav)
         await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
@@ -174,30 +153,23 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     def get_command_signature(self, command: CommandGroup, ctx: Optional[StellaContext] = None) -> str:
         """Method to return a commands name and signature"""
-        if not ctx:
-            prefix = self.context.clean_prefix
-            if not command.signature and not command.parent:
-                return f'`{prefix}{command.name}`'
-            if command.signature and not command.parent:
-                return f'`{prefix}{command.name}` `{command.signature}`'
-            if not command.signature and command.parent:
-                return f'`{prefix}{command.parent}` `{command.name}`'
-            else:
-                return f'`{prefix}{command.parent}` `{command.name}` `{command.signature}`'
-        else:
-            def get_invoke_with():
-                msg = ctx.message.content
-                prefixmax = re.match(f'{re.escape(ctx.prefix)}', ctx.message.content).regs[0][1]
-                return msg[prefixmax:msg.rindex(ctx.invoked_with)]
+        def get_invoke_with():
+            msg = ctx.message.content
+            prefixmax = re.match(f'{re.escape(ctx.prefix)}', ctx.message.content).regs[0][1]
+            return msg[prefixmax:msg.rindex(ctx.invoked_with)]
 
-            if not command.signature and not command.parent:
-                return f'{ctx.prefix}{ctx.invoked_with}'
-            if command.signature and not command.parent:
-                return f'{ctx.prefix}{ctx.invoked_with} {command.signature}'
-            if not command.signature and command.parent:
-                return f'{ctx.prefix}{get_invoke_with()}{ctx.invoked_with}'
-            else:
-                return f'{ctx.prefix}{get_invoke_with()}{ctx.invoked_with} {command.signature}'
+        parent = get_invoke_with() if ctx else command.parent
+        command_name = ctx.invoked_with if ctx else command.name
+        prefix = (ctx or self.context).clean_prefix
+
+        if not command.signature and not command.parent:
+            return f'{prefix}{command_name}'
+        if command.signature and not command.parent:
+            return f'{prefix}{command_name} {command.signature}'
+        if not command.signature and command.parent:
+            return f'{prefix}{parent}{command_name}'
+        else:
+            return f'{prefix}{parent}{command_name} {command.signature}'
 
     def get_help(self, command: CommandGroup, brief: Optional[bool] = True) -> str:
         """Gets the command short_doc if brief is True while getting the longer help if it is false"""
@@ -330,7 +302,9 @@ class StellaBotHelp(commands.DefaultHelpCommand):
     async def send_cog_help(self, cog: commands.Cog) -> None:
         """Gets invoke when `uwu help <cog>` is invoked."""
         cog_commands = [self.get_command_help(c) for c in await self.filter_commands(cog.walk_commands(), sort=True)]
-        pages = CogMenu(source=empty_page_format(cog_commands))
+        description = """This shows each commands in this category. Each page is a command 
+                         that shows what's the command is about and a demonstration of usage."""
+        pages = HelpMenu(empty_page_format(cog_commands), description)
         with contextlib.suppress(discord.NotFound, discord.Forbidden):
             await pages.start(self.context, wait=True)
             await self.context.confirmed()
