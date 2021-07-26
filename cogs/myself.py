@@ -14,7 +14,7 @@ from discord.ext import commands
 from discord.ext.commands import Greedy
 from utils import greedy_parser
 from utils.decorators import event_check, pages
-from utils.useful import call, empty_page_format, print_exception, StellaContext, BaseEmbed
+from utils.useful import call, empty_page_format, print_exception, StellaContext, BaseEmbed, aware_utc
 from utils.buttons import InteractionPages
 from utils.greedy_parser import GreedyParser, Separator, UntilFlag
 from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
@@ -423,9 +423,8 @@ class Myself(commands.Cog):
             if data := await self.bot.pool_pg.fetchrow(query + " WHERE snowflake_id=$1", snowflake_id.id):
                 uid = user_guild(data)
                 reason = data["reason"]
-                timestamp = data["timestamp"].replace(tzinfo=pytz.UTC)
                 embed = BaseEmbed.default(ctx, title=f"Blacklist for {uid}", description=f"**Reason:**\n{reason}")
-                embed.add_field(name="Time of blacklist", value=discord.utils.format_dt(timestamp, "F"))
+                embed.add_field(name="Time of blacklist", value=aware_utc(data["timestamp"]))
                 await ctx.maybe_reply(embed=embed)
             else:
                 await ctx.maybe_reply(f"`{snowflake_id}` is not blacklisted.")

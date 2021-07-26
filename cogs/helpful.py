@@ -20,7 +20,7 @@ from utils.menus import ListPageInteractionBase, HelpMenuBase, MenuViewInteracti
 from utils import flags as flg
 from collections import namedtuple
 from jishaku.codeblocks import codeblock_converter
-from typing import Any, Tuple, List, Union, Optional, Literal, Dict, TYPE_CHECKING
+from typing import Any, Tuple, List, Union, Optional, Literal, Dict, TYPE_CHECKING, Type
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -69,9 +69,12 @@ class HelpMenuView(MenuViewBase):
     """This class is responsible for starting the view + menus activity for the help command.
        This accepts embed, help_command, context, page_source, dataset and optionally Menu.
        """
-
-    def __init__(self, embed: discord.Embed, help_object: commands.HelpCommand, *args: Any, **kwargs: Any):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *data: Any, embed: discord.Embed, help_object: StellaBotHelp, context: StellaContext, **kwargs: Any):
+        super().__init__(context, HelpSource, *data,
+                         button=HelpButton,
+                         menu=HelpMenu,
+                         style=discord.ButtonStyle.primary,
+                         **kwargs)
         self.original_embed = embed
         self.help_command = help_object
 
@@ -274,14 +277,13 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         embed.set_thumbnail(url=bot.user.avatar)
         embed.set_author(name=f"By {stella}", icon_url=stella.avatar)
         loads = {
-            "style": discord.ButtonStyle.primary,
-            "button": HelpButton,
-            "mapper": command_data,
-            "menu": HelpMenu
+            "embed": embed,
+            "help_object": self,
+            "context": ctx,
+            "mapper": command_data
         }
         cog_names = [*discord.utils.as_chunks(cog_names, 5)]
-        args = [embed, self, ctx, HelpSource, *cog_names]
-        menu_view = HelpMenuView(*args, **loads)
+        menu_view = HelpMenuView(*cog_names, **loads)
         await ctx.reply(embed=embed, view=menu_view)
 
     def get_command_help(self, command: commands.Command) -> discord.Embed:
