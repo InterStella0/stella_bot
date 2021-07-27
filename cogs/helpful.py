@@ -482,15 +482,21 @@ class Helpful(commands.Cog):
             await self.bot.pool_pg.execute(query_msg, *msg_values)
 
     @report.error
-    async def report_error(self, ctx, error):
+    async def report_error(self, ctx: StellaContext, error: commands.CommandError):
         if isinstance(error, commands.CommandOnCooldown):
             if self.cooldown_report.update_rate_limit(ctx.message):
                 await self.bot.add_blacklist(ctx.author.id, "Spamming cooldown report message.")
         self.bot.dispatch("command_error", ctx, BypassError(error))
 
     @commands.command()
-    async def about(self, ctx):
-        embed = BaseEmbed.default(ctx, title=f"About {self.bot.user}", description=self.bot.description.format(self.bot.stella))
+    async def about(self, ctx: StellaContext):
+        REPO_URL = "https://github.com/InterStella0/stella_bot"
+        embed = BaseEmbed.default(
+            ctx, 
+            title=f"About {self.bot.user}", 
+            description=self.bot.description.format(self.bot.stella),
+            url=REPO_URL
+        )
         payload = {
             "bot_name": str(self.bot.user),
             "name": str(self.bot.stella),
@@ -501,14 +507,15 @@ class Helpful(commands.Cog):
         banner = await self.bot.ipc_client.request("generate_banner", **payload)
         embed.set_image(url=banner)
         repo = Repository('.git')
+        HEAD = repo.head.target
         COMMIT_AMOUNT = 4
-        iterator = itertools.islice(repo.walk(repo.head.target, GIT_SORT_TOPOLOGICAL), COMMIT_AMOUNT)
+        iterator = itertools.islice(repo.walk(HEAD, GIT_SORT_TOPOLOGICAL), COMMIT_AMOUNT)
 
         def format_commit(c):
             time = datetime.datetime.fromtimestamp(c.commit_time)
-            repo_link = "https://github.com/InterStella0/stella_bot/commit/"
+            repo_link = f"{REPO_URL}/commit/{c.hex}"
             message, *_ = c.message.partition("\n")
-            return f"[`{c.hex[:6]}`] [{message}]({repo_link}{c.hex}) ({aware_utc(time, mode='R')})"
+            return f"[`{c.hex[:6]}`] [{message}]({repo_link}) ({aware_utc(time, mode='R')})"
 
         embed.add_field(name="Recent Changes", value="\n".join(map(format_commit, iterator)), inline=False)
         embed.add_field(name="Launch Time", value=f"{aware_utc(self.bot.uptime, 'R')}")
