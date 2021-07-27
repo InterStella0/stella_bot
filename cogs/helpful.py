@@ -260,7 +260,8 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             "author_avatar_hash": ctx.author.avatar.key,
             "author_name": str(ctx.author)
         }
-        embed.set_image(url=await bot.ipc_client.request("generate_banner", **payload))
+        banner = await bot.ipc_client.request("generate_banner", **payload)
+        embed.set_image(url=banner)
         embed.set_author(name=f"By {stella}", icon_url=stella.avatar)
 
         loads = {
@@ -497,16 +498,17 @@ class Helpful(commands.Cog):
             "author_avatar_hash": ctx.author.avatar.key,
             "author_name": str(ctx.author)
         }
-        embed.set_image(url=await self.bot.ipc_client.request("generate_banner", **payload))
+        banner = await self.bot.ipc_client.request("generate_banner", **payload)
+        embed.set_image(url=banner)
         repo = Repository('.git')
         COMMIT_AMOUNT = 4
         iterator = itertools.islice(repo.walk(repo.head.target, GIT_SORT_TOPOLOGICAL), COMMIT_AMOUNT)
 
         def format_commit(c):
-            time = datetime.datetime.fromtimestamp(c.commit_time - c.commit_time_offset * 60)
+            time = datetime.datetime.fromtimestamp(c.commit_time)
             repo_link = "https://github.com/InterStella0/stella_bot/commit/"
             message, *_ = c.message.partition("\n")
-            return f"[{c.hex[:6]}]({repo_link}{c.hex}) `{message}` ({aware_utc(time, mode='R')})"
+            return f"[`{c.hex[:6]}`] [{message}]({repo_link}{c.hex}) ({aware_utc(time, mode='R')})"
 
         embed.add_field(name="Recent Changes", value="\n".join(map(format_commit, iterator)), inline=False)
         embed.add_field(name="Launch Time", value=f"{aware_utc(self.bot.uptime, 'R')}")

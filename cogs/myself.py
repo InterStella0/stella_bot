@@ -486,6 +486,11 @@ class Myself(commands.Cog):
         await msg.reply(embed=embed)
         await message.reply(f"You've forcefully ended the report. (`{report_id}`)")
 
+    @commands.command()
+    async def botupdate(self, ctx):
+        jsk = self.bot.get_command("jsk git")
+        await jsk(ctx, argument=Codeblock("me", "pull"))
+
 
 def setup(bot: StellaBot) -> None:
     cog = Myself(bot)
