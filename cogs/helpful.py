@@ -9,9 +9,10 @@ import humanize
 import datetime
 import textwrap
 import itertools
+from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
 from fuzzywuzzy import process
 from discord.ext import commands
-from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext
+from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader
 from utils.greedy_parser import UntilFlag, command, GreedyParser
@@ -254,7 +255,10 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         )
         payload = {
             "bot_name": str(bot.user),
-            "name": str(bot.stella)
+            "name": str(bot.stella),
+            "author_avatar": ctx.author.avatar.url,
+            "author_avatar_hash": ctx.author.avatar.key,
+            "author_name": str(ctx.author)
         }
         embed.set_image(url=await bot.ipc_client.request("generate_banner", **payload))
         embed.set_author(name=f"By {stella}", icon_url=stella.avatar)
@@ -482,6 +486,35 @@ class Helpful(commands.Cog):
             if self.cooldown_report.update_rate_limit(ctx.message):
                 await self.bot.add_blacklist(ctx.author.id, "Spamming cooldown report message.")
         self.bot.dispatch("command_error", ctx, BypassError(error))
+
+    @commands.command()
+    async def about(self, ctx):
+        embed = BaseEmbed.default(ctx, title=f"About {self.bot.user}", description=self.bot.description.format(self.bot.stella))
+        payload = {
+            "bot_name": str(self.bot.user),
+            "name": str(self.bot.stella),
+            "author_avatar": ctx.author.avatar.url,
+            "author_avatar_hash": ctx.author.avatar.key,
+            "author_name": str(ctx.author)
+        }
+        embed.set_image(url=await self.bot.ipc_client.request("generate_banner", **payload))
+        repo = Repository('.git')
+        COMMIT_AMOUNT = 4
+        iterator = itertools.islice(repo.walk(repo.head.target, GIT_SORT_TOPOLOGICAL), COMMIT_AMOUNT)
+
+        def format_commit(c):
+            time = datetime.datetime.fromtimestamp(c.commit_time - c.commit_time_offset * 60)
+            repo_link = "https://github.com/InterStella0/stella_bot/commit/"
+            message, *_ = c.message.partition("\n")
+            return f"[{c.hex[:6]}]({repo_link}{c.hex}) `{message}` ({aware_utc(time, mode='R')})"
+
+        embed.add_field(name="Recent Changes", value="\n".join(map(format_commit, iterator)), inline=False)
+        embed.add_field(name="Launch Time", value=f"{aware_utc(self.bot.uptime, 'R')}")
+        embed.add_field(name="Bot Ping", value=f"{self.bot.latency * 1000:.2f}ms")
+        bots = sum(u.bot for u in self.bot.users)
+        content = f"{len(self.bot.guilds):,} servers, `{len(self.bot.users) - bots:,}` users, `{bots:,}` bots"
+        embed.add_field(name="Users", value=content)
+        await ctx.embed(embed=embed)
 
     def cog_unload(self) -> None:
         self.bot.help_command = self._default_help_command
