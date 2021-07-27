@@ -512,7 +512,7 @@ class Helpful(commands.Cog):
         embed.add_field(name="Launch Time", value=f"{aware_utc(self.bot.uptime, 'R')}")
         embed.add_field(name="Bot Ping", value=f"{self.bot.latency * 1000:.2f}ms")
         bots = sum(u.bot for u in self.bot.users)
-        content = f"{len(self.bot.guilds):,} servers, `{len(self.bot.users) - bots:,}` users, `{bots:,}` bots"
+        content = f"`{len(self.bot.guilds):,}` servers, `{len(self.bot.users) - bots:,}` users, `{bots:,}` bots"
         embed.add_field(name="Users", value=content)
         await ctx.embed(embed=embed)
 
