@@ -1,6 +1,7 @@
 import time
 import re
 import asyncpg
+import asyncio
 import datetime
 import os
 import copy
@@ -296,6 +297,18 @@ async def on_message(message):
                 await bot.process_commands(new_message)
 
     await bot.process_commands(message)
+
+
+@bot.ipc_client.listen()
+async def on_restarting_server(data):
+    print("Server restarting...")
+    server = bot.ipc_client
+    await server.session.close()
+    print("Server waiting for server respond.")
+    await asyncio.sleep(10)
+    print("Server re-establishing connection")
+    await server.init_sock()
+    print("Server Connection Successful.")
 
 
 bot.starter()

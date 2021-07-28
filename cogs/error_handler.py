@@ -45,10 +45,14 @@ class ErrorHandler(commands.Cog):
     async def on_command_error(self, ctx: StellaContext, error: commands.CommandError) -> None:
         """The event triggered when an error is raised while invoking a command."""
         async def send_del(*args: Any, **kwargs: Any) -> None:
+            if embed := kwargs.get("embed"):
+                command = self.bot.get_command('report')
+                command_sig = f"{ctx.clean_prefix}{command.qualified_name} {command.signature}"
+                text = f"If you think this is an error. Report via {command_sig}"
+                embed.set_footer(icon_url=self.bot.user.avatar, text=text)
             await ctx.reply(*args, delete_after=60, **kwargs)
             if ctx.channel.permissions_for(ctx.me).manage_messages:
-                with contextlib.suppress(discord.NotFound):
-                    await ctx.message.delete(delay=60)
+                await ctx.message.delete(delay=60)
 
         async def handle_missing_param(template: discord.Embed) -> None:
             name = error.param.name

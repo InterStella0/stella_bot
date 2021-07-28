@@ -7,7 +7,6 @@ import tabulate
 import asyncio
 import traceback
 import io
-import pytz
 import textwrap
 from typing import Union, Optional, Any, Tuple, Coroutine, Generator, Dict, TYPE_CHECKING, List
 from discord.ext import commands
@@ -397,7 +396,7 @@ class Myself(commands.Cog):
             await InteractionPages(show_result(chunked)).start(ctx)
 
     @commands.group(invoke_without_command=True)
-    async def blacklist(self, ctx, snowflake_id: Optional[Union[discord.Guild, discord.User]]):
+    async def blacklist(self, ctx: StellaContext, snowflake_id: Optional[Union[discord.Guild, discord.User]]):
         E = Union[discord.User, discord.Guild, int]
 
         def user_guild(data: Dict[str, Union[int, str]]) -> E:
@@ -430,14 +429,14 @@ class Myself(commands.Cog):
                 await ctx.maybe_reply(f"`{snowflake_id}` is not blacklisted.")
 
     @blacklist.command(name="add")
-    async def blaclist_add(self, ctx, snowflake_ids: Greedy[Union[discord.Guild, discord.User]], *, reason: str):
+    async def blaclist_add(self, ctx: StellaContext, snowflake_ids: Greedy[Union[discord.Guild, discord.User]], *, reason: str):
         for uid in snowflake_ids:
             await self.bot.add_blacklist(uid.id, reason)
         names = ", ".join(map(str, snowflake_ids))
         await ctx.maybe_reply(f"{names} are now blacklisted.")
 
     @blacklist.command(name="remove")
-    async def blaclist_remove(self, ctx, snowflake_ids: Greedy[Union[discord.Guild, discord.User]]):
+    async def blaclist_remove(self, ctx: StellaContext, snowflake_ids: Greedy[Union[discord.Guild, discord.User]]):
         for uid in snowflake_ids:
             await self.bot.remove_blacklist(uid.id)
         names = ", ".join(map(str, snowflake_ids))
@@ -455,7 +454,7 @@ class Myself(commands.Cog):
         await self.bot.close()
 
     @commands.command()
-    async def report_end(self, ctx, message: discord.Message):
+    async def report_end(self, ctx: StellaContext, message: discord.Message):
         query = """SELECT report_id, user_id 
                    FROM reports WHERE report_id=(
                     SELECT report_id 
@@ -487,7 +486,7 @@ class Myself(commands.Cog):
         await message.reply(f"You've forcefully ended the report. (`{report_id}`)")
 
     @commands.command()
-    async def botupdate(self, ctx):
+    async def botupdate(self, ctx: StellaContext):
         jsk = self.bot.get_command("jsk git")
         await jsk(ctx, argument=Codeblock("me", "pull"))
 

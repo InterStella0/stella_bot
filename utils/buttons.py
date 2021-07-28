@@ -2,6 +2,7 @@ from __future__ import annotations
 import discord
 import inspect
 import asyncio
+import contextlib
 from copy import copy
 from functools import partial
 from discord import ui
@@ -275,9 +276,12 @@ class ConfirmView(ViewAuthor, CallbackView):
         if not self.delete_after:
             for x in self.children:
                 x.disabled = True
-            await self.message.edit(view=self)
+            coro = self.message.edit(view=self)
         else:
-            await self.message.delete()
+            coro = self.message.delete()
+
+        with contextlib.suppress(discord.HTTPException):
+            await coro
         return self.result
 
     async def confirmed(self, button: ui.Button, interaction: discord.Interaction):

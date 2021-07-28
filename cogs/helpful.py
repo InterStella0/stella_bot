@@ -176,9 +176,9 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         if command.signature and not command.parent:
             return f'{prefix}{command_name} {command.signature}'
         if not command.signature and command.parent:
-            return f'{prefix}{parent}{command_name}'
+            return f'{prefix}{parent} {command_name}'
         else:
-            return f'{prefix}{parent}{command_name} {command.signature}'
+            return f'{prefix}{parent} {command_name} {command.signature}'
 
     def get_help(self, command: CommandGroup, brief: Optional[bool] = True) -> str:
         """Gets the command short_doc if brief is True while getting the longer help if it is false"""
@@ -261,7 +261,8 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             "author_name": str(ctx.author)
         }
         banner = await bot.ipc_client.request("generate_banner", **payload)
-        embed.set_image(url=banner)
+        if isinstance(banner, str):
+            embed.set_image(url=banner)
         embed.set_author(name=f"By {stella}", icon_url=stella.avatar)
 
         loads = {
@@ -488,7 +489,7 @@ class Helpful(commands.Cog):
                 await self.bot.add_blacklist(ctx.author.id, "Spamming cooldown report message.")
         self.bot.dispatch("command_error", ctx, BypassError(error))
 
-    @commands.command()
+    @commands.command(aliases=["aboutme"], help="Shows what the bot is about. It also shows recent changes and stuff.")
     async def about(self, ctx: StellaContext):
         REPO_URL = "https://github.com/InterStella0/stella_bot"
         embed = BaseEmbed.default(
@@ -505,7 +506,8 @@ class Helpful(commands.Cog):
             "author_name": str(ctx.author)
         }
         banner = await self.bot.ipc_client.request("generate_banner", **payload)
-        embed.set_image(url=banner)
+        if isinstance(banner, str):
+            embed.set_image(url=banner)
         repo = Repository('.git')
         HEAD = repo.head.target
         COMMIT_AMOUNT = 4
