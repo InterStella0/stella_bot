@@ -209,7 +209,7 @@ class InteractionPages(ui.View, MenuBase):
     @ui.button(emoji='<:stop_check:754948796365930517>')
     async def stop_page(self, *_: Union[ui.Button, discord.Interaction]):
         self.stop()
-        await self.message.delete()
+        await self.message.delete(delay=0)
 
     @ui.button(emoji='<:next_check:754948796361736213>')
     async def next_page(self, *_: Union[ui.Button, discord.Interaction]):
@@ -249,7 +249,7 @@ class InteractionPages(ui.View, MenuBase):
         return True
 
     async def on_timeout(self) -> None:
-        await self.message.delete()
+        await self.message.delete(delay=0)
 
 
 class ConfirmView(ViewAuthor, CallbackView):
