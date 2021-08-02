@@ -72,6 +72,13 @@ class StellaBot(commands.Bot):
         self.blacklist.remove(snowflake_id)
         await self.ipc_client.request("global_unblacklist_id", snowflake_id=snowflake_id)
 
+    def get_command_signature(self, ctx: StellaContext, command_name: str) -> str:
+        help_c = self.help_command
+        if not (command := self.get_command(command_name)):
+            raise Exception("Command does not exist for signature.")
+
+        return help_c.get_command_signature(command, ctx)
+
     async def after_db(self) -> None:
         """Runs after the db is connected"""
         await to_call.call(self)
@@ -306,6 +313,7 @@ bot_data = {
     "intents": intents,
     "owner_id": 591135329117798400,
     "socket_states": states.get("WEBSOCKET_STATES"),
+    "activity": discord.Activity(type=discord.ActivityType.listening, name="phone. who dis doe"),
     "description": "{}'s personal bot that is partially for the public. "
                    f"Written with only `{count_python('.'):,}` lines. plz be nice"
 }

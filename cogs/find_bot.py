@@ -9,6 +9,7 @@ import contextlib
 import functools
 import collections
 import textwrap
+import operator
 from dataclasses import dataclass
 from discord.ext import commands
 from discord.ext.commands import UserNotFound
@@ -84,6 +85,24 @@ class BotOwner(BotAdded):
         if not ctx.guild.get_member(botdata.bot.id):
             raise commands.CommandError("This bot must be in the server.")
         return botdata
+
+
+class BotPending(BotAdded):
+    @classmethod
+    async def convert(cls, ctx: StellaContext, argument: str) -> BotPending:
+        botdata = await super().convert(ctx, argument)
+        if isinstance(botdata.bot, discord.Member):
+            suggest = ctx.bot.get_command_signature(ctx, "botinfo")
+            raise commands.CommandError(f"Sorry `{botdata.bot}` is already in the server. Use `{suggest}` instead.")
+
+        return botdata
+
+
+class BotPendingFlag(commands.FlagConverter):
+    reverse: Optional[bool] = flg.flag(aliases=["reverses"],
+                                       help="Reverse the list order, this is False by default.", default=False)
+    bot: Optional[BotPending] = flg.flag(aliases=['user'],
+                                         help="Allow execution of repl, defaults to True, unless a non owner.")
 
 
 def pprefix(bot_guild: Union[StellaBot, discord.Guild], prefix: str) -> str:
@@ -804,16 +823,20 @@ class FindBot(commands.Cog, name="Bots"):
             await ctx.embed(title="Bot Command Rank", description="\n".join(realign(contents, key)))
 
     @commands.command(aliases=["pendingbot", "penbot", "peb"],
-                      help="A bot that registered to ?addbot command of R. Danny but never joined the server.",
-                      cls=flg.SFlagCommand)
-    @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
-                  help="Reverses the list based on the requested date. This flag accepts True or False, default to "
-                       "False if not stated.")
+                      help="A bot that registered to ?addbot command of R. Danny but never joined the server.")
     @is_discordpy()
-    async def pendingbots(self, ctx: StellaContext, **flags: bool):
-        ordered = " DESC" if not flags.get("reverse", False) else ""
-        bots = await self.bot.pool_pg.fetch("SELECT * FROM pending_bots ORDER BY requested_at" + ordered)
+    async def pendingbots(self, ctx: StellaContext, *, flag: BotPendingFlag):
+        sql = "SELECT * FROM pending_bots ORDER BY requested_at "
+        sql += "DESC" if not flag.reverse else ""
+        bots = await self.bot.pool_pg.fetch(sql)
         menu = InteractionPages(bot_pending_list(bots))
+        if data := flag.bot:
+            bot_target = data.bot.id
+            get_bot_id = operator.itemgetter("bot_id")
+            # It's impossible for it to be None, both came from pending_bots table. Unless race condition occurs
+            index, _ = discord.utils.find(lambda b: get_bot_id(b[1]) == bot_target, enumerate(bots))
+            menu.current_page = index
+
         menu.cached_bots = self.cached_bots
         await menu.start(ctx)
 
