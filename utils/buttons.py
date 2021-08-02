@@ -78,8 +78,7 @@ class ViewAuthor(ui.View):
             bucket = self.cooldown.get_bucket(ctx.message)
             if not bucket.update_rate_limit():
                 if self.is_command:
-                    h = ctx.bot.help_command
-                    command = h.get_command_signature(ctx.command, ctx)
+                    command = ctx.bot.get_command_signature(ctx, ctx.command)
                     content = f"Only `{author}` can use this. If you want to use it, use `{command}`"
                 else:
                     content = f"Only `{author}` can use this."
@@ -240,8 +239,7 @@ class InteractionPages(ui.View, MenuBase):
         if interaction.user != author:
             bucket = self.cooldown.get_bucket(ctx.message)
             if not bucket.update_rate_limit():
-                h = ctx.bot.help_command
-                command = h.get_command_signature(ctx.command, ctx)
+                command = ctx.bot.get_command_signature(ctx, ctx.command)
                 content = f"Only `{author}` can use this menu. If you want to use it, use `{command}`"
                 embed = BaseEmbed.to_error(description=content)
                 await interaction.response.send_message(embed=embed, ephemeral=True)

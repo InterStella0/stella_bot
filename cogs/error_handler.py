@@ -116,7 +116,7 @@ class ErrorHandler(commands.Cog):
         command = ctx.command
         help_com = self.bot.help_command
         help_com.context = ctx
-        real_signature = help_com.get_command_signature(command, ctx)
+        real_signature = self.bot.get_command_signature(ctx, command)
         if ctx.current_parameter is None:
             if not isinstance(error, commands.MissingRequiredArgument):
                 return

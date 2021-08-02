@@ -72,12 +72,13 @@ class StellaBot(commands.Bot):
         self.blacklist.remove(snowflake_id)
         await self.ipc_client.request("global_unblacklist_id", snowflake_id=snowflake_id)
 
-    def get_command_signature(self, ctx: StellaContext, command_name: str) -> str:
-        help_c = self.help_command
-        if not (command := self.get_command(command_name)):
-            raise Exception("Command does not exist for signature.")
-
-        return help_c.get_command_signature(command, ctx)
+    def get_command_signature(self, ctx: StellaContext, command_name: Union[commands.Command, str]) -> str:
+        if isinstance(command_name, str):
+            if not (command := self.get_command(command_name)):
+                raise Exception("Command does not exist for signature.")
+        else:
+            command = command_name
+        return self.help_command.get_command_signature(command, ctx)
 
     async def after_db(self) -> None:
         """Runs after the db is connected"""
