@@ -346,7 +346,7 @@ class InteractionPages(BaseView, MenuBase):
             if not value.isdigit():
                 await message.reply("Please enter a valid number.", delete_after=60)
             else:
-                return 0 < int(value) < self.max_pages
+                return 0 < int(value) <= self.max_pages
 
     async def start(self, ctx: StellaContext, /) -> None:
         self.ctx = ctx
