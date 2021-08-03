@@ -21,7 +21,7 @@ from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButton
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMenuBase
 from utils import flags as flg
 from collections import namedtuple
-from jishaku.codeblocks import codeblock_converter
+from jishaku.codeblocks import codeblock_converter, Codeblock
 from typing import Any, Tuple, List, Union, Optional, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -453,6 +453,9 @@ class Helpful(commands.Cog):
         flags = dict(flags)
         async with ctx.typing():
             if flags.get('exec') and not await self.bot.is_owner(ctx.author):
+                if code.language is None:
+                    content = code.content
+                    code = Codeblock("py", f"\n{content}\n")
                 code = await Tio().repr_run(code.content)
             else:
                 code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
