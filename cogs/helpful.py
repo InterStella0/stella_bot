@@ -13,6 +13,7 @@ from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
 from fuzzywuzzy import process
 from discord.ext import commands
 from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc
+from utils.decorators import pages
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, Tio
 from utils.greedy_parser import UntilFlag, command, GreedyParser
@@ -36,6 +37,11 @@ emoji_dict = {"Bots": '<:robot_mark:848257366587211798>',
               "Myself": '<:me:848262873783205888>',
               None: '<:question:848263403604934729>'}
 home_emoji = '<:house_mark:848227746378809354>'
+
+
+@pages()
+async def formatter(self, menu, entry):
+    return f"```py\n{entry}```"
 
 
 class HelpSource(ListPageInteractionBase):
@@ -449,7 +455,15 @@ class Helpful(commands.Cog):
             code = await Tio().repr_run(code.content)
         else:
             code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
-        await ctx.maybe_reply(f"```py\n{code}```")
+
+        text = textwrap.wrap(code, width=1880, replace_whitespace=False)
+
+        if len(text) > 1:
+            pages = InteractionPages(formatter(text))
+            await pages.start(ctx)
+        else:
+            code, = text
+            await ctx.maybe_reply(f"```py\n{code}```")
 
     @commands.command(help="Reports to the owner through the bot. Automatic blacklist if abuse.")
     @commands.cooldown(1, 60, commands.BucketType.user)
