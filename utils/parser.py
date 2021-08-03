@@ -1,14 +1,17 @@
+import aiohttp
 import contextlib
-import discord
 import re
 import traceback
 import itertools
 import io
 import textwrap
 import warnings
+import zlib
+import inspect
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator
 from collections import namedtuple
 from jishaku.codeblocks import Codeblock
+from discord.utils import find, get
 from utils.errors import ReplParserDies
 from utils.useful import cancel_gen
 
@@ -104,7 +107,7 @@ class ReplParser:
     def execute_inside_dent(self, no: int, line: str, match: re.Match) -> str:
         captured = match["captured"]
         if part := self.JOINER.get(captured):
-            ind = discord.utils.get(self.meet_collon, space=self.space)
+            ind = get(self.meet_collon, space=self.space)
             if getattr(ind, "part", None) in part:
                 index = self.meet_collon.index(ind)
                 self.meet_collon[index] = Indentor(self.space, captured, ind.func)
@@ -113,7 +116,7 @@ class ReplParser:
                     self.inside_function_statement(no, line, ind, match)
             else:
                 raise ReplParserDies("Invalid Syntax", no, line, self.indicator_mode)
-        if expect := discord.utils.get(self.expecting_combo, space=self.space):
+        if expect := get(self.expecting_combo, space=self.space):
             if captured not in self.COMBINATION.get(expect.part):
                 raise ReplParserDies("Invalid Syntax", no, line, self.indicator_mode)
             if expect.part == '@':
@@ -146,10 +149,10 @@ class ReplParser:
         if x_space.func:  # In a function
             is_async = "async" in x_space.func
             if is_async: 
-                if value := discord.utils.find(lambda x: x == syntax, self.SYNC_FUNC_ONLY):
+                if value := find(lambda x: x == syntax, self.SYNC_FUNC_ONLY):
                     raise ReplParserDies(f"'{value}' is inside async function.", no, line, self.indicator_mode)
             else:
-                if value := discord.utils.find(lambda x: x == syntax, self.ASYNC_FUNC_ONLY):
+                if value := find(lambda x: x == syntax, self.ASYNC_FUNC_ONLY):
                     raise ReplParserDies(f"'{value}' is outside async function.", no, line, self.indicator_mode)
             
             if not statement and syntax not in ("yield", "return"):
@@ -226,7 +229,7 @@ class ReplParser:
         if self.expected_indent != '@' and self.expected_indent is not None:
             if self.previous_space < self.space:
                 self.previous_space = self.space
-                if before := discord.utils.find(lambda x: x.func in self.FUNCTION_DEF, reversed(self.meet_collon)):
+                if before := find(lambda x: x.func in self.FUNCTION_DEF, reversed(self.meet_collon)):
                     func = before.func
                 else:
                     func = self.expected_indent if self.expected_indent in self.FUNCTION_DEF else None
@@ -409,3 +412,102 @@ class ReplReader:
     async def empty(self) -> AsyncGenerator[None, None]:
         while True:
             yield
+
+# TODO: early code, make sure to refactor later
+
+
+IMPORTANT_PARTS = r"""
+import asyncio
+import contextlib
+import re
+import traceback
+import itertools
+import io
+import textwrap
+import warnings
+from collections import namedtuple
+from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator, TypeVar
+
+class ReplParserDies(Exception):
+    def __init__(self, message: str, no: int, line: str, mode: bool):
+        super().__init__(message=message)
+        self.message = message
+        self.line = line
+        self.no = no
+        self.mode = mode
+
+Codeblock = namedtuple('Codeblock', 'language content')
+T = TypeVar('T')
+async def cancel_gen(agen) -> None:
+    task = asyncio.create_task(agen.__anext__())
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    await agen.aclose() 
+
+from operator import attrgetter
+def find(predicate, seq):
+    for element in seq:
+        if predicate(element):
+            return element
+    return None
+
+Indentor = namedtuple("Indentor", "space part func")
+IMPORT_REGEX = re.compile(r"(?P<import>[^\s.()]+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
+
+def get_import(d: re.Match) -> str:
+    return d['import'][:-1]
+""" + inspect.getsource(get)
+
+RUNNER = r"""
+async def runner():
+    to_run = {}
+    code = Codeblock('python', to_run)
+    print("\n".join([o async for o in ReplReader(code, exec=True)]))
+asyncio.run(runner())
+"""
+
+
+class Tio:
+    URL: str = "https://tio.run/cgi-bin/run/api/"
+
+    @staticmethod
+    def format_payload(name: str, obj: Union[list, str]) -> bytes:
+        def to_bytes(value):
+            return bytes(value, encoding='utf-8')
+
+        end = '\x00'
+        if not obj:
+            return b''
+        elif isinstance(obj, list):
+            content = ['V' + name, str(len(obj))] + obj
+            return to_bytes(end.join(content) + end)
+        else:
+            return to_bytes(f"F{name}{end}{len(to_bytes(obj))}{end}{obj}{end}")
+
+    async def repr_run(self, code: str) -> str:
+        parser = inspect.getsource(ReplParser)
+        reader = inspect.getsource(ReplReader)
+        complete = IMPORTANT_PARTS + parser + reader
+        complete += RUNNER.format(repr(code))
+        return await self.run(complete)
+
+    async def run(self, code: str) -> str:
+        payload = {
+            "lang": ["python38pr"],
+            ".code.tio": code,
+            '.input.tio': '',
+            'TIO_CFLAGS': [],
+            'TIO_OPTIONS': [],
+            'args': []
+        }
+        p_bytes = b''.join(itertools.starmap(self.format_payload, payload.items())) + b'R'
+        data = zlib.compress(p_bytes, 9)[2:-4]
+        async with aiohttp.ClientSession() as session:
+            async with session.post(self.URL, data=data) as recv:
+                if recv.status == 200:
+                    r_bytes = await recv.read()
+                    output = r_bytes.decode('utf-8')
+                    values = output.replace(output[:16], '')
+                    statistic = values.splitlines()
+                    return "\n".join(statistic[:-5])

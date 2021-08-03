@@ -14,7 +14,7 @@ from fuzzywuzzy import process
 from discord.ext import commands
 from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc
 from utils.errors import CantRun, BypassError
-from utils.parser import ReplReader
+from utils.parser import ReplReader, Tio
 from utils.greedy_parser import UntilFlag, command, GreedyParser
 from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, PersistentRespondView
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMenuBase
@@ -446,8 +446,9 @@ class Helpful(commands.Cog):
         }
         flags = dict(flags)
         if flags.get('exec') and not await self.bot.is_owner(ctx.author):
-            flags.update({"exec": False, "inner_func_check": True})
-        code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
+            code = await Tio().repr_run(code.content)
+        else:
+            code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
         await ctx.maybe_reply(f"```py\n{code}```")
 
     @commands.command(help="Reports to the owner through the bot. Automatic blacklist if abuse.")
