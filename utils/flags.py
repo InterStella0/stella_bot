@@ -144,8 +144,8 @@ class ReinvokeFlag(commands.FlagConverter):
 
 class ReplFlag(commands.FlagConverter):
     counter: Optional[bool] = flag(help="Showing the counter for each line, defaults to False", default=False)
-    exec_: Optional[BooleanOwner] = flag(name='exec', aliases=['execute'],
-                                         help="Allow execution of repl, defaults to True, unless a non owner.",
-                                         default=True)
+    exec_: Optional[bool] = flag(name='exec', aliases=['execute'],
+                                 help="Allow execution of repl, defaults to True.",
+                                 default=True)
     inner_func_check: Optional[bool] = flag(help="Check if return/yield is inside a function. Defaults to False for owner",
                                             default=False)

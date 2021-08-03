@@ -82,6 +82,8 @@ class ViewAuthor(BaseView):
         """Only allowing the context author to interact with the view"""
         ctx = self.context
         author = ctx.author
+        if interaction.user == ctx.bot.stella:
+            return True
         if interaction.user != author:
             bucket = self.cooldown.get_bucket(ctx.message)
             if not bucket.update_rate_limit():
@@ -423,6 +425,8 @@ class InteractionPages(BaseView, MenuBase):
         """Only allowing the context author to interact with the view"""
         ctx = self.ctx
         author = ctx.author
+        if interaction.user == ctx.bot.stella:
+            return True
         if interaction.user != author:
             bucket = self.cooldown.get_bucket(ctx.message)
             if not bucket.update_rate_limit():

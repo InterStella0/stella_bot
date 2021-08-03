@@ -19,6 +19,8 @@ from utils.useful import cancel_gen
 
 Indentor = namedtuple("Indentor", "space part func")
 IMPORT_REGEX = re.compile(r"(?P<import>[^\s.()]+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
+# I just like tricking people for no reason skskksks
+things = '".code.tio"', '"/home/sarah/runner.py"'
 
 
 def get_import(d: re.Match) -> str:
@@ -277,7 +279,8 @@ class ReplReader:
         async for each in self.reading_codeblock():
             if isinstance(each, tuple):
                 compiled, _ = each
-                yield compiled
+                r = [*map(lambda x: "File " + x, things)]
+                yield compiled.replace(*r)
                 return
             yield each
         # eof
@@ -300,7 +303,8 @@ class ReplReader:
             return await self.iterator.asend(line)
         except ReplParserDies as e:
             lines = traceback.format_exception(type(e), e, e.__traceback__)
-            return "".join(lines), e
+            r = [*map(lambda x: "File " + x, things)]
+            return "".join(li.replace(*r) for li in lines), e
 
     async def reading_codeblock(self) -> AsyncGenerator[str, None]:
         codes = self.codeblock.content.splitlines()
@@ -404,7 +408,8 @@ class ReplReader:
                     yield await self.compiling(build_str, global_vars)
                 except BaseException as e:
                     lines = traceback.format_exception(type(e), e, e.__traceback__)
-                    yield "".join(lines), -1
+                    r = [*map(lambda x: "File " + x, things)]
+                    yield "".join(li.replace(*r) for li in lines), -1
                 build_str.clear()
             else:
                 yield
@@ -429,9 +434,10 @@ import warnings
 from collections import namedtuple
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator, TypeVar
 
+things = '".code.tio"', '"/home/sarah/runner.py"'
 class ReplParserDies(Exception):
     def __init__(self, message: str, no: int, line: str, mode: bool):
-        super().__init__(message=message)
+        super().__init__(message)
         self.message = message
         self.line = line
         self.no = no
@@ -462,9 +468,10 @@ def get_import(d: re.Match) -> str:
 
 RUNNER = r"""
 async def runner():
-    to_run = {}
+    to_run = {0}
+    flags = {1}
     code = Codeblock('python', to_run)
-    print("\n".join([o async for o in ReplReader(code, exec=True)]))
+    print("\n".join([o async for o in ReplReader(code, **flags)]))
 asyncio.run(runner())
 """
 
@@ -486,11 +493,11 @@ class Tio:
         else:
             return to_bytes(f"F{name}{end}{len(to_bytes(obj))}{end}{obj}{end}")
 
-    async def repr_run(self, code: str) -> str:
+    async def repl_run(self, code: str, **flags) -> str:
         parser = inspect.getsource(ReplParser)
         reader = inspect.getsource(ReplReader)
         complete = IMPORTANT_PARTS + parser + reader
-        complete += RUNNER.format(repr(code))
+        complete += RUNNER.format(repr(code), repr(flags))
         return await self.run(complete)
 
     async def run(self, code: str) -> str:

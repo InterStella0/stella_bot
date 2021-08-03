@@ -456,7 +456,7 @@ class Helpful(commands.Cog):
                 if code.language is None:
                     content = code.content
                     code = Codeblock("py", f"\n{content}\n")
-                code = await Tio().repr_run(code.content)
+                code = await Tio().repl_run(code.content, **flags)
             else:
                 code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
 
