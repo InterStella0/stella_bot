@@ -12,7 +12,7 @@ import itertools
 from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
 from fuzzywuzzy import process
 from discord.ext import commands
-from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc
+from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, islicechunk
 from utils.decorators import pages
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, Tio
@@ -451,19 +451,31 @@ class Helpful(commands.Cog):
             'commands': commands
         }
         flags = dict(flags)
-        if flags.get('exec') and not await self.bot.is_owner(ctx.author):
-            code = await Tio().repr_run(code.content)
-        else:
-            code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
+        async with ctx.typing():
+            if flags.get('exec') and not await self.bot.is_owner(ctx.author):
+                code = await Tio().repr_run(code.content)
+            else:
+                code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
 
-        text = textwrap.wrap(code, width=1880, replace_whitespace=False)
+            text = textwrap.wrap(code, width=1880, replace_whitespace=False)
+            for i, each in enumerate(text):
+                elems = each.splitlines()
+                if len(elems) > 20:
+                    new_elems = []
+                    for values in islicechunk(elems, 20):
+                        new_elems.append("\n".join(values))
+                    text[i] = new_elems
+
+            text = [*unpack(text)]
 
         if len(text) > 1:
             pages = InteractionPages(formatter(text))
             await pages.start(ctx)
-        else:
+        elif len(text) == 1:
             code, = text
             await ctx.maybe_reply(f"```py\n{code}```")
+        else:
+            await ctx.maybe_reply(f"It died sry")
 
     @commands.command(help="Reports to the owner through the bot. Automatic blacklist if abuse.")
     @commands.cooldown(1, 60, commands.BucketType.user)

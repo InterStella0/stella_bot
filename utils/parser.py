@@ -8,6 +8,7 @@ import textwrap
 import warnings
 import zlib
 import inspect
+from discord.ext import commands
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator
 from collections import namedtuple
 from jishaku.codeblocks import Codeblock
@@ -511,3 +512,6 @@ class Tio:
                     values = output.replace(output[:16], '')
                     statistic = values.splitlines()
                     return "\n".join(statistic[:-5])
+
+                else:
+                    raise commands.CommandError(f"Error {recv.status}, {recv.reason}")

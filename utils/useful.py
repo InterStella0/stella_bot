@@ -269,3 +269,11 @@ def aware_utc(dt: datetime.datetime, format: Optional[bool] = True, mode: Option
     if format:
         return discord.utils.format_dt(new_dt, mode)
     return dt.replace(tzinfo=pytz.UTC)
+
+
+def islicechunk(sequence: List[Any], chunk: Optional[int] = 1):
+    end = 0
+    for i, x in enumerate(sequence):
+        if i % chunk == 0:
+            end += chunk
+            yield sequence[end - chunk: end]
