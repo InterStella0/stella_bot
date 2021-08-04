@@ -1,4 +1,3 @@
-import aiohttp
 import contextlib
 import re
 import traceback
@@ -6,9 +5,7 @@ import itertools
 import io
 import textwrap
 import warnings
-import zlib
 import inspect
-from discord.ext import commands
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator
 from collections import namedtuple
 from jishaku.codeblocks import Codeblock
@@ -19,8 +16,6 @@ from utils.useful import cancel_gen
 
 Indentor = namedtuple("Indentor", "space part func")
 IMPORT_REGEX = re.compile(r"(?P<import>[^\s.()]+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
-# I just like tricking people for no reason skskksks
-things = '".code.tio"', '"/home/sarah/runner.py"'
 
 
 def get_import(d: re.Match) -> str:
@@ -279,8 +274,7 @@ class ReplReader:
         async for each in self.reading_codeblock():
             if isinstance(each, tuple):
                 compiled, _ = each
-                r = [*map(lambda x: "File " + x, things)]
-                yield compiled.replace(*r)
+                yield compiled
                 return
             yield each
         # eof
@@ -303,8 +297,7 @@ class ReplReader:
             return await self.iterator.asend(line)
         except ReplParserDies as e:
             lines = traceback.format_exception(type(e), e, e.__traceback__)
-            r = [*map(lambda x: "File " + x, things)]
-            return "".join(li.replace(*r) for li in lines), e
+            return "".join(lines), e
 
     async def reading_codeblock(self) -> AsyncGenerator[str, None]:
         codes = self.codeblock.content.splitlines()
@@ -408,8 +401,7 @@ class ReplReader:
                     yield await self.compiling(build_str, global_vars)
                 except BaseException as e:
                     lines = traceback.format_exception(type(e), e, e.__traceback__)
-                    r = [*map(lambda x: "File " + x, things)]
-                    yield "".join(li.replace(*r) for li in lines), -1
+                    yield "".join(lines), -1
                 build_str.clear()
             else:
                 yield
@@ -434,7 +426,26 @@ import warnings
 from collections import namedtuple
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator, TypeVar
 
-things = '".code.tio"', '"/home/sarah/runner.py"'
+# Decoy bot
+class HTTPClient:
+    def __init__(self):
+        self.token = "what is love?"
+        self.bot_token = "what is love?"
+        self.proxy = "okies"
+        self.user_agent = "DiscordBot"
+
+class StellaBot:
+    def __init__(self):
+        self.http = HTTPClient()
+        self.token = "what is love?"
+    
+    def run(self):
+        raise Runtime("Event loop is closed")
+    
+    async def start(*args, **kwargs):
+        raise Exception("Unable to run StellaBot")
+
+
 class ReplParserDies(Exception):
     def __init__(self, message: str, no: int, line: str, mode: bool):
         super().__init__(message)
@@ -470,55 +481,22 @@ RUNNER = r"""
 async def runner():
     to_run = {0}
     flags = {1}
+    global_stuff = {{
+        'bot': StellaBot()
+    }}
     code = Codeblock('python', to_run)
-    print("\n".join([o async for o in ReplReader(code, **flags)]))
+    async for output in ReplReader(code, _globals=global_stuff, **flags):
+        print(output)
+
+    await asyncio.sleep(0)
 asyncio.run(runner())
 """
 
 
-class Tio:
-    URL: str = "https://tio.run/cgi-bin/run/api/"
+def repl_wrap(code: str, **flags) -> str:
+    parser = inspect.getsource(ReplParser)
+    reader = inspect.getsource(ReplReader)
+    complete = IMPORTANT_PARTS + parser + reader
+    return complete + RUNNER.format(repr(code), repr(flags))
 
-    @staticmethod
-    def format_payload(name: str, obj: Union[list, str]) -> bytes:
-        def to_bytes(value):
-            return bytes(value, encoding='utf-8')
 
-        end = '\x00'
-        if not obj:
-            return b''
-        elif isinstance(obj, list):
-            content = ['V' + name, str(len(obj))] + obj
-            return to_bytes(end.join(content) + end)
-        else:
-            return to_bytes(f"F{name}{end}{len(to_bytes(obj))}{end}{obj}{end}")
-
-    async def repl_run(self, code: str, **flags) -> str:
-        parser = inspect.getsource(ReplParser)
-        reader = inspect.getsource(ReplReader)
-        complete = IMPORTANT_PARTS + parser + reader
-        complete += RUNNER.format(repr(code), repr(flags))
-        return await self.run(complete)
-
-    async def run(self, code: str) -> str:
-        payload = {
-            "lang": ["python38pr"],
-            ".code.tio": code,
-            '.input.tio': '',
-            'TIO_CFLAGS': [],
-            'TIO_OPTIONS': [],
-            'args': []
-        }
-        p_bytes = b''.join(itertools.starmap(self.format_payload, payload.items())) + b'R'
-        data = zlib.compress(p_bytes, 9)[2:-4]
-        async with aiohttp.ClientSession() as session:
-            async with session.post(self.URL, data=data) as recv:
-                if recv.status == 200:
-                    r_bytes = await recv.read()
-                    output = r_bytes.decode('utf-8')
-                    values = output.replace(output[:16], '')
-                    statistic = values.splitlines()
-                    return "\n".join(statistic[:-5])
-
-                else:
-                    raise commands.CommandError(f"Error {recv.status}, {recv.reason}")

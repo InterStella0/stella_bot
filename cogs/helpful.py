@@ -15,7 +15,7 @@ from discord.ext import commands
 from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, islicechunk
 from utils.decorators import pages
 from utils.errors import CantRun, BypassError
-from utils.parser import ReplReader, Tio
+from utils.parser import ReplReader, repl_wrap
 from utils.greedy_parser import UntilFlag, command, GreedyParser
 from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, PersistentRespondView
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMenuBase
@@ -456,7 +456,16 @@ class Helpful(commands.Cog):
                 if code.language is None:
                     content = code.content
                     code = Codeblock("py", f"\n{content}\n")
-                code = await Tio().repl_run(code.content, **flags)
+
+                wrapped = repl_wrap(code.content, **flags)
+                accepted = await self.bot.ipc_client.request("execute_python", code=wrapped)
+                if output := accepted.get("output"):
+                    code = output
+                else:
+                    error_code = accepted.get("code")
+                    reason = accepted.get("reason")
+                    raise commands.CommandError(f"Error {error_code}: {reason}")
+
             else:
                 code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
 
