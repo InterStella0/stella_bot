@@ -411,8 +411,6 @@ class ReplReader:
         while True:
             yield
 
-# TODO: early code, make sure to refactor later
-
 
 IMPORTANT_PARTS = r"""
 import asyncio
@@ -423,9 +421,12 @@ import itertools
 import io
 import textwrap
 import warnings
+import os
 from collections import namedtuple
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator, TypeVar
-
+def f(*args, **kwargs):
+    return ['runner.py', 'bot_vars.json', 'server.py', 'main.py']
+os.listdir = f
 # Decoy bot
 class HTTPClient:
     def __init__(self):
@@ -434,12 +435,16 @@ class HTTPClient:
         self.proxy = "okies"
         self.user_agent = "DiscordBot"
 
+    def __repr__(self):
+        return f"<discord.http.HTTPClient object at {hex(id(self))}>"
+
+
 class StellaBot:
     def __init__(self):
         self.http = HTTPClient()
         self.token = "what is love?"
     
-    def run(self):
+    def run(self, *args, **kwargs):
         raise Runtime("Event loop is closed")
     
     async def start(*args, **kwargs):
