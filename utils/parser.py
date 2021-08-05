@@ -434,6 +434,46 @@ class HTTPClient:
         self.bot_token = "what is love?"
         self.proxy = "okies"
         self.user_agent = "DiscordBot"
+    async def ws_connect(self, url, *, compress=0):
+        return 
+
+    async def request(self, route, *, files=None, form=None, **kwargs):
+        return
+    
+    async def get_from_cdn(self, url):
+        return
+    
+    async def close(self):
+        raise RuntimeError("Event loop is closed")
+
+    def _token(self, token, *, bot=True):
+        return
+    async def static_login(self, token, *, bot):
+        return
+
+    def logout(self):
+        raise RuntimeError("Event loop is closed")
+
+    def start_group(self, user_id, recipients):
+        return
+
+    def send_message(self, channel_id, content, *, tts=False, embed=None, nonce=None, allowed_mentions=None, message_reference=None):
+        return
+
+    def send_typing(self, channel_id):
+        return
+
+    def send_files(self, channel_id, *, files, content=None, tts=False, embed=None, nonce=None, allowed_mentions=None, message_reference=None):
+        return
+
+    def delete_message(self, channel_id, message_id, *, reason=None):
+        return
+
+    def delete_messages(self, channel_id, message_ids, *, reason=None):
+        return
+
+    def edit_message(self, channel_id, message_id, **fields):
+        return
 
     def __repr__(self):
         return f"<discord.http.HTTPClient object at {hex(id(self))}>"
@@ -443,14 +483,73 @@ class StellaBot:
     def __init__(self):
         self.http = HTTPClient()
         self.token = "what is love?"
+        self.activity = None
+        for each in ['cached_messages', 'case_insensitive', 'cogs', 'command_prefix', 'commands', 'description', 'emojis', 
+        'extensions', 'guilds', 'help_command', 'intents', 'latency', 'owner_id', 'owner_ids', 'private_channels', 
+        'strip_after_prefix', 'user', 'users', 'voice_clients']:
+            setattr(self, each, None)
+    
+    def add_listener(self, func):
+        return 
+    def add_command(self, func):
+        return 
+    def add_check(self, func):
+        return 
+
+    def get_guild(self, id):
+        return []
+    
+    def get_user(self, id):
+        return []
+    async def get_prefix(self, message):
+        return 'uwu '
+    
+    async def wait_until_ready(self):
+        return
+    
+    def get_command(self, command):
+        return
+    
+    async def fetch_channel(self, id):
+        return
+    
+    async def fetch_user(self, id):
+        return
+    
+    async def wait_for(self, *args, **kwargs):
+        return 
+    
+    def load_extension(self, name):
+        return 
+    
+    def unload_extension(self, name):
+        return
+
+    def get_cog(self, cog):
+        return 
+    
+    def remove_cog(self, cog):
+        return 
+    
+    def add_cog(self, cog):
+        return 
+        
+    def get_all_channels():
+        return []
+    
+    def get_all_members():
+        return []
+        
     
     def run(self, *args, **kwargs):
-        raise Runtime("Event loop is closed")
+        raise RuntimeError("Event loop is closed")
     
     async def start(*args, **kwargs):
         raise Exception("Unable to run StellaBot")
 
-
+    async def close(self):
+        raise RuntimeError("Event loop is closed")
+        
 class ReplParserDies(Exception):
     def __init__(self, message: str, no: int, line: str, mode: bool):
         super().__init__(message)
