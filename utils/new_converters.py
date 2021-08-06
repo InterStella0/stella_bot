@@ -4,8 +4,9 @@ import re
 import contextlib
 import datetime
 import humanize
+import numpy as np
 from collections import namedtuple, Counter
-from typing import Any, List, Optional, Union, Tuple, Generator
+from typing import Any, List, Optional, Union, Tuple, Generator, TYPE_CHECKING
 from fuzzywuzzy import fuzz
 from discord.ext import commands
 from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound, MustMember, NotOwnerConvert
@@ -88,28 +89,29 @@ class BotData:
 
 class BotPrefixes(BotData):
     """Bot data for prefix"""
-    __slots__ = ("prefixes",)
+    __slots__ = ("predicted_data", )
 
-    def __init__(self, member: discord.Member, prefixes: dict):
+    def __init__(self, member: discord.Member, predicted_data: dict):
         super().__init__(member)
-        self.prefixes = prefixes
+        self.predicted_data = predicted_data
 
     @classmethod
     async def convert(cls, ctx: StellaContext, argument: str) -> "BotPrefixes":
         member, data = await super().convert(ctx, argument)
-        prefixes = {payload['prefix']: payload['usage'] for payload in data}
-        return cls(member, prefixes)
+        processed = [[x["prefix"], x["usage"], x["last_usage"].timestamp()] for x in data]
+        prediction = await ctx.bot.get_prefixes_dataset(processed)
+        return cls(member, prediction)
 
     @property
     def prefix(self) -> int:
-        return max(self.prefixes, key=lambda x: self.prefixes[x])
+        return self.predicted_data[self.predicted_data[:, 3].astype(np.float).argmax()][0]
 
     @property
     def aliases(self) -> str:
-        alias = {x: y for x, y in self.prefixes.items() if x != self.prefix}
-        total = sum(alias.values())
-        highest = self.prefixes[self.prefix]
-        return [p for p, v in alias.items() if v / total > 0.5 and v / highest > 0.05]
+        prefixes = self.predicted_data
+        potential = prefixes[prefixes[:, 3].astype(np.float) >= 50]
+        alias = potential[potential[:, 0] != self.prefix]
+        return alias[:, 0].tolist()
 
     @property
     def allprefixes(self) -> str:

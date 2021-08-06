@@ -10,9 +10,11 @@ import discord
 import contextlib
 import humanize
 import json
+import numpy as np
 from typing import Union, List, Optional, Dict, Any
+from utils.prefix_ai import PrefixNeuralNetwork
 from utils.useful import StellaContext, ListCall, count_python
-from utils.decorators import event_check, wait_ready
+from utils.decorators import event_check, wait_ready, in_executor
 from utils.ipc import StellaClient, StellaWebSocket
 from discord.ext import commands
 from discord.gateway import ReconnectWebSocket
@@ -55,6 +57,23 @@ class StellaBot(commands.Bot):
         self.cached_users = {}
         self.existing_prefix = {}
         super().__init__(self.get_prefix, **kwargs)
+
+        kweights = kwargs.pop("prefix_weights")
+        self.prefix_neural_network = PrefixNeuralNetwork.from_weight(*kweights.values())
+
+    @in_executor()
+    def get_prefixes_dataset(self, data: List[List[Union[int, str]]]) -> np.array:
+        """Get a list of prefixes from database and calculated through Neural Network"""
+        inputs = np.array(data)
+        amounts, epoch_times = inputs[:, 1].astype(np.int32), inputs[:, 2].astype(np.float)
+
+        # Normalize datasets into between 0 - 1 for ANN
+        # This is done by getting the the current value divided by highest value
+        normalized_amount, normalized_epoch = amounts / amounts.max(), epoch_times / epoch_times.max()
+        normalized = np.dstack((normalized_amount, normalized_epoch))
+        result = self.prefix_neural_network.fit(normalized) * 200
+        predicted = np.column_stack((inputs, result.flat[::]))
+        return predicted
 
     async def add_blacklist(self, snowflake_id, reason):
         timed = datetime.datetime.utcnow()
@@ -316,6 +335,7 @@ bot_data = {
     "owner_id": 591135329117798400,
     "websocket_ip": states.get("WEBSOCKET_IP"),
     "socket_states": states.get("WEBSOCKET_STATES"),
+    "prefix_weights": states.get("PREFIX_WEIGHT"),
     "activity": discord.Activity(type=discord.ActivityType.listening, name="phone. who dis doe"),
     "description": "{}'s personal bot that is partially for the public. "
                    f"Written with only `{count_python('.'):,}` lines. plz be nice"
