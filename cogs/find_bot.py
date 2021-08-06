@@ -665,32 +665,34 @@ class FindBot(commands.Cog, name="Bots"):
                       help="Shows the number of bot that shares a prefix between bots.")
     @commands.guild_only()
     async def prefixuse(self, ctx: StellaContext, prefix: str):
-        instance_bot = await self.get_all_prefix(ctx.guild, prefix)
+        instance_bot = await self.get_all_prefix(ctx, prefix)
         prefix = self.clean_prefix(ctx, prefix)
         desk = plural(f"There (is/are) `{len(instance_bot)}` bot(s) that use `{prefix}` as prefix", len(instance_bot))
         await ctx.embed(description=desk)
 
-    async def get_all_prefix(self, guild: discord.Guild, prefix: str) -> List[discord.Member]:
+    async def get_all_prefix(self, ctx: StellaContext, prefix: str) -> List[discord.Member]:
         """Quick function that gets the amount of bots that has the same prefix in a server."""
-        data = await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE guild_id=$1 AND prefix=$2", guild.id, prefix)
+        sql = "SELECT * FROM prefixes_list WHERE guild_id=$1 AND prefix=$2"
+        data = await self.bot.pool_pg.fetch(sql, ctx.guild.id, prefix)
 
         def mem(x):
-            return guild.get_member(x)
+            return ctx.guild.get_member(x)
 
-        return [mem(x['bot_id']) for x in data if mem(x['bot_id'])]
+        bot_list = []
+        for each in [mem(x['bot_id']) for x in data if mem(x['bot_id'])]:
+            bot = await BotPrefixes.convert(ctx, f"{each.id}")
+            if prefix in bot.all_raw_prefixes:
+                bot_list.append(bot)
+
+        return bot_list
 
     @commands.command(aliases=["prefixbots", "pbots"],
                       brief="Shows the name of bot(s) have a given prefix.",
                       help="Shows a list of bot(s) name that have a given prefix.")
     @commands.guild_only()
     async def prefixbot(self, ctx: StellaContext, prefix: str):
-        instance_bot = await self.get_all_prefix(ctx.guild, prefix)
-        bot_list = []
-        for each in instance_bot:
-            bot = await BotPrefixes.convert(ctx, f"{each.id}")
-            if prefix in bot.allprefixes:
-                bot_list.append(bot)
-        list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(bot_list)) or "`Not a single bot have it.`"
+        instance_bot = await self.get_all_prefix(ctx, prefix)
+        list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
         prefix = self.clean_prefix(ctx, prefix)
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
         await ctx.embed(description=plural(desk, len(list_bot)))
@@ -715,16 +717,15 @@ class FindBot(commands.Cog, name="Bots"):
         def mem(x):
             return ctx.guild.get_member(x)
 
-        temp = {}
+        data = []
         for bot in filter(lambda b: mem(b["bot_id"]), bots):
-            prefixes = temp.setdefault(bot["bot_id"], {bot["prefix"]: bot["usage"]})
-            prefixes.update({bot["prefix"]: bot["usage"]})
-        data = [BotPrefixes(mem(b), v) for b, v in temp.items()]
+            bot_id = bot["bot_id"]
+            data.append(await BotPrefixes.convert(ctx, str(bot_id)))
 
         if count_mode:
             PrefixCount = collections.namedtuple("PrefixCount", "prefix count")
-            aliases = itertools.chain.from_iterable(map(lambda x: x.aliases, data))
-            count_prefixes = collections.Counter([*map(lambda x: x.prefix, data), *aliases])
+            prefixes = itertools.chain.from_iterable(map(lambda x: x.all_raw_prefixes, data))
+            count_prefixes = collections.Counter(prefixes)
             data = [PrefixCount(*a) for a in count_prefixes.items()]
 
         data.sort(key=lambda x: getattr(x, attr), reverse=count_mode is not reverse)

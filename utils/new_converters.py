@@ -98,13 +98,17 @@ class BotPrefixes(BotData):
     @classmethod
     async def convert(cls, ctx: StellaContext, argument: str) -> "BotPrefixes":
         member, data = await super().convert(ctx, argument)
+        return await cls.from_db(ctx, member, data)
+
+    @classmethod
+    async def from_db(cls, ctx: StellaContext, member, data):
         processed = [[x["prefix"], x["usage"], x["last_usage"].timestamp()] for x in data]
         prediction = await ctx.bot.get_prefixes_dataset(processed)
         return cls(member, prediction)
 
     @property
-    def prefix(self) -> int:
-        return self.predicted_data[self.predicted_data[:, 3].astype(np.float).argmax()][0]
+    def prefix(self) -> str:
+        return str(self.predicted_data[self.predicted_data[:, 3].astype(np.float).argmax()][0])
 
     @property
     def aliases(self) -> str:
@@ -112,6 +116,10 @@ class BotPrefixes(BotData):
         potential = prefixes[prefixes[:, 3].astype(np.float) >= 50]
         alias = potential[potential[:, 0] != self.prefix]
         return alias[:, 0].tolist()
+
+    @property
+    def all_raw_prefixes(self):
+        return [self.prefix, *self.aliases]
 
     @property
     def allprefixes(self) -> str:
