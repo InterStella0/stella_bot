@@ -40,9 +40,10 @@ class StellaBot(commands.Bot):
         self.pass_db = kwargs.pop("pass_db", None)
         self.color = kwargs.pop("color", None)
         self.socket_states = kwargs.pop("socket_states")
+        self.websocket_IP = kwargs.pop("websocket_ip")
         self.ipc_key = kwargs.pop("ipc_key")
         self.ipc_port = kwargs.pop("ipc_port")
-        self.ipc_client = StellaClient(secret_key=self.ipc_key, port=self.ipc_port)
+        self.ipc_client = StellaClient(host=self.websocket_IP, secret_key=self.ipc_key, port=self.ipc_port)
         self.pool_pg = None
         self.uptime = None
         self.global_variable = None
@@ -313,6 +314,7 @@ bot_data = {
     "ipc_key": states.get("IPC_KEY"),
     "intents": intents,
     "owner_id": 591135329117798400,
+    "websocket_ip": states.get("WEBSOCKET_IP"),
     "socket_states": states.get("WEBSOCKET_STATES"),
     "activity": discord.Activity(type=discord.ActivityType.listening, name="phone. who dis doe"),
     "description": "{}'s personal bot that is partially for the public. "

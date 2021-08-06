@@ -478,10 +478,52 @@ class HTTPClient:
     def __repr__(self):
         return f"<discord.http.HTTPClient object at {hex(id(self))}>"
 
+class StellaContext:
+    def __init__(self, bot):
+        self.view = None
+        self.command = "repl"
+        self.bot = bot
+        self.author = bot
+        self.channel = None
+        self.clean_prefix = "uwu "
+        self.cog = None
+        self.guild = None
+        self.invoked_parents = None
+        self.invoked_subcommand = None
+        self.invoked_with = "repl"
+        self.kwargs = {}
+        self.me = bot
+        self.message = "uwu repl"
+        self.prefix = "uwu "
+        self.valid = True
 
+    async def fetch_message(self, message_id):
+        return
+    
+    async def HistoryIterator(self, *args, **kwargs):
+        yield
+        yield
+
+    async def history(self, *args, **kwargs):
+        return self.HistoryIterator()
+        
+    async def invoke(*args, **kwargs):
+        return
+    
+    async def reinvoke(self):
+        return
+    
+    async def send(self, content, **kwargs):
+        print(content)
+    
+    async def repl(self, content, **kwargs):
+        await self.send(content, **kwargs)
+    
+    
 class StellaBot:
     def __init__(self):
         self.http = HTTPClient()
+        self.loop = asyncio.get_event_loop()
         self.token = "what is love?"
         self.activity = None
         for each in ['cached_messages', 'case_insensitive', 'cogs', 'command_prefix', 'commands', 'description', 'emojis', 
@@ -585,8 +627,10 @@ RUNNER = r"""
 async def runner():
     to_run = {0}
     flags = {1}
+    bot = StellaBot()
     global_stuff = {{
-        'bot': StellaBot()
+        'bot': bot,
+        'ctx': StellaContext(bot)
     }}
     code = Codeblock('python', to_run)
     async for output in ReplReader(code, _globals=global_stuff, **flags):

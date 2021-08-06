@@ -18,11 +18,16 @@ class StellaClient(ipc.Client):
     def __call__(self, bot_id: int) -> None:
         self.bot_id = bot_id
 
+    def exception_catching_callback(self, task):
+        if task.exception():
+            task.print_stack()
+
     async def check_init(self) -> None:
         if not self.session:
             await self.init_sock()
-            if not self.connect:
-                self.connect = asyncio.create_task(self.connection())
+        if not self.connect:
+            self.connect = asyncio.create_task(self.connection())
+            self.connect.add_done_callback(self.exception_catching_callback)
 
     def listen(self) -> Callable[[], Callable]:
         def inner(coro) -> Callable[..., None]:
@@ -42,6 +47,8 @@ class StellaClient(ipc.Client):
         request_id = os.urandom(32).hex()
         payload = self.create_payload(endpoint, data)
         payload.update({"request_id": request_id})
+        if self.websocket is None:
+            raise Exception("Server is not connected")
         await self.websocket.send_json(payload)
         return await self.wait_for(endpoint, request_id)
 
@@ -80,17 +87,20 @@ class StellaClient(ipc.Client):
 
     async def connection(self) -> None:
         async for data in self.get_response():
-            respond = json.loads(data.data)
-            event = "on_" + respond.pop("endpoint")
-            value = respond.pop("response")
-            if listeners := self._listeners.get(event):
-                if request_id := respond.get("request_id"):
-                    if future := listeners.pop(request_id):
-                        future.set_result(value)
+            try:
+                respond = json.loads(data.data)
+                event = "on_" + respond.pop("endpoint")
+                value = respond.pop("response")
+                if listeners := self._listeners.get(event):
+                    if request_id := respond.get("request_id"):
+                        if future := listeners.pop(request_id):
+                            future.set_result(value)
 
-            if events := self.events.get(event):
-                for coro in events:
-                    await coro(value)
+                if events := self.events.get(event):
+                    for coro in events:
+                        await coro(value)
+            except Exception as e:
+                print("Ignoring error in gateway:", e)
 
 
 class StellaWebSocket(DiscordWebSocket):
