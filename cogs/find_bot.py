@@ -395,13 +395,14 @@ class FindBot(commands.Cog, name="Bots"):
         for type in "commands", "prefixes":
             await self.bot.pool_pg.executemany(locals()[f"{type}_query"], locals()[type])
 
-    @commands.Cog.listener("on_message")
-    @wait_ready()
-    @listen_for_guilds()
-    @prefix_cache_ready()
-    @is_user()
+    # @commands.Cog.listener("on_message")
+    # @wait_ready()
+    # @listen_for_guilds()
+    # @prefix_cache_ready()
+    # @is_user()
     async def find_bot_commands(self, message: discord.Message):
-        """Get a prefix based on known command used."""
+        """Get a prefix based on known command used.
+           Disabled for now, as the derive detection is dumb."""
         word, _, _ = message.content.partition("\n")
         to_find = textwrap.shorten(word, width=100, placeholder="")
         if not (received := await self.search_respond(search_commands, message, to_find.casefold(), "commands")):
@@ -422,7 +423,7 @@ class FindBot(commands.Cog, name="Bots"):
                     if any(x['prefix'] != prefix and prefix.startswith(x["prefix"]) for x in existing):
                         continue
                     prefixes_values.append((message.guild.id, bot_id, prefix, 1, message_respond))
-                
+
                 if message.content.casefold().startswith(command):
                     commands_values.append((message.guild.id, bot_id, command, message_respond))
 
@@ -684,7 +685,12 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.guild_only()
     async def prefixbot(self, ctx: StellaContext, prefix: str):
         instance_bot = await self.get_all_prefix(ctx.guild, prefix)
-        list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(instance_bot)) or "`Not a single bot have it.`"
+        bot_list = []
+        for each in instance_bot:
+            bot = await BotPrefixes.convert(ctx, f"{each.id}")
+            if prefix in bot.allprefixes:
+                bot_list.append(bot)
+        list_bot = "\n".join(f"`{no + 1}. {x}`" for no, x in enumerate(bot_list)) or "`Not a single bot have it.`"
         prefix = self.clean_prefix(ctx, prefix)
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
         await ctx.embed(description=plural(desk, len(list_bot)))
