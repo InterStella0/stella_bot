@@ -385,4 +385,10 @@ async def on_restarting_server(data):
     print("Server Connection Successful.")
 
 
+@bot.ipc_client.listen()
+async def on_kill(data):
+    print("Kill has been ordered", data)
+    await bot.close()
+
+
 bot.starter()
