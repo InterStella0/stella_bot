@@ -485,7 +485,7 @@ class Helpful(commands.Cog):
             await pages.start(ctx)
         elif len(text) == 1:
             code, = text
-            await ctx.maybe_reply(f"```py\n{code}```")
+            await ctx.maybe_reply(f"```py\n{code}```", allowed_mentions=discord.AllowedMentions.none())
         else:
             await ctx.maybe_reply(f"It died sry")
 
