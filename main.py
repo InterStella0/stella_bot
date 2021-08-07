@@ -11,6 +11,7 @@ import contextlib
 import humanize
 import json
 import numpy as np
+from aiogithub import GitHub
 from typing import Union, List, Optional, Dict, Any
 from utils.prefix_ai import PrefixNeuralNetwork
 from utils.useful import StellaContext, ListCall, count_python
@@ -46,6 +47,8 @@ class StellaBot(commands.Bot):
         self.ipc_key = kwargs.pop("ipc_key")
         self.ipc_port = kwargs.pop("ipc_port")
         self.ipc_client = StellaClient(host=self.websocket_IP, secret_key=self.ipc_key, port=self.ipc_port)
+        self.git_token = kwargs.pop("git_token")
+        self.git = GitHub(self.git_token)
         self.pool_pg = None
         self.uptime = None
         self.global_variable = None
@@ -336,6 +339,7 @@ bot_data = {
     "websocket_ip": states.get("WEBSOCKET_IP"),
     "socket_states": states.get("WEBSOCKET_STATES"),
     "prefix_weights": states.get("PREFIX_WEIGHT"),
+    "git_token": states.get("GIT_TOKEN"),
     "activity": discord.Activity(type=discord.ActivityType.listening, name="phone. who dis doe"),
     "description": "{}'s personal bot that is partially for the public. "
                    f"Written with only `{count_python('.'):,}` lines. plz be nice"

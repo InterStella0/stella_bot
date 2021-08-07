@@ -15,6 +15,8 @@ from discord.ext import commands
 from discord.ext.commands import UserNotFound
 from discord.ext import menus
 from discord.ext.menus import ListPageSource
+from aiogithub.objects import Repo
+from fuzzywuzzy import fuzz
 from utils import flags as flg
 from utils.new_converters import BotPrefixes, IsBot, BotCommands
 from utils.buttons import InteractionPages
@@ -29,8 +31,29 @@ if TYPE_CHECKING:
     from main import StellaBot
 
 ReactRespond = collections.namedtuple("ReactRespond", "created_at author reference")
-
 DISCORD_PY = 336642139381301249
+
+
+@dataclass
+class BotRepo:
+    bot: discord.User = None
+    repo: Repo = None
+
+    @classmethod
+    async def from_db(cls, stellabot, bot, data):
+        repo = await stellabot.git.get_repo(data["owner_repo"], data["bot_name"])
+        return cls(bot=bot, repo=repo)
+
+    @classmethod
+    async def convert(cls, ctx: StellaContext, argument: str) -> BotRepo:
+        if user := await IsBot().convert(ctx, argument):
+            data = await ctx.bot.pool_pg.fetchrow("SELECT * FROM bot_repo WHERE bot_id=$1", user.id)
+            if data:
+                return await cls.from_db(ctx.bot, user, data)
+        raise NotInDatabase(user)
+
+    def __str__(self) -> str:
+        return str(self.bot)
 
 
 @dataclass
@@ -195,6 +218,7 @@ class FindBot(commands.Cog, name="Bots"):
         re_bot = "[\s|\n]+(?P<id>[0-9]{17,19})[\s|\n]"
         re_reason = "+(?P<reason>.[\s\S\r]+)"
         self.re_addbot = re_command + re_bot + re_reason
+        self.re_github = re.compile(r'https?://(?:www\.)?github.com/(?P<repo_owner>\w+)/(?P<repo_name>\w+)?')
         self.cached_bots = {}
         self.compiled_prefixes = None
         self.compiled_commands = None
@@ -467,6 +491,34 @@ class FindBot(commands.Cog, name="Bots"):
         self.update_compile()
 
         await self.insert_both_prefix_command(prefixes_values, commands_values)
+
+    @commands.Cog.listener("on_message")
+    @wait_ready()
+    @event_check(lambda _, m: m.author.bot)
+    async def is_it_bot_repo(self, message: discord.Message):
+        def get_content(m: discord.Message) -> str:
+            values = m.content
+            if m.embeds:
+                embed = m.embeds[0]
+                values += str(embed.to_dict())
+            return values
+
+        content = get_content(message)
+        bot = message.author
+        bot_name = bot.display_name
+        potential = []
+        for match in self.re_github.finditer(content):
+            repo_name = match['repo_name']
+            if (predict := fuzz.ratio(repo_name, bot_name)) >= 50:
+                potential.append((match, predict))
+
+        if potential:
+            match, predict = max(potential, key=operator.itemgetter(1))
+            sql = "INSERT INTO bot_repo VALUES($1, $2, $3, $4) " \
+                  "ON CONFLICT (bot_id) DO UPDATE SET owner_repo=$2, bot_name=$3, certainty=$4 " \
+                  "WHERE bot_repo.certainty < $4"
+            values = (bot.id, match["repo_owner"], match["repo_name"], predict)
+            await self.bot.pool_pg.execute(sql, *values)
 
     @commands.Cog.listener("on_message")
     @wait_ready()
@@ -987,6 +1039,51 @@ class FindBot(commands.Cog, name="Bots"):
 
         menu = InteractionPages(each_commands_list(data))
         await menu.start(ctx)
+
+    @commands.command(aliases=["wgithub", "github", "botgithub"], help="Tries to show the given bot's GitHub repository.")
+    async def whatgithub(self, ctx: StellaContext, bot: BotRepo):
+        repo = bot.repo
+        author = await self.bot.git.get_user(repo.owner.login)
+        embed = BaseEmbed.default(
+            ctx,
+            title=repo.full_name,
+            description=f"**About: **\n{repo.description}\n\n",
+            url=repo.html_url
+        )
+        embed.set_thumbnail(url=bot.bot.avatar)
+
+        async def aislice(citerator, cut):
+            i = 0
+            async for v in citerator:
+                i += 1
+                yield v
+                if i == cut:
+                    break
+
+        async def formatted_commits():
+            async for c in aislice(repo.get_commits(), 5):
+                commit = c['commit']
+                time_created = datetime.datetime.strptime(commit['author']['date'], "%Y-%m-%dT%H:%M:%SZ")
+                message = commit['message']
+                url = c['html_url']
+                sha = c['sha'][:6]
+                yield f'[{aware_utc(time_created, mode="R")}] [{message}]({url} "{sha}")'
+
+        embed.description += "**Recent Commits:** \n" + "\n".join([o async for o in formatted_commits()])
+
+        value = [f'{u.login}(`{u.contributions}`)' async for u in aislice(repo.get_contributors(), 3)]
+        embed.description += plural("\n\n**Top Contributor(s)**\n", len(value)) + ", ".join(value)
+
+        embed.add_field(name=plural("Star(s)", repo.stargazers_count), value=repo.stargazers_count)
+        embed.add_field(name=plural("Fork(s)", repo.forks_count), value=repo.forks_count)
+        embed.add_field(name="Language", value=repo.language)
+
+        if issue := repo.open_issues_count:
+            embed.add_field(name=plural("Open Issue(s)", issue), value=issue)
+
+        embed.add_field(name="Created At", value=aware_utc(repo.created_at))
+        embed.set_author(name=f"Repository by {author.name}", icon_url=author.avatar_url)
+        await ctx.maybe_reply(embed=embed)
 
 
 def setup(bot: StellaBot) -> None:
