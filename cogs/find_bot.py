@@ -1085,6 +1085,28 @@ class FindBot(commands.Cog, name="Bots"):
         embed.set_author(name=f"Repository by {author.name}", icon_url=author.avatar_url)
         await ctx.maybe_reply(embed=embed)
 
+    @commands.command()
+    async def allgithub(self, ctx):
+        bots = [b.id for b in ctx.guild.members if b.bot]
+        data = await self.bot.pool_pg.fetch("SELECT * FROM bot_repo WHERE bot_id=ANY($1::BIGINT[])", bots)
+
+        if not data:
+            return await ctx.reply("I dont know any github here.")
+
+        @pages(per_page=6)
+        async def each_git_list(self, menu: InteractionPages,
+                                     entries: List[Dict[str, Union[str, int]]]) -> discord.Embed:
+            offset = menu.current_page * self.per_page
+            embed = BaseEmbed(title=f"All GitHub Repository in Server")
+            members = [ctx.guild.get_member(b['bot_id']) for b in entries]
+            contents = ["{i}. [{m}](https://github.com/{owner_repo}/{bot_name})".format(i=i, m=m, **b)
+                        for (i, b), m in zip(enumerate(entries, start=offset + 1), members)]
+            embed.description = "\n".join(contents)
+            return embed
+
+        menu = InteractionPages(each_git_list(data))
+        await menu.start(ctx)
+
 
 def setup(bot: StellaBot) -> None:
     bot.add_cog(FindBot(bot))
