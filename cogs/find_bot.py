@@ -500,7 +500,7 @@ class FindBot(commands.Cog, name="Bots"):
             values = m.content
             if m.embeds:
                 embed = m.embeds[0]
-                values += str(embed.to_dict())
+                values += " / " + str(embed.to_dict())
             return values
 
         content = get_content(message)
