@@ -57,6 +57,25 @@ class BotRepo:
 
 
 @dataclass
+class BotGitHubLink:
+    repo_owner: str = None
+    repo_name: str = None
+
+    @classmethod
+    async def convert(cls, ctx: StellaContext, argument: str) -> BotGitHubLink:
+        find = ctx.bot.get_cog("Bots")
+        regex = find.re_github
+        if found := regex.search(argument):
+            repo_owner = found['repo_owner']
+            repo_bot = found['repo_name']
+            content = f"**Owner repository:** `{repo_owner}`\n**Bot repository:** `{repo_bot}`\n\n **Is this correct?**"
+            if not await ctx.confirmation(content, delete_after=True):
+                raise commands.CommandNotFound()
+            return cls(repo_owner=repo_owner, repo_name=repo_bot)
+        raise commands.CommandError("Unable to resolve repository owner and repository bot")
+
+
+@dataclass
 class BotAdded:
     """BotAdded information for discord.py that is used in whoadd and whatadd command."""
     author: discord.Member = None
@@ -218,7 +237,7 @@ class FindBot(commands.Cog, name="Bots"):
         re_bot = "[\s|\n]+(?P<id>[0-9]{17,19})[\s|\n]"
         re_reason = "+(?P<reason>.[\s\S\r]+)"
         self.re_addbot = re_command + re_bot + re_reason
-        self.re_github = re.compile(r'https?://(?:www\.)?github.com/(?P<repo_owner>[^/ ]+)/(?P<repo_name>[^/ ]+)?')
+        self.re_github = re.compile(r'https?://(?:www\.)?github.com/(?P<repo_owner>[^/ ]+)/(?P<repo_name>[^/ >]+)?')
         self.cached_bots = {}
         self.compiled_prefixes = None
         self.compiled_commands = None
@@ -1005,6 +1024,16 @@ class FindBot(commands.Cog, name="Bots"):
         values = [(guild_id, bot_id, x, max_usage, datetime.datetime.utcnow()) for x in unique_prefixes]
         await self.bot.pool_pg.executemany(query, values)
         await ctx.maybe_reply(f"Successfully inserted `{'` `'.join(unique_prefixes)}`")
+        await ctx.confirmed()
+
+    @_bot.command(help="Manual insert of github's owner repository", aliases=["changegithubs", "cgithub"])
+    async def changegithub(self, ctx: StellaContext, bot: BotOwner, *, github_link: BotGitHubLink):
+        bot_id = bot.bot.id
+        sql = "INSERT INTO bot_repo VALUES($1, $2, $3, $4) " \
+              "ON CONFLICT (bot_id) DO UPDATE SET owner_repo=$2, bot_name=$3, certainty=$4"
+
+        values = (bot_id, github_link.repo_owner, github_link.repo_name, 100)
+        await self.bot.pool_pg.execute(sql, *values)
         await ctx.confirmed()
 
     @commands.command(cls=flg.SFlagCommand,
