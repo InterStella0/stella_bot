@@ -505,11 +505,13 @@ class FindBot(commands.Cog, name="Bots"):
 
         content = get_content(message)
         bot = message.author
-        bot_name = bot.name
         potential = []
         for match in self.re_github.finditer(content):
             repo_name = match['repo_name']
-            if (predict := fuzz.ratio(repo_name, bot_name)) >= 50:
+            predicting_name = fuzz.ratio(repo_name, bot.name)
+            predicting_display = fuzz.ratio(repo_name, bot.display_name)
+            val = max([predicting_display, predicting_name])
+            if (predict := val) >= 50:
                 potential.append((match, predict))
 
         if potential:
