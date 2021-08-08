@@ -1138,6 +1138,34 @@ class FindBot(commands.Cog, name="Bots"):
         menu = InteractionPages(each_git_list(data))
         await menu.start(ctx)
 
+    @commands.Cog.listener('on_message')
+    @event_check(lambda _, m: m.author.bot)
+    async def is_bot_triggered(self, message: discord.Message):
+        def resolve_message(m):
+            if m.reference:
+                caught = m.reference.resolved
+                if isinstance(caught, discord.DeletedReferencedMessage) or caught is None:
+                    return
+                return caught
+
+            return discord.utils.get(reversed(self.bot.cached_messages), author__bot=False, channel__id=m.channel.id)
+
+        if not (triggering := resolve_message(message)):
+            return
+
+        no_newline, *_ = triggering.content.partition('\n')
+        processed = textwrap.shorten(no_newline, width=30, placeholder="")
+        if not processed:
+            return
+
+        bot_id = message.author.id
+        values = [(bot_id, x.lower(), i, 1) for i, x in enumerate(processed)]
+        sql = "INSERT INTO position_letter VALUES($1, $2, $3, $4) " \
+              "ON CONFLICT(bot_id, letter, position) DO " \
+              "UPDATE SET count = position_letter.count + 1"
+
+        await self.bot.pool_pg.executemany(sql, values)
+
 
 def setup(bot: StellaBot) -> None:
     bot.add_cog(FindBot(bot))
