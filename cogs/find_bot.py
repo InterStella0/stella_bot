@@ -218,7 +218,7 @@ class FindBot(commands.Cog, name="Bots"):
         re_bot = "[\s|\n]+(?P<id>[0-9]{17,19})[\s|\n]"
         re_reason = "+(?P<reason>.[\s\S\r]+)"
         self.re_addbot = re_command + re_bot + re_reason
-        self.re_github = re.compile(r'https?://(?:www\.)?github.com/(?P<repo_owner>\w+)/(?P<repo_name>\w+)?')
+        self.re_github = re.compile(r'https?://(?:www\.)?github.com/(?P<repo_owner>[^/]+)/(?P<repo_name>[^/]+)?')
         self.cached_bots = {}
         self.compiled_prefixes = None
         self.compiled_commands = None
@@ -510,8 +510,7 @@ class FindBot(commands.Cog, name="Bots"):
             repo_name = match['repo_name']
             predicting_name = fuzz.ratio(repo_name, bot.name)
             predicting_display = fuzz.ratio(repo_name, bot.display_name)
-            val = max([predicting_display, predicting_name])
-            if (predict := val) >= 50:
+            if (predict := max([predicting_display, predicting_name])) >= 50:
                 potential.append((match, predict))
 
         if potential:
