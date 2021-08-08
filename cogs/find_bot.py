@@ -505,7 +505,7 @@ class FindBot(commands.Cog, name="Bots"):
 
         content = get_content(message)
         bot = message.author
-        bot_name = bot.display_name
+        bot_name = bot.name
         potential = []
         for match in self.re_github.finditer(content):
             repo_name = match['repo_name']
