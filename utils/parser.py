@@ -15,7 +15,7 @@ from utils.useful import cancel_gen
 
 
 Indentor = namedtuple("Indentor", "space part func")
-IMPORT_REGEX = re.compile(r"(?P<import>[^\s.()]+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
+IMPORT_REGEX = re.compile(r"(?P<import>\w+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
 
 
 def get_import(d: re.Match) -> str:
@@ -617,7 +617,7 @@ def find(predicate, seq):
     return None
 
 Indentor = namedtuple("Indentor", "space part func")
-IMPORT_REGEX = re.compile(r"(?P<import>[^\s.()]+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
+IMPORT_REGEX = re.compile(r"(?P<import>\w+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
 
 def get_import(d: re.Match) -> str:
     return d['import'][:-1]

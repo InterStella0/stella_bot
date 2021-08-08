@@ -9,10 +9,12 @@ import contextlib
 import typing
 import os
 import pytz
-from typing import Callable, Any, Awaitable, Union, Tuple, List, Iterable, Coroutine, Optional, Type, AsyncGenerator
+import textwrap
+from typing import Callable, Any, Awaitable, Union, Tuple, List, Iterable, Coroutine, Optional, Type, AsyncGenerator, TypeVar, Generator
 from utils.decorators import pages, in_executor
 from discord.utils import maybe_coroutine
 from discord.ext import commands
+# TODO: do some detail documentation, cause im lazy
 
 
 async def try_call(method: Union[Awaitable, Callable], *args: Tuple[Any], exception: Exception = Exception,
@@ -56,8 +58,11 @@ class BaseEmbed(discord.Embed):
         return cls(title=title, color=color, **kwargs)
 
 
-def unpack(li: List[Union[list, Any]], /) -> List[Any]:
-    """Flattens list of list where it is a list, while leaving alone any other element."""
+T = TypeVar("T")
+
+
+def unpack(li: List[Union[List[T], T]], /) -> Iterable[T]:
+    """Flattens list of list while leaving alone any other element."""
     for item in li:
         if isinstance(item, list):
             yield from unpack(item)
@@ -264,16 +269,60 @@ def count_python(root: str) -> int:
     return sum(reading_recursive(root))
 
 
-def aware_utc(dt: datetime.datetime, format: Optional[bool] = True, mode: Optional[str] = 'F') -> datetime.datetime:
+def aware_utc(dt: datetime.datetime, format: Optional[bool] = True, *,
+              mode: Optional[str] = 'F') -> Union[datetime.datetime, str]:
     new_dt = dt.replace(tzinfo=pytz.UTC)
     if format:
         return discord.utils.format_dt(new_dt, mode)
     return dt.replace(tzinfo=pytz.UTC)
 
 
-def islicechunk(sequence: List[Any], chunk: Optional[int] = 1):
+def islicechunk(sequence: List[T], *, chunk: Optional[int] = 1) -> Generator[T, None, None]:
+    """works like islice, it cuts a sequence into chunks, instead of only getting the end of the sequence elements
+        sequence: List[Any]
+            The sequence that you want to cut
+        chunk: Optional[int]
+            Cut the sequence every given number. Defaults to 1
+
+        return: T
+            An iterable that got cut up given by chunk
+     """
     end = 0
     for i, x in enumerate(sequence):
-        if i % chunk == 0:
+        if not i % chunk:
             end += chunk
             yield sequence[end - chunk: end]
+
+
+def text_chunker(text: str, *, width: Optional[int] = 1880, max_newline: Optional[int] = 20, wrap: Optional[bool] = True,
+                 wrap_during_chunk: Optional[bool] = True) -> List[str]:
+    """Chunks a given text into a flattened list.
+        text: str
+            massive text that needs to be chunked
+        width: Optional[int]
+            maximum character per chunks
+        max_newline: Optional[int]
+            maximum new line per chunks
+        wrap: Optional[bool]
+            whether to chunk before the max_newline pagination
+        wrap_during_chunk: Optional[bool]
+            maximum character during max_newline pagination
+
+        return: List[str]
+    """
+    # idk i just write this long ass doc so i remember how to use it later lmao
+    if wrap:
+        text = textwrap.wrap(text, width=width, replace_whitespace=False)
+
+    for i, each in enumerate(text):
+        elems = each.splitlines()
+        if len(elems) >= max_newline:
+            new_elems = []
+            for values in islicechunk(elems, chunk=20):
+                elem = "\n".join(values)
+                if wrap_during_chunk:
+                    elem = textwrap.wrap(elem, width=width, replace_whitespace=False)
+                new_elems.append(elem)
+            text[i] = new_elems
+
+    return [*unpack(text)]

@@ -12,7 +12,7 @@ import itertools
 from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
 from fuzzywuzzy import process
 from discord.ext import commands
-from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, islicechunk
+from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker
 from utils.decorators import pages
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, repl_wrap
@@ -469,17 +469,7 @@ class Helpful(commands.Cog):
             else:
                 code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
 
-            text = textwrap.wrap(code, width=1880, replace_whitespace=False)
-            for i, each in enumerate(text):
-                elems = each.splitlines()
-                if len(elems) > 20:
-                    new_elems = []
-                    for values in islicechunk(elems, 20):
-                        new_elems.append("\n".join(values))
-                    text[i] = new_elems
-
-            text = [*unpack(text)]
-
+            text = text_chunker(code, width=2000, max_newline=20)
         if len(text) > 1:
             pages = InteractionPages(formatter(text))
             await pages.start(ctx)
@@ -559,7 +549,7 @@ class Helpful(commands.Cog):
             return f"[`{c.hex[:6]}`] [{message}]({repo_link}) ({aware_utc(time, mode='R')})"
 
         embed.add_field(name="Recent Changes", value="\n".join(map(format_commit, iterator)), inline=False)
-        embed.add_field(name="Launch Time", value=f"{aware_utc(self.bot.uptime, 'R')}")
+        embed.add_field(name="Launch Time", value=f"{aware_utc(self.bot.uptime, mode='R')}")
         embed.add_field(name="Bot Ping", value=f"{self.bot.latency * 1000:.2f}ms")
         bots = sum(u.bot for u in self.bot.users)
         content = f"`{len(self.bot.guilds):,}` servers, `{len(self.bot.users) - bots:,}` users, `{bots:,}` bots"
