@@ -462,11 +462,11 @@ class Helpful(commands.Cog):
                                     for c in ctx.guild.text_channels]
                     user_values = [{"user__id": u.id, "user__name": u.name, "user__nick": u.nick, "user__bot": u.bot,
                                     "user__discriminator": u.discriminator}
-                                   for u in ctx.guild.members]
+                                   for u in ctx.guild.members[:100]]
                     message_values = [{"message__id": m.id, "message__content": m.content,
                                        "message__author": m.author.id, "channel_id": m.channel.id,
                                        "guild__id": m.guild.id}
-                                      for m in self.bot.cached_messages if m.guild == ctx.guild]
+                                      for m in self.bot.cached_messages if m.guild == ctx.guild][:100]
                 else:
                     c = ctx.channel
                     u = ctx.author
