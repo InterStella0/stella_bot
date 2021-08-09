@@ -462,14 +462,12 @@ class Helpful(commands.Cog):
                 if output := accepted.get("output"):
                     code = output
                 else:
-                    error_code = accepted.get("code")
-                    reason = accepted.get("reason")
-                    raise commands.CommandError(f"Error {error_code}: {reason}")
+                    raise commands.CommandError(f"It died sorry dan maaf")
 
             else:
                 code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
 
-            text = text_chunker(code, width=2000, max_newline=20)
+            text = text_chunker(code, width=1900, max_newline=20)
         if len(text) > 1:
             pages = InteractionPages(formatter(text))
             await pages.start(ctx)
@@ -477,7 +475,7 @@ class Helpful(commands.Cog):
             code, = text
             await ctx.maybe_reply(f"```py\n{code}```", allowed_mentions=discord.AllowedMentions.none())
         else:
-            await ctx.maybe_reply(f"It died sry")
+            raise commands.CommandError(f"It died sorry dan maaf")
 
     @commands.command(help="Reports to the owner through the bot. Automatic blacklist if abuse.")
     @commands.cooldown(1, 60, commands.BucketType.user)
