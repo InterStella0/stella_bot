@@ -461,6 +461,8 @@ class PersistentRespondView(ui.View):
     async def res_action(self, button: ui.Button, interaction: discord.Interaction):
         message = interaction.message
         bot = self.bot
+        if bot.tester:
+            return
 
         msg = await interaction.user.send("Please enter your message to respond. You have 60 seconds.")
         await self.clean_up(message)
@@ -495,6 +497,9 @@ class PersistentRespondView(ui.View):
     async def end_action(self, button: ui.Button, interaction: discord.Interaction):
         message = interaction.message
         bot = self.bot
+        if bot.tester:
+            return
+
         interaction_data = await self.get_interface_data(interaction)
         report_id = interaction_data["report_id"]
         # Update to database

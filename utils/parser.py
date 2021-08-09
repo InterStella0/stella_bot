@@ -9,7 +9,7 @@ import inspect
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator
 from collections import namedtuple
 from jishaku.codeblocks import Codeblock
-from discord.utils import find, get
+from discord.utils import find, get, snowflake_time
 from utils.errors import ReplParserDies
 from utils.useful import cancel_gen
 
@@ -422,11 +422,40 @@ import io
 import textwrap
 import warnings
 import os
+import datetime
 from collections import namedtuple
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator, TypeVar
 def f(*args, **kwargs):
     return ['runner.py', 'bot_vars.json', 'server.py', 'main.py']
 os.listdir = f
+DISCORD_EPOCH = 1420070400000
+
+
+class HistoryIterator:
+    def __init__(self, bot, channel_id, limit=10):
+        self.channel_id = channel_id
+        self.bot = bot
+        self.limit = limit
+        self.iterator = self.going_through()
+
+    async def __anext__(self):
+        return await self.next()
+        
+    async def next(self):
+        return await self.iterator.__anext__()
+    
+    def __aiter__(self):
+        return self
+
+    async def going_through(self):
+        limit = 0
+        for each in reversed(self.bot.cached_messages):
+            if self.channel_id == each.channel.id:
+                yield each
+                limit += 1
+                if limit == self.limit:
+                    break
+    
 # Decoy bot
 class HTTPClient:
     def __init__(self):
@@ -478,34 +507,113 @@ class HTTPClient:
     def __repr__(self):
         return f"<discord.http.HTTPClient object at {hex(id(self))}>"
 
+
+class Object:
+    def __init__(self, id):
+        try:
+            id = int(id)
+        except ValueError:
+            raise TypeError('id parameter must be convertable to int not {0.__class__!r}'.format(id)) from None
+        else:
+            self.id = id
+
+    def __repr__(self):
+        return f'<type(self).__name__ object at {hex(id(self))}>'
+
+    @property
+    def created_at(self):
+        return snowflake_time(self.id)
+
+
+class NotFound(Exception):
+    def __init__(self, response, data):
+        super().__init__(response)
+        self.response = response
+        self.data = data
+
+
+class TextChannel(Object):
+    def __init__(self, bot, channel__id, channel__name, guild__id):
+        super().__init__(channel__id)
+        self.name = channel__name
+        self.guild = None
+        self.guild__id = guild__id
+        self.__bot = bot
+
+    @property
+    def mention(self):
+        return f"<@#{self.id}>"
+
+    def history(self, *, limit=10):
+        return HistoryIterator(bot=self.__bot, channel_id=self.id, limit=limit)
+
+    async def fetch_message(self, message_id):
+        value = get(self.__bot.cached_messages, id=message_id, channel__id=self.id)
+        if value is None:
+            response = "404 Not Found (error code: 10008): Unknown Message"
+            data = 404
+            raise NotFound(response, data)
+        return value
+
+    async def send(self, content, **kwargs):
+        print(content)
+
+    def __str__(self):
+        return f"{self.name}"
+
+    def __repr__(self):
+        return f"<discord.channel.TextChannel object at {hex(id(self))}>"
+
+
+class Member(Object):
+    def __init__(self, user__id, user__name, user__nick, user__bot, user__discriminator):
+        super().__init__(user__id)
+        self.name = user__name
+        self.nick = user__nick
+        self.bot = user__bot
+        self.discriminator = user__discriminator
+
+    @property
+    def display_name(self):
+        return self.nick or self.name
+
+    @property
+    def mention(self):
+        return f"<@{self.id}>"
+    
+    def __str__(self):
+        return f"{self.name}#{self.discriminator}"
+    
+    def __repr__(self):
+        return f"<discord.member.Member object at {hex(id(self))}>"
+
+
 class StellaContext:
-    def __init__(self, bot):
+    def __init__(self, bot, **values):
+        context = values.get("context")
+        self.message = get(bot.cached_messages, id=context.get("message_id"))
         self.view = None
         self.command = "repl"
         self.bot = bot
         self.author = bot
-        self.channel = None
-        self.clean_prefix = "uwu "
+        self.channel = bot.get_channel(context.get("channel_id"))
         self.cog = None
         self.guild = None
         self.invoked_parents = None
         self.invoked_subcommand = None
         self.invoked_with = "repl"
+        self.args = ()
         self.kwargs = {}
-        self.me = bot
-        self.message = "uwu repl"
-        self.prefix = "uwu "
+        self.me = bot.get_user(context.get("bot__id"))
+        self.prefix = context.get("prefix")
+        self.clean_prefix = self.prefix
         self.valid = True
 
     async def fetch_message(self, message_id):
-        return
-    
-    async def HistoryIterator(self, *args, **kwargs):
-        yield
-        yield
+        return await self.channel.fetch_message(message_id)
 
-    async def history(self, *args, **kwargs):
-        return self.HistoryIterator()
+    def history(self, *args, **kwargs):
+        return self.channel.history(*args, **kwargs)
         
     async def invoke(*args, **kwargs):
         return
@@ -514,22 +622,74 @@ class StellaContext:
         return
     
     async def send(self, content, **kwargs):
-        print(content)
+        await self.channel.send(content, **kwargs)
     
-    async def repl(self, content, **kwargs):
+    async def reply(self, content, **kwargs):
         await self.send(content, **kwargs)
     
+
+class Message(Object):
+    def __init__(self, bot, **state):
+        super().__init__(state.pop("message__id"))
+        self.content = state.pop("message__content")
+        self.author = bot.get_user(state.pop("message__author"))
+        self.channel = bot.get_channel(state.pop("channel_id"))
+        self.guild = bot.get_guild(state.pop("guild__id"))
+
+    @property
+    def jump_url(self):
+        guild_id = getattr(self.guild, 'id', '@me')
+        return 'https://discord.com/channels/{0}/{1.channel.id}/{1.id}'.format(guild_id, self)
+
+    def __repr__(self):
+        return f"<discord.message.Message object at {hex(id(self))}>"
+
+
+class Guild(Object):
+    def __init__(self, bot, **state):
+        super().__init__(state.pop("guild__id"))
+        self.name = state.pop("guild__name")
+        self.channels = bot.channels
+        self.__bot = bot
+
+    def member_count(self):
+        return len(__bot.users)
     
+    def get_channel(self, channel_id):
+        return bot.get_channel(channel_id)
+
+    def get_member(self, user_id):
+        return bot.get_user(user_id)
+
+    @property
+    def text_channels(self):
+        return self.channels
+
+    @property
+    def voice_channels(self):
+        return []
+
+
 class StellaBot:
-    def __init__(self):
+    def __init__(self, **values):
         self.http = HTTPClient()
         self.loop = asyncio.get_event_loop()
         self.token = "what is love?"
         self.activity = None
         for each in ['cached_messages', 'case_insensitive', 'cogs', 'command_prefix', 'commands', 'description', 'emojis', 
-        'extensions', 'guilds', 'help_command', 'intents', 'latency', 'owner_id', 'owner_ids', 'private_channels', 
-        'strip_after_prefix', 'user', 'users', 'voice_clients']:
+        'extensions', 'help_command', 'intents', 'latency', 'owner_id', 'owner_ids', 'private_channels', 
+        'strip_after_prefix', 'user', 'voice_clients']:
             setattr(self, each, None)
+        
+        bot = values.get("_bot")
+        self.state_channels = {state.get("channel__id"): TextChannel(self, **state) for state in bot.get("channels")}
+        self.state_guilds = {state.get("guild__id"): Guild(self, **state) for state in bot.get("guilds")}
+        for each in self.state_channels.values():
+            each.guild = self.get_guild(each.guild__id)
+    
+        self.state_users = {state.get("user__id"): Member(**state) for state in values.get("members")}
+    
+        self.cached_messages = [Message(self, **state) for state in values.get("cached_messages")]
     
     def add_listener(self, func):
         return 
@@ -538,11 +698,27 @@ class StellaBot:
     def add_check(self, func):
         return 
 
+    @property 
+    def channels(self):
+        return list(self.state_channels.values())
+
+    @property
+    def text_channels(self):
+        return self.channels
+
+    @property 
+    def guilds(self):
+        return list(self.state_guilds.values())
+ 
     def get_guild(self, id):
-        return []
+        return self.state_guilds.get(id)
+    
+    def get_channel(self, id):
+        return self.state_channels.get(id)
     
     def get_user(self, id):
-        return []
+        return self.state_users.get(id)
+
     async def get_prefix(self, message):
         return 'uwu '
     
@@ -577,11 +753,12 @@ class StellaBot:
         return 
         
     def get_all_channels():
-        return []
+        for channel in self.state_channels.values():
+            yield channel
     
     def get_all_members():
-        return []
-        
+        for user in self.state_users.values():
+            yield user
     
     def run(self, *args, **kwargs):
         raise RuntimeError("Event loop is closed")
@@ -621,16 +798,17 @@ IMPORT_REGEX = re.compile(r"(?P<import>\w+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*
 
 def get_import(d: re.Match) -> str:
     return d['import'][:-1]
-""" + inspect.getsource(get)
+""" + inspect.getsource(get) + inspect.getsource(snowflake_time)
 
 RUNNER = r"""
 async def runner():
-    to_run = {0}
-    flags = {1}
-    bot = StellaBot()
+    to_run = {0!r}
+    flags = {1!r}
+    state = {2!r}
+    bot = StellaBot(**state)
     global_stuff = {{
         'bot': bot,
-        'ctx': StellaContext(bot)
+        'ctx': StellaContext(bot, **state)
     }}
     code = Codeblock('python', to_run)
     async for output in ReplReader(code, _globals=global_stuff, **flags):
@@ -641,10 +819,10 @@ asyncio.run(runner())
 """
 
 
-def repl_wrap(code: str, **flags) -> str:
+def repl_wrap(code: str, context: Dict[str, Any], **flags) -> str:
     parser = inspect.getsource(ReplParser)
     reader = inspect.getsource(ReplReader)
     complete = IMPORTANT_PARTS + parser + reader
-    return complete + RUNNER.format(repr(code), repr(flags))
+    return complete + RUNNER.format(code, flags, context)
 
 
