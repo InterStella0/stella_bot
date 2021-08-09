@@ -186,7 +186,7 @@ async def all_bot_count(self, menu: InteractionPages, entries: List[BotCommands]
 async def bot_added_list(self, menu: InteractionPages, entries: List[BotAdded]) -> discord.Embed:
     """Menu for recentbotadd command."""
     offset = menu.current_page * self.per_page
-    contents = ((f"{b.author}", f'**{b}** `{discord.utils.format_dt(b.joined_at, "R")}`')
+    contents = ((f"{b.author}", f'**{b}** {discord.utils.format_dt(b.joined_at, "R")}')
                 for i, b in enumerate(entries, start=offset))
     return BaseEmbed(title="Bots added today", fields=contents)
 
