@@ -12,7 +12,7 @@ import itertools
 from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
 from fuzzywuzzy import process
 from discord.ext import commands
-from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker
+from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker, in_executor
 from utils.decorators import pages
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, repl_wrap
@@ -457,42 +457,44 @@ class Helpful(commands.Cog):
                     content = code.content
                     code = Codeblock("py", f"\n{content}\n")
 
-                if ctx.guild:
-                    guild_values = [{"channel__id": c.id, "channel__name": c.name, "guild__id": c.guild.id}
-                                    for c in ctx.guild.text_channels]
-                    user_values = [{"user__id": u.id, "user__name": u.name, "user__nick": u.nick, "user__bot": u.bot,
-                                    "user__discriminator": u.discriminator}
-                                   for u in ctx.guild.members[:100]]
-                    message_values = [{"message__id": m.id, "message__content": m.content,
-                                       "message__author": m.author.id, "channel_id": m.channel.id,
-                                       "guild__id": m.guild.id}
-                                      for m in self.bot.cached_messages if m.guild == ctx.guild][:100]
-                else:
-                    c = ctx.channel
-                    u = ctx.author
-                    guild_values = [{"channel__id": c.id, "channel__name": None, "guild__id": None}]
-                    user_values = [{"user__id": u.id, "user__name": u.name, "user__nick": u.nick, "user__bot": u.bot,
-                                    "user__discriminator": u.discriminator}]
-                    message_values = [{"message__id": m.id, "message__content": m.content, "message__author": u.id,
-                                       "channel_id": m.channel.id, "guild__id": m.guild}
-                                      for m in self.bot.cached_messages if m.channel.id == ctx.channel.id]
-                context = {
-                    "context": {
-                        "channel_id": ctx.channel.id,
-                        "message_id": ctx.message.id,
-                        "bot__id": ctx.me.id,
-                        "prefix": ctx.clean_prefix
-                    },
-                    "_bot": {
-                        "channels": guild_values,
-                        "guilds": [{"guild__id": ctx.guild.id, "guild__name": ctx.guild.name}] if ctx.guild else []
-                    },
-                    "members": user_values,
-                    "cached_messages": message_values
-                }  # Allowed variables to be passed
+                @in_executor()
+                def get_wrapped():
+                    if ctx.guild:
+                        guild_values = [{"channel__id": c.id, "channel__name": c.name, "guild__id": c.guild.id}
+                                        for c in ctx.guild.text_channels]
+                        user_values = [{"user__id": u.id, "user__name": u.name, "user__nick": u.nick, "user__bot": u.bot,
+                                        "user__discriminator": u.discriminator}
+                                       for u in ctx.guild.members[:100]]
+                        message_values = [{"message__id": m.id, "message__content": m.content,
+                                           "message__author": m.author.id, "channel_id": m.channel.id,
+                                           "guild__id": m.guild.id}
+                                          for m in self.bot.cached_messages if m.guild == ctx.guild][:100]
+                    else:
+                        c = ctx.channel
+                        u = ctx.author
+                        guild_values = [{"channel__id": c.id, "channel__name": None, "guild__id": None}]
+                        user_values = [{"user__id": u.id, "user__name": u.name, "user__nick": u.nick, "user__bot": u.bot,
+                                        "user__discriminator": u.discriminator}]
+                        message_values = [{"message__id": m.id, "message__content": m.content, "message__author": u.id,
+                                           "channel_id": m.channel.id, "guild__id": m.guild}
+                                          for m in self.bot.cached_messages if m.channel.id == ctx.channel.id]
+                    context = {
+                        "context": {
+                            "channel_id": ctx.channel.id,
+                            "message_id": ctx.message.id,
+                            "bot__id": ctx.me.id,
+                            "prefix": ctx.clean_prefix
+                        },
+                        "_bot": {
+                            "channels": guild_values,
+                            "guilds": [{"guild__id": ctx.guild.id, "guild__name": ctx.guild.name}] if ctx.guild else []
+                        },
+                        "members": user_values,
+                        "cached_messages": message_values
+                    }  # Allowed variables to be passed
 
-                wrapped = repl_wrap(code.content, context, **flags)
-                accepted = await self.bot.ipc_client.request("execute_python", code=wrapped)
+                    return repl_wrap(code.content, context, **flags)
+                accepted = await self.bot.ipc_client.request("execute_python", code=await get_wrapped())
                 if output := accepted.get("output"):
                     code = output
                 else:
