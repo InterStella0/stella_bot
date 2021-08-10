@@ -769,10 +769,10 @@ class FindBot(commands.Cog, name="Bots"):
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
         await ctx.embed(description=plural(desk, len(list_bot)))
 
-    @commands.command(aliases=["ap", "aprefix", "allprefixes"],
-                      brief="Shows every bot's prefix in the server.",
-                      help="Shows a list of every single bot's prefix in a server.",
-                      cls=flg.SFlagCommand)
+    # @commands.command(aliases=["ap", "aprefix", "allprefixes"],
+    #                   brief="Shows every bot's prefix in the server.",
+    #                   help="Shows a list of every single bot's prefix in a server.",
+    #                   cls=flg.SFlagCommand) Disabled for now until i have time
     @commands.guild_only()
     @flg.add_flag("--count", type=bool, default=False, action="store_true",
                   help="Create a rank of the highest prefix that is being use by bots. This flag accepts True or False, "
@@ -1138,7 +1138,7 @@ class FindBot(commands.Cog, name="Bots"):
         menu = InteractionPages(each_git_list(data))
         await menu.start(ctx)
 
-    @commands.Cog.listener('on_message')
+    # @commands.Cog.listener('on_message') DATA COMPLETE
     @event_check(lambda _, m: m.author.bot)
     async def is_bot_triggered(self, message: discord.Message):
         def resolve_message(m):
