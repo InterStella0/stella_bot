@@ -1138,7 +1138,7 @@ class FindBot(commands.Cog, name="Bots"):
         menu = InteractionPages(each_git_list(data))
         await menu.start(ctx)
 
-    # @commands.Cog.listener('on_message') DATA COMPLETE
+    @commands.Cog.listener('on_message')
     @event_check(lambda _, m: m.author.bot)
     async def is_bot_triggered(self, message: discord.Message):
         def resolve_message(m):
