@@ -86,7 +86,6 @@ int search(char** arr, char target[], int n){
 
 void free_result(Result* pointer_result){
     // Free the allocated memory of Result pointer
-    char** array = (*pointer_result).found_array;
     int size = (*pointer_result).size;
     // Due to strdup stored in the array, it is required to free from the heap for each element
     for(int i = size - 1; i >= 0; i--)

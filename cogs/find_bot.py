@@ -20,7 +20,7 @@ from fuzzywuzzy import fuzz
 from utils import flags as flg
 from utils.new_converters import BotPrefixes, IsBot, BotCommands
 from utils.buttons import InteractionPages
-from utils.useful import try_call, BaseEmbed, compile_array, search_prefixes, default_date, plural, realign, search_commands, StellaContext, aware_utc
+from utils.useful import try_call, StellaEmbed, compile_array, search_prefixes, default_date, plural, realign, search_commands, StellaContext, aware_utc
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
 from utils import greedy_parser
@@ -32,6 +32,41 @@ if TYPE_CHECKING:
 
 ReactRespond = collections.namedtuple("ReactRespond", "created_at author reference")
 DISCORD_PY = 336642139381301249
+
+
+@dataclass
+class BotPredictPrefixes:
+    bot: discord.User
+    prefix: str
+    raw_data: List[Tuple[str, float]]
+
+    @classmethod
+    async def convert(cls, ctx: StellaContext, argument: str) -> BotPredictPrefixes:
+        user = await IsBot().convert(ctx, argument)
+        query = """
+            SELECT pt.letter, pt.position, pt.count, total, (pt.count::FLOAT) / (total::FLOAT) "percentage"
+            FROM position_letter pt
+            INNER JOIN (
+                SELECT position, MAX(count) as count FROM position_letter
+                WHERE bot_id=$1
+                GROUP BY position
+            ) AS m
+            ON (m.count=pt.count AND pt.position=m.position)
+            INNER JOIN (
+                SELECT position, SUM(count) "total"
+                FROM position_letter
+                WHERE bot_id=$1
+                GROUP BY position
+            ) AS sums
+            ON (sums.position=m.position)
+            WHERE bot_id=$1
+            ORDER BY pt.position
+        """
+        if not (data := await ctx.bot.pool_pg.fetch(query, user.id)):
+            raise NotInDatabase(user)
+        NN = ctx.bot.derivative_prefix_neural
+        prefix, raw_data = await NN.predict(data, return_raw=True)
+        return cls(user, prefix, raw_data)
 
 
 @dataclass
@@ -166,8 +201,8 @@ class AllPrefixes(ListPageSource):
         offset = menu.current_page * self.per_page
         content = "`{no}. {prefix} {key} {b.count}`" if self.count_mode else "`{no}. {b} {key} {prefix}`"
         contents = [content.format(no=i+1, b=b, key=key, prefix=pprefix(menu.ctx.guild, b.prefix)) for i, b in enumerate(entries, start=offset)]
-        embed = BaseEmbed(title="All Prefixes",
-                          description="\n".join(realign(contents, key)))
+        embed = StellaEmbed(title="All Prefixes",
+                            description="\n".join(realign(contents, key)))
         return menu.generate_page(embed, self._max_pages)
 
 
@@ -178,8 +213,8 @@ async def all_bot_count(self, menu: InteractionPages, entries: List[BotCommands]
     offset = menu.current_page * self.per_page
     content = "`{no}. {b} {key} {b.total_usage}`"
     contents = [content.format(no=i+1, b=b, key=key) for i, b in enumerate(entries, start=offset)]
-    return BaseEmbed(title="Bot Command Rank",
-                     description="\n".join(realign(contents, key)))
+    return StellaEmbed(title="Bot Command Rank",
+                       description="\n".join(realign(contents, key)))
 
 
 @pages(per_page=6)
@@ -188,7 +223,7 @@ async def bot_added_list(self, menu: InteractionPages, entries: List[BotAdded]) 
     offset = menu.current_page * self.per_page
     contents = ((f"{b.author}", f'**{b}** {discord.utils.format_dt(b.joined_at, "R")}')
                 for i, b in enumerate(entries, start=offset))
-    return BaseEmbed(title="Bots added today", fields=contents)
+    return StellaEmbed(title="Bots added today", fields=contents)
 
 
 @pages()
@@ -203,7 +238,7 @@ async def bot_pending_list(self, menu: InteractionPages, entry: Dict[str, Union[
               ("Created at", aware_utc(bot.created_at)),
               ("Requested at", aware_utc(entry["requested_at"])),
               ("Message", f"[jump]({entry['jump_url']})"))
-    embed = BaseEmbed(title=f"{bot}(`{bot.id}`)", fields=fields)
+    embed = StellaEmbed(title=f"{bot}(`{bot.id}`)", fields=fields)
     embed.set_thumbnail(url=bot.avatar.url)
     return embed
 
@@ -666,7 +701,7 @@ class FindBot(commands.Cog, name="Bots"):
         async def get_member(b_id: int) -> Union[discord.Member, discord.User]:
             return ctx.guild.get_member(b_id) or await self.bot.fetch_user(b_id)
         list_bots = [BotAdded.from_json(await get_member(x["bot_id"]), **x) for x in total_list]
-        embed = BaseEmbed.default(ctx, title=plural(f"{author}'s bot(s)", len(list_bots)))
+        embed = StellaEmbed.default(ctx, title=plural(f"{author}'s bot(s)", len(list_bots)))
         for dbot in list_bots:
             bot_id = dbot.bot.id
             value = ""
@@ -829,7 +864,7 @@ class FindBot(commands.Cog, name="Bots"):
                    (("Reason", "reason"),
                     ("Requested at", 'requested_at')),
                    BotAdded))
-        embed = BaseEmbed.default(ctx, title=str(bot))
+        embed = StellaEmbed.default(ctx, title=str(bot))
         embed.set_thumbnail(url=bot.avatar.url)
         embed.add_field(name="ID", value=f"`{bot.id}`")
         for title, attrib, converter in reversed(titles):
@@ -931,7 +966,7 @@ class FindBot(commands.Cog, name="Bots"):
         def each_page(self, menu: menus.MenuPages, entries: List[str]) -> discord.Embed:
             number = menu.current_page * self.per_page + 1
             list_commands = "\n".join(f"{x}. {c}[`{bot.get_command(c)}`]" for x, c in enumerate(entries, start=number))
-            embed = BaseEmbed.default(ctx, title=f"{bot} Commands[`{bot.total_usage}`]", description=list_commands)
+            embed = StellaEmbed.default(ctx, title=f"{bot} Commands[`{bot.total_usage}`]", description=list_commands)
             if owner_info and owner_info.author:
                 embed.set_author(icon_url=owner_info.author.avatar.url, name=f"Owner {owner_info.author}")
 
@@ -1060,7 +1095,7 @@ class FindBot(commands.Cog, name="Bots"):
         async def each_commands_list(self, menu: InteractionPages,
                                      entries: List[Dict[str, Union[str, int]]]) -> discord.Embed:
             offset = menu.current_page * self.per_page
-            embed = BaseEmbed(title=f"All Commands")
+            embed = StellaEmbed(title=f"All Commands")
             key = "(\u200b|\u200b)"
             contents = ["`{i}. {command}{k}{command_count}`".format(i=i, k=key, **b)
                         for i, b in enumerate(entries, start=offset + 1)]
@@ -1074,7 +1109,7 @@ class FindBot(commands.Cog, name="Bots"):
     async def whatgithub(self, ctx: StellaContext, bot: BotRepo):
         repo = bot.repo
         author = await self.bot.git.get_user(repo.owner.login)
-        embed = BaseEmbed.default(
+        embed = StellaEmbed.default(
             ctx,
             title=repo.full_name,
             description=f"**About: **\n{repo.description}\n\n",
@@ -1117,7 +1152,7 @@ class FindBot(commands.Cog, name="Bots"):
 
     @commands.command(aliases=["agithub", "ag", "everygithub", "allgithubs"],
                       help="Shows all bot's github that it knows from a server.")
-    async def allgithub(self, ctx):
+    async def allgithub(self, ctx: StellaContext):
         bots = [b.id for b in ctx.guild.members if b.bot]
         data = await self.bot.pool_pg.fetch("SELECT * FROM bot_repo WHERE bot_id=ANY($1::BIGINT[])", bots)
 
@@ -1128,7 +1163,7 @@ class FindBot(commands.Cog, name="Bots"):
         async def each_git_list(self, menu: InteractionPages,
                                      entries: List[Dict[str, Union[str, int]]]) -> discord.Embed:
             offset = menu.current_page * self.per_page
-            embed = BaseEmbed(title=f"All GitHub Repository in {ctx.guild}")
+            embed = StellaEmbed(title=f"All GitHub Repository in {ctx.guild}")
             members = [ctx.guild.get_member(b['bot_id']) for b in entries]
             contents = ["{i}. [{m}](https://github.com/{owner_repo}/{bot_name})".format(i=i, m=m, **b)
                         for (i, b), m in zip(enumerate(entries, start=offset + 1), members)]
@@ -1165,6 +1200,13 @@ class FindBot(commands.Cog, name="Bots"):
               "UPDATE SET count = position_letter.count + 1"
 
         await self.bot.pool_pg.executemany(sql, values)
+
+    @commands.command()
+    async def botpredict(self, ctx: StellaContext, *, bot: BotPredictPrefixes):
+        evaluated = "\n".join(f"{letter}: **{predict * 100:.2f}%**" for letter, predict in bot.raw_data if predict > .4)
+        desc = f'**Prefix: ** "{bot.prefix}"\n' \
+               f'**Evaluation: **\n{evaluated}'
+        await ctx.embed(title=f"Predicted Prefix for '{bot.bot}'", description=desc)
 
 
 def setup(bot: StellaBot) -> None:

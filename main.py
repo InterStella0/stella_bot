@@ -13,7 +13,7 @@ import json
 import numpy as np
 from aiogithub import GitHub
 from typing import Union, List, Optional, Dict, Any
-from utils.prefix_ai import PrefixNeuralNetwork
+from utils.prefix_ai import PrefixNeuralNetwork, DerivativeNeuralNetwork
 from utils.useful import StellaContext, ListCall, count_python
 from utils.decorators import event_check, wait_ready, in_executor
 from utils.ipc import StellaClient, StellaWebSocket
@@ -63,6 +63,7 @@ class StellaBot(commands.Bot):
 
         kweights = kwargs.pop("prefix_weights")
         self.prefix_neural_network = PrefixNeuralNetwork.from_weight(*kweights.values())
+        self.derivative_prefix_neural = DerivativeNeuralNetwork(kwargs.pop("prefix_derivative"))
 
     @in_executor()
     def get_prefixes_dataset(self, data: List[List[Union[int, str]]]) -> np.array:
@@ -339,6 +340,7 @@ bot_data = {
     "websocket_ip": states.get("WEBSOCKET_IP"),
     "socket_states": states.get("WEBSOCKET_STATES"),
     "prefix_weights": states.get("PREFIX_WEIGHT"),
+    "prefix_derivative": states.get("PREFIX_DERIVATIVE_PATH"),
     "git_token": states.get("GIT_TOKEN"),
     "activity": discord.Activity(type=discord.ActivityType.listening, name="phone. who dis doe"),
     "description": "{}'s personal bot that is partially for the public. "

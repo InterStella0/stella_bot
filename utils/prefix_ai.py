@@ -1,6 +1,9 @@
 from __future__ import annotations
 import numpy as np
 from typing import Optional
+from tensorflow import keras
+from typing import Dict, Union, List, Tuple
+from utils.decorators import in_executor
 
 
 class PrefixNeuralNetwork:
@@ -83,3 +86,48 @@ class PrefixNeuralNetwork:
         layer1 = self.calc_layer(x, self.weights1)
         result = self.calc_layer(layer1, self.weights2)
         return result
+
+
+class DerivativeNeuralNetwork:
+    def __init__(self, path: str):
+        self.input_output_size = 30
+        self.model = self.create_neural_network_model(path)
+
+    def create_neural_network_model(self, path: str) -> keras.Sequential:
+        normalization = keras.layers.Normalization(axis=-1)
+        SIZE = self.input_output_size
+        normalization.adapt(np.zeros(SIZE * 2).reshape((2, SIZE)))
+        model = keras.Sequential([
+            normalization,
+            keras.layers.Dense(40, activation='relu'),
+            keras.layers.Dense(40, activation='relu'),
+            keras.layers.Dense(self.input_output_size, activation='sigmoid')
+        ])
+
+        model.compile(optimizer='adam',
+                      loss=keras.losses.BinaryCrossentropy(from_logits=True),
+                      metrics=['accuracy'])
+
+        model.load_weights(path)
+        return model
+
+    @in_executor()
+    def predict(self, raw_data: Dict[str, Union[float, int, str]], *,
+                return_raw: Optional[bool] = False) -> Union[str, Tuple[str, List[Tuple[str, float]]]]:
+        data = [(d["letter"], d["position"], d["percentage"]) for d in raw_data]
+        x, original = self.process_input(data)
+        output, = self.model.predict(x)
+        best = output[output >= 0.5]
+        evaluated = "".join(letter for letter, _ in original[:len(best)])
+        if return_raw:
+            evaluated = evaluated, [(letter, prediction) for (letter, _), prediction in zip(original, output)]
+        return evaluated
+
+    def process_input(self, letters: List[Tuple[str, int, float]]) -> Tuple[np.array, Tuple[str, float]]:
+        input_layout = [("", 0)] * self.input_output_size
+        for prefix, postion, value in letters:
+            input_layout[postion] = (prefix, value)
+        return np.array([[t[1] for t in input_layout]]), input_layout
+
+
+
