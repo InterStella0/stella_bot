@@ -10,7 +10,9 @@ import functools
 import collections
 import textwrap
 import operator
+import time
 from dataclasses import dataclass
+from discord import ui
 from discord.ext import commands
 from discord.ext.commands import UserNotFound
 from discord.ext import menus
@@ -19,7 +21,7 @@ from aiogithub.objects import Repo
 from fuzzywuzzy import fuzz
 from utils import flags as flg
 from utils.new_converters import BotPrefixes, IsBot, BotCommands
-from utils.buttons import InteractionPages
+from utils.buttons import InteractionPages, PromptView
 from utils.useful import try_call, StellaEmbed, compile_array, search_prefixes, default_date, plural, realign, search_commands, StellaContext, aware_utc
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
@@ -862,13 +864,18 @@ class FindBot(commands.Cog, name="Bots"):
                            "joined the server.")
     @is_discordpy()
     async def botinfo(self, ctx: StellaContext, *, bot: IsBot):
+        embed = await self.format_bot_info(ctx, bot)
+        await ctx.embed(embed=embed)
+
+    async def format_bot_info(self, ctx, bot: Union[discord.Member, discord.User]) -> discord.Embed:
         embed = StellaEmbed.default(ctx, title=str(bot))
-        embed.add_field(name="ID", value=f"`{bot.id}`")
+        bot_id = str(bot.id)
+        embed.add_field(name="ID", value=f"`{bot_id}`")
         T = TypeVar("T")
 
         async def handle_convert(converter: Type[T]) -> Optional[T]:
             with contextlib.suppress(Exception):
-                return await converter.convert(ctx, str(bot.id))
+                return await converter.convert(ctx, bot_id)
 
         if val := await handle_convert(BotAdded):
             reason = textwrap.shorten(val.reason, width=1000, placeholder='...')
@@ -881,10 +888,10 @@ class FindBot(commands.Cog, name="Bots"):
             embed.add_field(name="Bot Prefix", value=val.allprefixes)
 
         if val := await handle_convert(BotCommands):
-            embed.add_field(name="Command Usage", value=val.total_usage)
+            embed.add_field(name="Command Usage", value=f"{val.total_usage:,}")
             high_command = val.highest_command
             high_amount = len(val.command_usages.get(high_command))
-            embed.add_field(name="Top Command", value=f"{high_command}(`{high_amount}`)")
+            embed.add_field(name="Top Command", value=f"{high_command}(`{high_amount:,}`)")
 
         if val := await handle_convert(BotRepo):
             repo = val.repo
@@ -896,8 +903,7 @@ class FindBot(commands.Cog, name="Bots"):
 
         embed.set_thumbnail(url=bot.avatar)
         embed.add_field(name="Created at", value=f"{aware_utc(bot.created_at, mode='f')}")
-        embed.add_field(name="Joined at", value=f"{aware_utc(bot.joined_at, mode='f')}")
-        await ctx.embed(embed=embed)
+        return embed.add_field(name="Joined at", value=f"{aware_utc(bot.joined_at, mode='f')}")
 
     @commands.command(aliases=["rba", "recentbot", "recentadd"],
                       brief="Shows a list of bots that has been added in a day.",
@@ -1222,6 +1228,68 @@ class FindBot(commands.Cog, name="Bots"):
                f'**Evaluation: **\n{evaluated}\n' \
                f'**Overall Confidence: ** `{summation / len(bot.prefix) * 100:.2f}%`'
         await ctx.embed(title=f"Predicted Prefix for '{bot.bot}'", description=desc)
+
+    @commands.command(aliases=["ab"], help="Shows the list of all bots in discord.py server and information.")
+    @is_discordpy()
+    async def allbots(self, ctx):
+        command = self.allbots
+        bots = [m for m in ctx.guild.members if m.bot]
+        bots.sort(key=operator.attrgetter("id"))
+
+        class CacheListPageSource(ListPageSource):
+            def __init__(self, *args, formatter):
+                super().__init__(*args, per_page=1)
+                self.bot_cache = {}
+                self.formatter = formatter
+
+            async def format_page(self, menu: InteractionPages, entry: discord.Member) -> discord.Embed:
+                if not (embed := self.bot_cache.get(entry)):
+                    embed = await self.formatter(ctx, entry)
+
+                return embed
+
+        class InteractionBots(InteractionPages):
+            class BotPrompter(PromptView):
+                def __init__(self, *args, set_bots, timeout, **kwargs):
+                    super().__init__(*args, timeout=timeout or 60, delete_after=True, **kwargs)
+                    self.set_bots = set_bots
+                    self.user = None
+
+                def invalid_response(self) -> str:
+                    return f"Bot is not in the server."
+
+                async def message_respond(self, message: discord.Message) -> bool:
+                    value = message.content
+                    try:
+                        user = await IsBot().convert(ctx, value)
+                        self.user = user
+                    except Exception as e:
+                        await command.dispatch_error(ctx, e)
+                    else:
+                        return user.id in self.set_bots
+
+            @ui.button(label="Select Bot")
+            async def select_bot(self, button: ui.Button, interaction: discord.Interaction):
+                await interaction.response.edit_message(view=None)
+                prompt_timeout = 60
+                # Ensures the winteractionpages doesn't get remove after timeout
+                self.set_timeout(time.monotonic() + self.timeout + prompt_timeout)
+                set_bots = set([b.id for b in bots])
+                prompt = self.BotPrompter(self.ctx, set_bots=set_bots, timeout=prompt_timeout)
+                content = "Mention a bot."
+                value = self.current_page
+                try:
+                    respond = await prompt.send(content, reference=self.message.to_reference())
+                    if isinstance(respond, discord.Message):  # Handles both timeout and False
+                        value = bots.index(prompt.user)
+                except Exception as e:
+                    await self.ctx.reply(f"Something went wrong. {e}")
+                finally:
+                    await self.show_checked_page(value)
+                    self.reset_timeout()
+
+        menu = InteractionBots(CacheListPageSource(bots, formatter=self.format_bot_info), generate_page=True)
+        await menu.start(ctx)
 
 
 def setup(bot: StellaBot) -> None:
