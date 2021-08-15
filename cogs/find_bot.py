@@ -66,7 +66,13 @@ class BotPredictPrefixes:
             raise NotInDatabase(user)
         NN = ctx.bot.derivative_prefix_neural
         prefix, raw_data = await NN.predict(data, return_raw=True)
-        return cls(user, prefix, raw_data)
+        instance = cls(user, prefix, raw_data)
+        if not instance.prefix:
+            raise commands.CommandError(
+                f"Seems like I'm unable to determine the prefix confidently. Please continue to use "
+                f"`{user}` for more data."
+            )
+        return instance
 
 
 @dataclass
@@ -1205,9 +1211,11 @@ class FindBot(commands.Cog, name="Bots"):
     async def botpredict(self, ctx: StellaContext, *, bot: BotPredictPrefixes):
         content = [f"`{discord.utils.escape_markdown(letter)}`: **{predict * 100:.2f}%**"
                    for letter, predict in bot.raw_data if predict > .4]
+        summation = sum([p for _, p in bot.raw_data if p >= .5])
         evaluated = "\n".join(content)
         desc = f'**Prefix: ** "{bot.prefix}"\n' \
-               f'**Evaluation: **\n{evaluated}'
+               f'**Evaluation: **\n{evaluated}\n' \
+               f'**Overall Confidence: ** `{summation / len(bot.prefix) * 100:.2f}%`'
         await ctx.embed(title=f"Predicted Prefix for '{bot.bot}'", description=desc)
 
 
