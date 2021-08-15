@@ -1279,7 +1279,7 @@ class FindBot(commands.Cog, name="Bots"):
                 content = "Mention a bot."
                 value = self.current_page
                 try:
-                    respond = await prompt.send(content, reference=self.message.to_reference())
+                    respond = await prompt.send(content, reference=ctx.message.to_reference())
                     if isinstance(respond, discord.Message):  # Handles both timeout and False
                         value = bots.index(prompt.user)
                 except Exception as e:
