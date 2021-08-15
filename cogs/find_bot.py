@@ -1150,12 +1150,12 @@ class FindBot(commands.Cog, name="Bots"):
         embed = StellaEmbed.default(
             ctx,
             title=repo.full_name,
-            description=f"**About: **\n{repo.description}\n\n**Recent Commits:** \n"
+            description=f"**About: **\n{repo.description}\n\n**Recent Commits:** \n" +
                         "\n".join([o async for o in formatted_commits()]) +
                         plural("\n\n**Top Contributor(s)**\n", len(value)) + ", ".join(value),
             url=repo.html_url
         )
-        embed.set_thumbnail(url=repo.bot.avatar)
+        embed.set_thumbnail(url=bot.bot.avatar)
         embed.add_field(name=plural("Star(s)", repo.stargazers_count), value=repo.stargazers_count)
         embed.add_field(name=plural("Fork(s)", repo.forks_count), value=repo.forks_count)
         embed.add_field(name="Language", value=repo.language)
