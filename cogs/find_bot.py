@@ -1201,9 +1201,11 @@ class FindBot(commands.Cog, name="Bots"):
 
         await self.bot.pool_pg.executemany(sql, values)
 
-    @commands.command()
+    @commands.command(aliases=["bpd"], help="Uses neural network to predict a bot's prefix.")
     async def botpredict(self, ctx: StellaContext, *, bot: BotPredictPrefixes):
-        evaluated = "\n".join(f"{letter}: **{predict * 100:.2f}%**" for letter, predict in bot.raw_data if predict > .4)
+        content = [f"`{discord.utils.escape_markdown(letter)}`: **{predict * 100:.2f}%**"
+                   for letter, predict in bot.raw_data if predict > .4]
+        evaluated = "\n".join(content)
         desc = f'**Prefix: ** "{bot.prefix}"\n' \
                f'**Evaluation: **\n{evaluated}'
         await ctx.embed(title=f"Predicted Prefix for '{bot.bot}'", description=desc)
