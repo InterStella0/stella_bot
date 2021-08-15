@@ -9,7 +9,7 @@ from functools import partial
 from discord import ui
 from discord.ext import commands
 from typing import Optional, Any, Dict, Iterable, Union, Type, TYPE_CHECKING, Coroutine, Callable, Tuple, AsyncGenerator
-from utils.useful import BaseEmbed
+from utils.useful import StellaEmbed
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, MenuBase
 
 if TYPE_CHECKING:
@@ -92,7 +92,7 @@ class ViewAuthor(BaseView):
                     content = f"Only `{author}` can use this. If you want to use it, use `{command}`"
                 else:
                     content = f"Only `{author}` can use this."
-                embed = BaseEmbed.to_error(description=content)
+                embed = StellaEmbed.to_error(description=content)
                 await interaction.response.send_message(embed=embed, ephemeral=True)
             return False
         return True
@@ -432,7 +432,7 @@ class InteractionPages(BaseView, MenuBase):
             if not bucket.update_rate_limit():
                 command = ctx.bot.get_command_signature(ctx, ctx.command)
                 content = f"Only `{author}` can use this menu. If you want to use it, use `{command}`"
-                embed = BaseEmbed.to_error(description=content)
+                embed = StellaEmbed.to_error(description=content)
                 await interaction.response.send_message(embed=embed, ephemeral=True)
             return False
         return True
@@ -483,7 +483,7 @@ class PersistentRespondView(ui.View):
             # Send to the opposite person
             dm = await destination.create_dm()
             msg = dm.get_partial_message(data["message_id"])
-            embed = BaseEmbed.default(ctx, title=f"Respond from {ctx.author}", description=respond.content)
+            embed = StellaEmbed.default(ctx, title=f"Respond from {ctx.author}", description=respond.content)
             interface_msg = await msg.reply(embed=embed, view=self)
 
             query_insert = "INSERT INTO report_respond VALUES($1, $2, $3, $4, $5)"
@@ -508,7 +508,7 @@ class PersistentRespondView(ui.View):
 
         # Send to author
         desc_user = "You will no longer receive any respond nor able to respond."
-        embed = BaseEmbed.to_error(title="End of Report", description=desc_user)
+        embed = StellaEmbed.to_error(title="End of Report", description=desc_user)
         channel = await interaction.user.create_dm()
         pmessage = channel.get_partial_message(message.id)
         await pmessage.reply(embed=embed)
@@ -518,7 +518,7 @@ class PersistentRespondView(ui.View):
         query_m = "SELECT message_id FROM report_respond WHERE interface_id=$1"
         data = await bot.pool_pg.fetchval(query_m, message.id, column='message_id')
         desc_opposite = f"{interaction.user} has ended the report."
-        embed = BaseEmbed.to_error(title="End of Report", description=desc_opposite)
+        embed = StellaEmbed.to_error(title="End of Report", description=desc_opposite)
 
         dm = await destination.create_dm()
         msg = dm.get_partial_message(data)

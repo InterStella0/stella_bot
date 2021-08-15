@@ -10,3 +10,4 @@ eros.py
 command_search.c
 .vscode
 *.exe
+max_prefix_weights

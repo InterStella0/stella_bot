@@ -12,7 +12,7 @@ import itertools
 from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
 from fuzzywuzzy import process
 from discord.ext import commands
-from utils.useful import BaseEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker, in_executor
+from utils.useful import StellaEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker, in_executor
 from utils.decorators import pages
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, repl_wrap
@@ -137,7 +137,7 @@ class HelpSearchButton(BaseButton):
 class Information(HelpMenuBase):
     async def on_information_show(self, payload: discord.RawReactionActionEvent) -> None:
         ctx = self.ctx
-        embed = BaseEmbed.default(ctx, title="Information", description=self.description)
+        embed = StellaEmbed.default(ctx, title="Information", description=self.description)
         curr = self.current_page + 1 if (p := self.current_page > -1) else "cover page"
         pa = ("page", "the")[not p]
         embed.set_author(icon_url=ctx.bot.user.avatar, name=f"You were on {pa} {curr}")
@@ -253,7 +253,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         mapped = itertools.starmap(get_cog_help, command_data.items())
         sort_cog = [*sorted(mapped, key=lambda c: c.commands, reverse=True)]
         stella = bot.stella
-        embed = BaseEmbed.default(
+        embed = StellaEmbed.default(
             ctx,
             title=f"{home_emoji} Help Command",
             description=f"{bot.description.format(stella)}\n\n**Select a Category:**",
@@ -284,7 +284,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     def get_command_help(self, command: commands.Command) -> discord.Embed:
         """Returns an Embed version of the command object given."""
-        embed = BaseEmbed.default(self.context)
+        embed = StellaEmbed.default(self.context)
         embed.title = self.get_command_signature(command)
         embed.description = self.get_help(command, brief=False)
         if demo := self.get_demo(command):
@@ -522,7 +522,7 @@ class Helpful(commands.Cog):
             return
 
         try:
-            embed = BaseEmbed.default(
+            embed = StellaEmbed.default(
                 ctx,
                 title=f"Report sent to {self.bot.stella}",
                 description=f"**You sent:** {message}"
@@ -537,7 +537,7 @@ class Helpful(commands.Cog):
             created_at = ctx.message.created_at.replace(tzinfo=None)
             report_id = await self.bot.pool_pg.fetchval(query, ctx.author.id, created_at, column='report_id')
 
-            embed = BaseEmbed.default(ctx, title=f"Reported from {ctx.author} ({report_id})", description=message)
+            embed = StellaEmbed.default(ctx, title=f"Reported from {ctx.author} ({report_id})", description=message)
             msg = await self.bot.stella.send(embed=embed, view=PersistentRespondView(self.bot))
             await ctx.confirmed()
 
@@ -555,7 +555,7 @@ class Helpful(commands.Cog):
     @commands.command(aliases=["aboutme"], help="Shows what the bot is about. It also shows recent changes and stuff.")
     async def about(self, ctx: StellaContext):
         REPO_URL = "https://github.com/InterStella0/stella_bot"
-        embed = BaseEmbed.default(
+        embed = StellaEmbed.default(
             ctx, 
             title=f"About {self.bot.user}", 
             description=self.bot.description.format(self.bot.stella),

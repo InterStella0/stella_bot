@@ -38,7 +38,7 @@ def call(func: Callable, *args: Tuple[Any], exception: Exception = Exception, re
         return (None, e)[ret]
 
 
-class BaseEmbed(discord.Embed):
+class StellaEmbed(discord.Embed):
     """Main purpose is to get the usual setup of Embed for a command or an error embed"""
     def __init__(self, color: Union[discord.Color, int] = 0xffcccb, timestamp: datetime.datetime = None,
                  fields: Tuple[Tuple[str, str]] = (), field_inline: Optional[bool] = False, **kwargs):
@@ -47,14 +47,14 @@ class BaseEmbed(discord.Embed):
             self.add_field(name=n, value=v, inline=field_inline)
 
     @classmethod
-    def default(cls, ctx: commands.Context, **kwargs) -> "BaseEmbed":
+    def default(cls, ctx: commands.Context, **kwargs) -> "StellaEmbed":
         instance = cls(**kwargs)
         instance.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar)
         return instance
 
     @classmethod
     def to_error(cls, title: Optional[str] = "Error",
-                 color: Union[discord.Color, int] = discord.Color.red(), **kwargs) -> "BaseEmbed":
+                 color: Union[discord.Color, int] = discord.Color.red(), **kwargs) -> "StellaEmbed":
         return cls(title=title, color=color, **kwargs)
 
 
@@ -176,7 +176,7 @@ class StellaContext(commands.Context):
     async def embed(self, content: str = None, *, reply: bool = True, mention_author: bool = False,
                     embed: discord.Embed = None, **kwargs: Any) -> discord.Message:
         embed_only_kwargs = ["colour", "color", "title", "type", "url", "description", "timestamp", "fields", "field_inline"]
-        ori_embed = BaseEmbed.default(self, **{key: value for key, value in kwargs.items() if key in embed_only_kwargs})
+        ori_embed = StellaEmbed.default(self, **{key: value for key, value in kwargs.items() if key in embed_only_kwargs})
         if embed:
             new_embed = embed.to_dict()
             new_embed.update(ori_embed.to_dict())

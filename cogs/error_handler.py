@@ -5,7 +5,7 @@ import copy
 import discord
 from typing import Any, TYPE_CHECKING
 from discord.ext import commands, flags
-from utils.useful import BaseEmbed, print_exception
+from utils.useful import StellaEmbed, print_exception
 from utils.errors import NotInDpy, BypassError
 from utils.buttons import BaseButton, ViewIterationAuthor
 
@@ -87,19 +87,19 @@ class ErrorHandler(commands.Cog):
         elif isinstance(error, commands.CommandOnCooldown):
             if ctx.author == self.bot.stella:
                 return await ctx.reinvoke()
-            await send_del(embed=BaseEmbed.to_error(
+            await send_del(embed=StellaEmbed.to_error(
                 title="Cooldown Error",
                 description=f"You're on cooldown. Retry after `{error.retry_after:.2f}` seconds")
             )
         elif isinstance(error, default_error):
-            await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
+            await send_del(embed=StellaEmbed.to_error(description=f"{error}"))
         else:
             if template := await self.generate_signature_error(ctx, error):
                 if isinstance(error, commands.MissingRequiredArgument):
                     return await handle_missing_param(template)
                 await send_del(embed=template)
             else:
-                await send_del(embed=BaseEmbed.to_error(description=f"{error}"))
+                await send_del(embed=StellaEmbed.to_error(description=f"{error}"))
                 traceback_error = print_exception(f'Ignoring exception in command {ctx.command}:', error)
                 if not self.bot.tester:
                     error_message = f"**Command:** {ctx.message.content}\n" \
@@ -110,7 +110,7 @@ class ErrorHandler(commands.Cog):
                                     f"**Jump:** [`jump`]({ctx.message.jump_url})```py\n" \
                                     f"{traceback_error}\n" \
                                     f"```"
-                    await self.bot.error_channel.send(embed=BaseEmbed.default(ctx, description=error_message))
+                    await self.bot.error_channel.send(embed=StellaEmbed.default(ctx, description=error_message))
 
     async def generate_signature_error(self, ctx: StellaContext, error: commands.CommandError):
         command = ctx.command
@@ -142,7 +142,7 @@ class ErrorHandler(commands.Cog):
         list_sig[pos] = "".join(target_list)
         space = " " * sum([len(x) + 1 for x in list_sig[:pos]])
         offset = " " * int((minimum + 1 + (maximum - minimum)) / 2)
-        embed = BaseEmbed.to_error(description=f"```{error}```\n")
+        embed = StellaEmbed.to_error(description=f"```{error}```\n")
         embed.description += f"**Errored at**\n" \
                              f"```prolog\n" \
                              f"{' '.join(list_sig)}\n" \
