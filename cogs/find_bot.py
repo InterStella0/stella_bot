@@ -24,8 +24,7 @@ from utils.useful import try_call, StellaEmbed, compile_array, search_prefixes, 
 from utils.errors import NotInDatabase, BotNotFound
 from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
 from utils import greedy_parser
-from typing import Any, Optional, Union, List, Tuple, Callable, Dict, Coroutine, TYPE_CHECKING
-
+from typing import Any, Optional, Union, List, Tuple, Callable, Dict, Coroutine, TYPE_CHECKING, AsyncGenerator, Type, TypeVar
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -87,10 +86,10 @@ class BotRepo:
 
     @classmethod
     async def convert(cls, ctx: StellaContext, argument: str) -> BotRepo:
-        if user := await IsBot().convert(ctx, argument):
-            data = await ctx.bot.pool_pg.fetchrow("SELECT * FROM bot_repo WHERE bot_id=$1", user.id)
-            if data:
-                return await cls.from_db(ctx.bot, user, data)
+        user = await IsBot().convert(ctx, argument)
+        data = await ctx.bot.pool_pg.fetchrow("SELECT * FROM bot_repo WHERE bot_id=$1", user.id)
+        if data:
+            return await cls.from_db(ctx.bot, user, data)
         raise NotInDatabase(user)
 
     def __str__(self) -> str:
@@ -863,32 +862,41 @@ class FindBot(commands.Cog, name="Bots"):
                            "joined the server.")
     @is_discordpy()
     async def botinfo(self, ctx: StellaContext, *, bot: IsBot):
-        # TODO: I said this 3 months ago to redo this, but im lazy
-        titles = (("Bot Prefix", "{0.allprefixes}", BotPrefixes),
-                  ("Command Usage", "{0.total_usage}", BotCommands),
-                  (("Bot Invited by", "{0.author}"),
-                   (("Reason", "reason"),
-                    ("Requested at", 'requested_at')),
-                   BotAdded))
         embed = StellaEmbed.default(ctx, title=str(bot))
-        embed.set_thumbnail(url=bot.avatar.url)
         embed.add_field(name="ID", value=f"`{bot.id}`")
-        for title, attrib, converter in reversed(titles):
+        T = TypeVar("T")
+
+        async def handle_convert(converter: Type[T]) -> Optional[T]:
             with contextlib.suppress(Exception):
-                if obj := await converter.convert(ctx, str(bot.id)):
-                    if isinstance(attrib, tuple):
-                        for t, a in attrib:
-                            if dat := getattr(obj, a):
-                                dat = dat if not isinstance(dat, datetime.datetime) else default_date(dat)
-                                embed.add_field(name=t, value=f"`{dat}`", inline=False)
+                return await converter.convert(ctx, str(bot.id))
 
-                        title, attrib = title
-                        if title == "Reason":
-                            attrib = textwrap.shorten(attrib, width=1000, placeholder='...')
-                    embed.add_field(name=title, value=f"{attrib.format(obj)}", inline=False)
+        if val := await handle_convert(BotAdded):
+            reason = textwrap.shorten(val.reason, width=1000, placeholder='...')
+            embed.add_field(name="Bot Invited By", value=val.author)
+            if value := val.requested_at:
+                embed.add_field(name="Requested at", value=aware_utc(value, mode='f'))
+            embed.add_field(name="Reason", value=reason, inline=False)
 
-        embed.add_field(name="Created at", value=f"`{default_date(bot.created_at)}`")
-        embed.add_field(name="Joined at", value=f"`{default_date(bot.joined_at)}`")
+        if val := await handle_convert(BotPrefixes):
+            embed.add_field(name="Bot Prefix", value=val.allprefixes)
+
+        if val := await handle_convert(BotCommands):
+            embed.add_field(name="Command Usage", value=val.total_usage)
+            high_command = val.highest_command
+            high_amount = len(val.command_usages.get(high_command))
+            embed.add_field(name="Top Command", value=f"{high_command}(`{high_amount}`)")
+
+        if val := await handle_convert(BotRepo):
+            repo = val.repo
+            embed.add_field(name="Bot Repository", value=f"[Source]({repo.html_url})")
+            with contextlib.suppress(Exception):
+                author = await self.bot.git.get_user(repo.owner.login)
+                embed.set_author(name=f"Repository by {author.name}", icon_url=author.avatar_url)
+            embed.add_field(name="Written in", value=f"{repo.language}")
+
+        embed.set_thumbnail(url=bot.avatar)
+        embed.add_field(name="Created at", value=f"{aware_utc(bot.created_at, mode='f')}")
+        embed.add_field(name="Joined at", value=f"{aware_utc(bot.joined_at, mode='f')}")
         await ctx.embed(embed=embed)
 
     @commands.command(aliases=["rba", "recentbot", "recentadd"],
@@ -983,6 +991,7 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.group(name="bot",
                     help="A group command that are related to all the bot that is stored in my database.")
     @commands.guild_only()
+    @is_discordpy()
     async def _bot(self, ctx: StellaContext):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
@@ -993,7 +1002,6 @@ class FindBot(commands.Cog, name="Bots"):
                   help="Allows you to change your own bot's information  in whoadd/whatadd command, "
                        "only applicable for discord.py server. The user is only allowed to change their own bot, "
                        "which they are able to change 'requested', 'reason' and 'jump url' values.")
-    @is_discordpy()
     async def changeinfo(self, ctx: StellaContext, bot: greedy_parser.UntilFlag[BotOwner], *, flags: flg.InfoFlag):
         bot = bot.bot
         new_data = {'bot_id': bot.id}
@@ -1088,11 +1096,11 @@ class FindBot(commands.Cog, name="Bots"):
     async def allcommands(self, ctx: StellaContext, **flags: bool):
         reverse = flags.get("reverse", False)
         query = "SELECT * FROM " \
-                "(SELECT command, COUNT(command) AS command_count FROM " \
-                "(SELECT DISTINCT bot_id, command FROM commands_list " \
-                "WHERE guild_id=$1 " \
-                "GROUP BY bot_id, command) AS _ " \
-                "GROUP BY command) AS _ " \
+                "   (SELECT command, COUNT(command) AS command_count FROM " \
+                "       (SELECT DISTINCT bot_id, command FROM commands_list " \
+                "       WHERE guild_id=$1 " \
+                "       GROUP BY bot_id, command) AS _ " \
+                "   GROUP BY command) AS _ " \
                 f"ORDER BY command_count {('DESC', '')[reverse]}"
 
         data = await self.bot.pool_pg.fetch(query, ctx.guild.id)
@@ -1113,17 +1121,7 @@ class FindBot(commands.Cog, name="Bots"):
 
     @commands.command(aliases=["wgithub", "github", "botgithub"], help="Tries to show the given bot's GitHub repository.")
     async def whatgithub(self, ctx: StellaContext, bot: BotRepo):
-        repo = bot.repo
-        author = await self.bot.git.get_user(repo.owner.login)
-        embed = StellaEmbed.default(
-            ctx,
-            title=repo.full_name,
-            description=f"**About: **\n{repo.description}\n\n",
-            url=repo.html_url
-        )
-        embed.set_thumbnail(url=bot.bot.avatar)
-
-        async def aislice(citerator, cut):
+        async def aislice(citerator: AsyncGenerator[Any, Any], cut: int) -> AsyncGenerator[Any, Any]:
             i = 0
             async for v in citerator:
                 i += 1
@@ -1131,7 +1129,7 @@ class FindBot(commands.Cog, name="Bots"):
                 if i == cut:
                     break
 
-        async def formatted_commits():
+        async def formatted_commits() -> AsyncGenerator[str, None]:
             async for c in aislice(repo.get_commits(), 5):
                 commit = c['commit']
                 time_created = datetime.datetime.strptime(commit['author']['date'], "%Y-%m-%dT%H:%M:%SZ")
@@ -1140,11 +1138,18 @@ class FindBot(commands.Cog, name="Bots"):
                 sha = c['sha'][:6]
                 yield f'[{aware_utc(time_created, mode="R")}] [{message}]({url} "{sha}")'
 
-        embed.description += "**Recent Commits:** \n" + "\n".join([o async for o in formatted_commits()])
-
+        repo = bot.repo
+        author = await self.bot.git.get_user(repo.owner.login)
         value = [f'{u.login}(`{u.contributions}`)' async for u in aislice(repo.get_contributors(), 3)]
-        embed.description += plural("\n\n**Top Contributor(s)**\n", len(value)) + ", ".join(value)
-
+        embed = StellaEmbed.default(
+            ctx,
+            title=repo.full_name,
+            description=f"**About: **\n{repo.description}\n\n**Recent Commits:** \n"
+                        "\n".join([o async for o in formatted_commits()]) +
+                        plural("\n\n**Top Contributor(s)**\n", len(value)) + ", ".join(value),
+            url=repo.html_url
+        )
+        embed.set_thumbnail(url=repo.bot.avatar)
         embed.add_field(name=plural("Star(s)", repo.stargazers_count), value=repo.stargazers_count)
         embed.add_field(name=plural("Fork(s)", repo.forks_count), value=repo.forks_count)
         embed.add_field(name="Language", value=repo.language)
@@ -1182,7 +1187,7 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.Cog.listener('on_message')
     @event_check(lambda _, m: m.author.bot)
     async def is_bot_triggered(self, message: discord.Message):
-        def resolve_message(m):
+        def resolve_message(m: discord.Message) -> Optional[discord.Message]:
             if m.reference:
                 caught = m.reference.resolved
                 if isinstance(caught, discord.DeletedReferencedMessage) or caught is None:
