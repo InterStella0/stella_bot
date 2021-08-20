@@ -533,7 +533,6 @@ class Helpful(commands.Cog):
                 title=f"Report sent to {self.bot.stella}",
                 description=f"**You sent:** {message}"
             )
-
             embed.set_author(name=f"Any respond from {self.bot.stella} will be through DM.")
             interface = await ctx.author.send(embed=embed)
         except discord.Forbidden:
