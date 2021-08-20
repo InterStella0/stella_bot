@@ -6,6 +6,7 @@ import io
 import textwrap
 import warnings
 import inspect
+import time
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator
 from collections import namedtuple
 from jishaku.codeblocks import Codeblock
@@ -265,6 +266,7 @@ class ReplReader:
         self.iterator = ReplParser(**flags).__aiter__()
         self.codeblock = codeblock
         self.counter = flags.get("counter")
+        self.exec_timer = flags.get("exec_timer")
         self.executor = self.compile_exec(_globals=_globals) if flags.get("exec") else self.empty()
 
     def __aiter__(self) -> AsyncGenerator[str, None]:
@@ -382,13 +384,21 @@ class ReplReader:
         caller, compiled = self.form_compiler(build_str, global_vars)
         with contextlib.redirect_stdout(str_io), warnings.catch_warnings():
             warnings.simplefilter("ignore")
+            started = time.time()
             output = await self.execution(caller, compiled, global_vars)
+            timed = time.time() - started
 
         if print_out := str_io.getvalue():
             if output is None:
                 output = re.sub("[\n]?$", "", print_out)
             else:
                 output = print_out + output
+
+        if self.exec_timer:
+            if output is None:
+                return f"Exec: {timed}s"
+            else:
+                return f"{output}\nExec: {timed}s"
         return output
 
     async def compile_exec(self, *, _globals: Dict[str, Any]) -> AsyncGenerator[Optional[Union[int, str]], Tuple[str, exec]]:
@@ -423,6 +433,7 @@ import textwrap
 import warnings
 import os
 import datetime
+import time
 from collections import namedtuple
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator, TypeVar
 def f(*args, **kwargs):

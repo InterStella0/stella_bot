@@ -149,3 +149,5 @@ class ReplFlag(commands.FlagConverter):
                                  default=True)
     inner_func_check: Optional[bool] = flag(help="Check if return/yield is inside a function. Defaults to False for owner",
                                             default=False)
+    exec_timer: Optional[bool] = flag(help="Shows the execution time for each line. Defaults to False.",
+                                      default=False)
