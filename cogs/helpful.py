@@ -490,23 +490,22 @@ class Helpful(commands.Cog):
             'commands': commands
         }
         flags = dict(flags)
-        async with ctx.breaktyping(limit=60):
-            if flags.get('exec') and not await self.bot.is_owner(ctx.author):
-                if code.language is None:
-                    content = code.content
-                    code = Codeblock("py", f"\n{content}\n")
+        if flags.get('exec') and not await self.bot.is_owner(ctx.author):
+            if code.language is None:
+                content = code.content
+                code = Codeblock("py", f"\n{content}\n")
 
-                coded = await self.get_wrapped(ctx, code, **flags)
-                accepted = await self.bot.ipc_client.request("execute_python", code=coded)
-                if output := accepted.get("output"):
-                    code = output
-                else:
-                    raise commands.CommandError(f"It died sorry dan maaf")
-
+            coded = await self.get_wrapped(ctx, code, **flags)
+            accepted = await self.bot.ipc_client.request("execute_python", code=coded)
+            if output := accepted.get("output"):
+                code = output
             else:
-                code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
+                raise commands.CommandError(f"It died sorry dan maaf")
 
-            text = text_chunker(code, width=1900, max_newline=20)
+        else:
+            code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
+
+        text = text_chunker(code, width=1900, max_newline=20)
 
         concurrent = ctx.command._max_concurrency
         await concurrent.release(ctx.message)

@@ -11,6 +11,7 @@ import contextlib
 import humanize
 import json
 import numpy as np
+import collections
 from aiogithub import GitHub
 from typing import Union, List, Optional, Dict, Any
 from utils.prefix_ai import PrefixNeuralNetwork, DerivativeNeuralNetwork
@@ -59,6 +60,7 @@ class StellaBot(commands.Bot):
         self.blacklist = set()
         self.cached_users = {}
         self.existing_prefix = {}
+        self.cached_context = collections.deque(maxlen=100)
         super().__init__(self.get_prefix, **kwargs)
 
         kweights = kwargs.pop("prefix_weights")
@@ -117,19 +119,21 @@ class StellaBot(commands.Bot):
     async def invoke(self, ctx: StellaContext, **flags) -> None:
         dispatch = flags.pop("dispatch", True)
         if ctx.command is not None:
+            self.cached_context.append(ctx)
             if dispatch:
                 self.dispatch('command', ctx)
             try:
                 check = await self.can_run(ctx, call_once=flags.pop("call_once", True))
-
                 if check or not flags.pop("call_check", True):
-                    if ctx.command.name == "jishaku":
-                        maximum = self._connection.max_messages
-                        self._connection.max_messages = "<:uwuqueen:785765496393433129>"
-                        await ctx.command.invoke(ctx)
-                        self._connection.max_messages = maximum
-                    else:
-                        await ctx.command.invoke(ctx)
+                    ctx.running = True
+                    async with ctx.breaktyping(limit=60):
+                        if ctx.command.name == "jishaku":
+                            maximum = self._connection.max_messages
+                            self._connection.max_messages = "<:uwuqueen:785765496393433129>"
+                            await ctx.command.invoke(ctx)
+                            self._connection.max_messages = maximum
+                        else:
+                            await ctx.command.invoke(ctx)
                 else:
                     raise commands.CheckFailure('The global check once functions failed.')
             except commands.CommandError as exc:
@@ -140,6 +144,7 @@ class StellaBot(commands.Bot):
             else:
                 if dispatch:
                     self.dispatch('command_completion', ctx)
+            ctx.running = False
         elif ctx.invoked_with:
             exc = commands.CommandNotFound('Command "{}" is not found'.format(ctx.invoked_with))
             if dispatch:
