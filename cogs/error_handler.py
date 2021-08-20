@@ -3,9 +3,10 @@ import asyncio
 import contextlib
 import copy
 import discord
+import textwrap
 from typing import Any, TYPE_CHECKING
 from discord.ext import commands, flags
-from utils.useful import StellaEmbed, print_exception
+from utils.useful import StellaEmbed, print_exception, multiget
 from utils.errors import NotInDpy, BypassError
 from utils.buttons import BaseButton, ViewIterationAuthor
 
@@ -73,8 +74,7 @@ class ErrorHandler(commands.Cog):
                 return
 
         ignored = (commands.CommandNotFound,)
-        default_error = (commands.NotOwner, commands.TooManyArguments, flags.ArgumentParsingError, NotInDpy,
-                         commands.MaxConcurrencyReached)
+        default_error = (commands.NotOwner, commands.TooManyArguments, flags.ArgumentParsingError, NotInDpy)
 
         error = getattr(error, 'original', error)
 
@@ -83,6 +83,30 @@ class ErrorHandler(commands.Cog):
 
         if isinstance(error, commands.DisabledCommand):
             await send_del(f'{ctx.command} has been disabled.')
+        elif isinstance(error, commands.MaxConcurrencyReached):
+            if error.per.name in ("user", "member"):
+                fmt = f"You can only use this command {error.number} at a time."
+            else:
+                fmt, *_ = str(error).partition(".")
+
+            contexts = multiget(
+                reversed(self.bot.cached_context),
+                size=min(error.number, 5),
+                author__id=ctx.author.id,
+                command__qualified_name=ctx.command.qualified_name
+            )
+
+            def context_format(c):
+                content, *_ = c.message.content.partition("\n")
+                shorten = textwrap.shorten(content, 50)
+                return f"[{shorten}]({c.message.jump_url})"
+
+            formatted = reversed(map(context_format, contexts))
+            embed = StellaEmbed.to_error(
+                title="Concurrency Error",
+                description="{}\n**Current Running Command(s):**\n{}".format(fmt, "\n".join(formatted))
+            )
+            await send_del(embed=embed)
 
         elif isinstance(error, commands.CommandOnCooldown):
             if ctx.author == self.bot.stella:

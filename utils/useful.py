@@ -10,6 +10,7 @@ import typing
 import os
 import pytz
 import textwrap
+import operator
 from typing import Callable, Any, Awaitable, Union, Tuple, List, Iterable, Coroutine, Optional, Type, AsyncGenerator, TypeVar, Generator
 from utils.decorators import pages, in_executor
 from utils.context_managers import BreakableTyping
@@ -330,3 +331,15 @@ def text_chunker(text: str, *, width: Optional[int] = 1880, max_newline: Optiona
             text[i] = new_elems
 
     return [*unpack(text)]
+
+
+def multiget(iterable: Iterable[T], *, size: Optional[int] = 2, **kwargs: Any) -> List[T]:
+    converted = [(operator.attrgetter(attr.replace('__', '.')), value) for attr, value in kwargs.items()]
+
+    value = []
+    for elem in iterable:
+        if all(pred(elem) == value for pred, value in converted):
+            value.append(elem)
+        if len(value) >= size:
+            break
+    return value
