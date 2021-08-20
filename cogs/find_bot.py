@@ -1291,6 +1291,22 @@ class FindBot(commands.Cog, name="Bots"):
         menu = InteractionBots(CacheListPageSource(bots, formatter=self.format_bot_info), generate_page=True)
         await menu.start(ctx)
 
+    @commands.command(aliases=["pp", "predictprefixes"], help="Shows how likely a prefix is valid for a bot.")
+    async def predictprefix(self, ctx, bot: IsBot):
+        data = await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE bot_id=$1", bot.id)
+        if not data:
+            raise commands.CommandError("Looks like i have no data to analyse sry.")
+
+        dataset = [[d['prefix'], d['usage'], d['last_usage'].timestamp()] for d in data]
+        array = await self.bot.get_prefixes_dataset(dataset)
+        pairs = [(p, float(c)) for p, _, _, c in array]
+        pairs.sort(key=lambda x: x[1], reverse=True)
+        size = min(len(pairs), 5)
+        await ctx.embed(
+            title=f"Top {size} {bot}'s prefixes",
+            description="\n".join([f'`{p}`: **{c:.2f}%**' for p, c in itertools.islice(pairs, size)])
+        )
+
 
 def setup(bot: StellaBot) -> None:
     bot.add_cog(FindBot(bot))
