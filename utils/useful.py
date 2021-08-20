@@ -12,6 +12,7 @@ import pytz
 import textwrap
 from typing import Callable, Any, Awaitable, Union, Tuple, List, Iterable, Coroutine, Optional, Type, AsyncGenerator, TypeVar, Generator
 from utils.decorators import pages, in_executor
+from utils.context_managers import BreakableTyping
 from discord.utils import maybe_coroutine
 from discord.ext import commands
 # TODO: do some detail documentation, cause im lazy
@@ -199,6 +200,9 @@ class StellaContext(commands.Context):
     async def confirmation(self, content: str, delete_after: Optional[bool] = False, **kwargs: Any) -> Optional[bool]:
         from utils.buttons import ConfirmView
         return await ConfirmView(self, delete_after).send(content, **kwargs)
+
+    def breaktyping(self, /, *, limit: Optional[int] = None):
+        return BreakableTyping(self, limit=limit)
 
 
 async def maybe_method(func: Union[Awaitable, Callable], cls: Optional[Type] = None, *args: Any, **kwargs: Any) -> Any:
