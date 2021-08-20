@@ -7,6 +7,7 @@ import textwrap
 import warnings
 import inspect
 import time
+import asyncio
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator
 from collections import namedtuple
 from jishaku.codeblocks import Codeblock
@@ -377,6 +378,7 @@ class ReplReader:
                 output = repr(returned)
             res = await generator.__anext__()
             global_vars.update(res)
+            global_vars.pop('__inner_function__')
         return output
 
     async def compiling(self, build_str: str, global_vars: Dict[str, Any]) -> str:
@@ -394,7 +396,7 @@ class ReplReader:
             else:
                 output = print_out + output
 
-        if self.exec_timer:
+        if self.exec_timer and timed > 0:
             if output is None:
                 return f"Exec: {timed}s"
             else:
