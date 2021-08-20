@@ -885,7 +885,8 @@ class FindBot(commands.Cog, name="Bots"):
             embed.add_field(name="Reason", value=reason, inline=False)
 
         if val := await handle_convert(BotPrefixes):
-            embed.add_field(name="Bot Prefix", value=val.allprefixes)
+            allprefixes = ", ".join(map("`{}`".format, [self.clean_prefix(ctx, v) for v in val.all_raw_prefixes]))
+            embed.add_field(name="Bot Prefix", value=allprefixes)
 
         if val := await handle_convert(BotCommands):
             embed.add_field(name="Command Usage", value=f"{val.total_usage:,}")
@@ -1302,9 +1303,10 @@ class FindBot(commands.Cog, name="Bots"):
         pairs = [(p, float(c)) for p, _, _, c in array]
         pairs.sort(key=lambda x: x[1], reverse=True)
         size = min(len(pairs), 5)
+        prefixes = "\n".join([f'`{self.clean_prefix(ctx, p)}`: **{c:.2f}%**' for p, c in itertools.islice(pairs, size)])
         await ctx.embed(
             title=f"Top {size} {bot}'s prefixes",
-            description="\n".join([f'`{p}`: **{c:.2f}%**' for p, c in itertools.islice(pairs, size)])
+            description=prefixes
         )
 
 
