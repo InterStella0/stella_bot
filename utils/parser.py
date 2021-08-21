@@ -8,7 +8,7 @@ import warnings
 import inspect
 import time
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator
-from collections import namedtuple
+from collections import namedtuple, deque
 from jishaku.codeblocks import Codeblock
 from discord.utils import find, get, snowflake_time
 from utils.errors import ReplParserDies
@@ -86,6 +86,15 @@ class ReplParser:
 
         self.CONNECT_REGEX = rf"(\s+)?(?P<captured>({self.form_re_const(self.COMBINATION, self.JOINER)}))(\s+)?:(\s+)?"
         self.COLLON_DEC_REGEX = r"(^(\s)*(@)|.*(:)(\s)*$)"
+
+        # multiblock parser
+        self.multiblock_reader = self.multiblock_reading()
+        self.open_symbol = deque()
+        self.constants = {"(": ")", "[": "]", "{": "}"}
+        self.ignore_symbol = ["'", '"']
+        self.ignoring = deque()
+        self.allow_nextline = False
+        next(self.multiblock_reader)
 
     def set_default(self, target: Dict[str, int]):
         for x in target:
@@ -231,45 +240,76 @@ class ReplParser:
         if line.endswith("\\"):
             return self.reading_multiline(lambda x: not x.endswith("\\"), no, line)
 
+    def multiblock_reading(self):
+        continuation = False
+        while True:
+            row = yield self.allow_nextline or len(self.open_symbol) or continuation
+            continuation = False
+            possible_doc = False
+            for i, char in enumerate(row):
+                if self.ignoring:
+                    size = len(self.ignoring)
+                    if char == self.ignoring[-1]:
+                        self.ignoring.append(char)
+                    elif size == 1:
+                        possible_doc = False
+                    elif size == 2:
+                        self.ignoring.clear()
+                    elif 3 < size < 6:
+                        for _ in range(size - 3):
+                            self.ignoring.pop()
+
+                    size = len(self.ignoring)
+                    if size == 6:
+                        self.allow_nextline = False
+                        self.ignoring.clear()
+                    elif size == 2 and not possible_doc:
+                        self.ignoring.clear()
+                    elif size == 3:
+                        self.allow_nextline = True
+                elif char in self.constants:
+                    self.open_symbol.append(char)
+                elif char in self.ignore_symbol:
+                    self.ignoring.append(char)
+                    possible_doc = True
+                elif self.open_symbol:
+                    opening = self.open_symbol[-1]
+                    if char == self.constants.get(opening):
+                        self.open_symbol.pop()
+                if i == len(row) - 1 and char == "\\":
+                    continuation = True
+
     async def _internal(self) -> AsyncGenerator[Union[int, bool, str], str]:
         for no in itertools.count(1):
             self.indicator_mode = True
             line = yield no
-
             if line == 0 or line is None:  # End of line, check for syntax combination statement
                 if self.expecting_combo:
                     raise ReplParserDies("Syntax Error", no, "", self.indicator_mode)
                 self.space = 0
                 self.parsing(no, "")
                 return
-            returning = True
-            parse = None
 
-            def get_multi_parser():
-                return enumerate([self.get_doctstring, self.get_continuation, self.get_open_close])
-
-            # Check for incomplete multiline
-            for i, getter in get_multi_parser():
-                if parse := getter(no, line):
+            builder = []  # Multi line support
+            current = line
+            while True:
+                if isinstance(current, str):
+                    is_continue = self.multiblock_reader.send(current)
+                    builder.append(current)
+                else:
+                    is_continue = False  # eof
+                if is_continue:
+                    if self.expected_indent and len(builder) == 1:
+                        self.indicator_mode = False
+                    yield self.indicator_mode
+                    self.indicator_mode = False
+                    current = yield no
+                else:
+                    line = "\n".join(builder)
                     break
 
-            if parse is not None:
-                if self.expected_indent:
-                    self.indicator_mode = False
-                yield self.indicator_mode
-                for li in parse:
-                    # If li is str, it means it finished constructing
-                    if isinstance(li, str):
-                        line = li
-                    else:
-                        yield parse.send((yield li))  # Else, move forward from the main generator
-                returning = False
-
             self.space = re.match(r"(\s+)?", line).span()[-1]
-            print("Parsing: ", line)
-            val = self.parsing(no, line)
-            if returning:
-                yield val 
+            yield self.parsing(no, line)
             self.previous_line = line
 
     def parsing(self, no: int, line: str, /) -> bool:
@@ -332,9 +372,9 @@ class ReplReader:
         await cancel_gen(self.iterator)
         await cancel_gen(self.executor)
 
-    async def runner(self, code: str) -> AsyncGenerator[Tuple[Any], None]:
+    async def runner(self, line_of_codes: str) -> AsyncGenerator[Tuple[Any], None]:
         with contextlib.suppress(StopAsyncIteration):
-            for line in code:
+            for line in line_of_codes:
                 result = [line]
                 for x in (self.iterator, self.executor):
                     result.append(await x.__anext__())
@@ -381,12 +421,10 @@ class ReplReader:
 
     @staticmethod
     def wrap_function(compiled: str) -> str:
-        is_one_line = len(compiled.splitlines()) == 1
         get_local = "    yield {0}\n    yield locals()"
         before = "async def __inner_function__():\n"
-        if is_one_line:
-            with contextlib.suppress(SyntaxError):
-                return compile(f"{before}{get_local.format(compiled)}", 'repl_command', 'exec')
+        with contextlib.suppress(SyntaxError):
+            return compile(f"{before}{get_local.format(compiled)}", 'repl_command', 'exec')
 
         return f"{before}{textwrap.indent(compiled, '    ')}\n{get_local.format('')}"
 
@@ -401,16 +439,14 @@ class ReplReader:
     def form_compiler(self, build_str: str, global_vars: Dict[str, Any]) -> Tuple[Union[exec, eval], Any]:
         imported_compiled = self.importer("\n".join(build_str), global_vars)
         caller = exec
-        if len(build_str) == 1: 
-            # Only wrap with async functions when it's an async operation
-            if "await" in imported_compiled:
-                imported_compiled = self.wrap_function(imported_compiled)
-            else:
-                with contextlib.suppress(SyntaxError):
-                    imported_compiled = compile(imported_compiled, 'repl_command', 'eval')
-                    caller = eval
-        elif any(x in self.get_first_character(build_str) for x in ("async for", "async with")):
+        if any(x in self.get_first_character(build_str) for x in ("async for", "async with")):
             imported_compiled = self.wrap_function(imported_compiled)
+        elif "await" in imported_compiled:
+            imported_compiled = self.wrap_function(imported_compiled)
+        else:
+            with contextlib.suppress(SyntaxError):
+                imported_compiled = compile(imported_compiled, 'repl_command', 'eval')
+                caller = eval
 
         return caller, imported_compiled
 
@@ -884,5 +920,3 @@ def repl_wrap(code: str, context: Dict[str, Any], **flags) -> str:
     reader = inspect.getsource(ReplReader)
     complete = IMPORTANT_PARTS + parser + reader
     return complete + RUNNER.format(code, flags, context)
-
-
