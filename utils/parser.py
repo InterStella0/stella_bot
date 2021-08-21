@@ -64,6 +64,14 @@ class ReplParser:
         self.UNCLOSED = rf".*(?P<unclosed>\()([^\)]+)?(?P<closed>\)?)"
         self.CLOSED = rf".*(?P<closed>\))"
 
+        self.OPENING = ["{", "(", "["]
+        self.opening_count = {x: 0 for x in self.OPENING}
+        self.CLOSED = ["}", ")", "]"]
+        self.closing_count = {x: 0 for x in self.CLOSED}
+
+        self.DOCSTRING = ('"""', "'''")
+        self.docstring_count = {x: 0 for x in self.DOCSTRING}
+
         self.JOINER = {
             "else": ['if', 'elif', 'except'], 
             'except': ['try'], 
@@ -78,6 +86,24 @@ class ReplParser:
 
         self.CONNECT_REGEX = rf"(\s+)?(?P<captured>({self.form_re_const(self.COMBINATION, self.JOINER)}))(\s+)?:(\s+)?"
         self.COLLON_DEC_REGEX = r"(^(\s)*(@)|.*(:)(\s)*$)"
+
+    def set_default(self, target: Dict[str, int]):
+        for x in target:
+            target[x] = 0
+
+    def counter(self, target: Dict[str, Optional[int]], line: str) -> None:
+        counted = {key: line.count(key) for key in target}
+        for key, count in counted.items():
+            target[key] += count
+
+    def check_open_close(self, line):
+        self.counter(self.opening_count, line)
+        self.counter(self.closing_count, line)
+        value = all([x == y for x, y in zip(self.opening_count.values(), self.closing_count.values())])
+        if value:
+            self.set_default(self.opening_count)
+            self.set_default(self.closing_count)
+        return value
 
     @staticmethod
     def form_re_const(*iterables: List[str]) -> str:
@@ -176,20 +202,34 @@ class ReplParser:
     def __aiter__(self) -> AsyncGenerator[int, str]:
         return self._internal()
 
-    def reading_parenthesis(self, no: int, line: str) -> Generator[Union[bool, int], str, None]:
+    def reading_multiline(self, check, no: int, line: str) -> Generator[Union[bool, int], str, None]:
         self.indicator_mode = False
         while True:
             self.combining_parse.append(line)
             line = yield no
             yield self.indicator_mode
-            if re.match(self.UNCLOSED, line):
-                self.continue_parsing += 1
-            if re.match(self.CLOSED, line):
-                self.continue_parsing -= 1
-            if not self.continue_parsing:
+            if check(line):
                 yield "\n".join(self.combining_parse) + f"\n{line}"
                 self.combining_parse.clear()
                 return
+
+    def get_doctstring(self, no, line):
+        for docstring in self.DOCSTRING:
+            if line.count(docstring) % 2 != 0:
+                def inner(inner_line):
+                    self.docstring_count[docstring] += inner_line.count(docstring)
+                    return self.docstring_count[docstring] % 2 != 0
+
+                return self.reading_multiline(inner, no, line)
+
+    def get_open_close(self, no, line):
+        if any(x in line for x in self.OPENING):
+            if not self.check_open_close(line):
+                return self.reading_multiline(self.check_open_close, no, line)
+
+    def get_continuation(self, no, line):
+        if line.endswith("\\"):
+            return self.reading_multiline(lambda x: not x.endswith("\\"), no, line)
 
     async def _internal(self) -> AsyncGenerator[Union[int, bool, str], str]:
         for no in itertools.count(1):
@@ -203,21 +243,30 @@ class ReplParser:
                 self.parsing(no, "")
                 return
             returning = True
-            # Check for incomplete parenthesis
-            if match := re.match(self.UNCLOSED, line):
-                if match['closed'] == "":
-                    if self.expected_indent:
-                        self.indicator_mode = False
-                    self.continue_parsing += 1
-                    parse = self.reading_parenthesis(no, line)
-                    yield self.indicator_mode
-                    for li in parse:
-                        if isinstance(li, str):
-                            line = li
-                        else:
-                            yield parse.send((yield li))
-                    returning = False
+            parse = None
+
+            def get_multi_parser():
+                return enumerate([self.get_doctstring, self.get_continuation, self.get_open_close])
+
+            # Check for incomplete multiline
+            for i, getter in get_multi_parser():
+                if parse := getter(no, line):
+                    break
+
+            if parse is not None:
+                if self.expected_indent:
+                    self.indicator_mode = False
+                yield self.indicator_mode
+                for li in parse:
+                    # If li is str, it means it finished constructing
+                    if isinstance(li, str):
+                        line = li
+                    else:
+                        yield parse.send((yield li))  # Else, move forward from the main generator
+                returning = False
+
             self.space = re.match(r"(\s+)?", line).span()[-1]
+            print("Parsing: ", line)
             val = self.parsing(no, line)
             if returning:
                 yield val 
