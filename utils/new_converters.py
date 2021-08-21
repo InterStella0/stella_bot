@@ -6,7 +6,8 @@ import datetime
 import humanize
 import numpy as np
 from collections import namedtuple, Counter
-from typing import Any, List, Optional, Union, Tuple, Generator, TYPE_CHECKING
+from typing import Any, List, Optional, Union, Tuple, Generator
+from jishaku.codeblocks import Codeblock, codeblock_converter
 from fuzzywuzzy import fuzz
 from discord.ext import commands
 from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotFound, MustMember, NotOwnerConvert
@@ -248,3 +249,26 @@ class BooleanOwner(commands.Converter):
         if await ctx.bot.is_owner(ctx.author):
             return commands.converter._convert_to_bool(argument)
         raise NotOwnerConvert('Boolean')
+
+
+codeblock_re = re.compile(r'`{3}((?P<language>\w+)\n)?(\n)*(?P<code>((.|\n)+?(?=`{3})|(.|\n)+?(?=`{2})|(.|\n)+))(?P<end>`{1,3})?')
+
+
+class CodeblockConverter(commands.Converter[Codeblock]):
+    async def convert(self, ctx: StellaContext, argument: str) -> Codeblock:
+        stringview = ctx.view
+        stringview.undo()
+        rest = stringview.read_rest()
+        if codes := codeblock_re.search(rest):
+            value = Codeblock(codes['language'], codes['code'])
+            if codes["end"] is None or len(codes["end"]) <= 2:
+                raise commands.CommandError("Codeblock was not properly ended")
+            start, end = codes.span()
+            stringview.previous += end
+        else:
+            value = codeblock_converter(argument)
+            stringview.previous += len(argument)
+        stringview.undo()
+        return value
+
+

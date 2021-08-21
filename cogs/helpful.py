@@ -18,10 +18,11 @@ from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, repl_wrap
 from utils.greedy_parser import UntilFlag, command, GreedyParser
 from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, PersistentRespondView
+from utils.new_converters import CodeblockConverter
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMenuBase
 from utils import flags as flg
 from collections import namedtuple
-from jishaku.codeblocks import codeblock_converter, Codeblock
+from jishaku.codeblocks import Codeblock
 from typing import Any, Tuple, List, Union, Optional, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -480,7 +481,7 @@ class Helpful(commands.Cog):
 
     @command(help="Simulate a live python interpreter interface when given a python code.")
     @commands.max_concurrency(1, commands.BucketType.user)
-    async def repl(self, ctx: StellaContext, code: UntilFlag[codeblock_converter], *, flags: flg.ReplFlag):
+    async def repl(self, ctx: StellaContext, code: UntilFlag[CodeblockConverter], *, flags: flg.ReplFlag):
         globals_ = {
             'ctx': ctx,
             'author': ctx.author,

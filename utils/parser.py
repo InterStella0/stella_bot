@@ -7,7 +7,6 @@ import textwrap
 import warnings
 import inspect
 import time
-import asyncio
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator
 from collections import namedtuple
 from jishaku.codeblocks import Codeblock
@@ -304,8 +303,7 @@ class ReplReader:
 
     async def reading_codeblock(self) -> AsyncGenerator[str, None]:
         codes = self.codeblock.content.splitlines()
-        no_lang = self.codeblock.language is not None
-        async for line, no, ex in self.runner(codes[no_lang:]):
+        async for line, no, ex in self.runner(codes):
             if isinstance(indent := await self.handle_repl(line), tuple):
                 _, error = indent
                 indicator = ("...", ">>>")[error.mode]
