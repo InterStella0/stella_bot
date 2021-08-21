@@ -18,7 +18,6 @@ from utils.prefix_ai import PrefixNeuralNetwork, DerivativeNeuralNetwork
 from utils.useful import StellaContext, ListCall, count_python
 from utils.decorators import event_check, wait_ready, in_executor
 from utils.ipc import StellaClient, StellaWebSocket
-from utils.parser import MultiBlock
 from discord.ext import commands
 from discord.gateway import ReconnectWebSocket
 from discord.backoff import ExponentialBackoff
@@ -369,15 +368,6 @@ async def on_disconnect():
 @bot.event
 async def on_connect():
     print("bot connected")
-
-
-@bot.command()
-async def test(ctx, *, content):
-    def func():
-        yield from content.splitlines()
-
-    for i, each in enumerate(MultiBlock(func()).reading()):
-        await ctx.send(f"{i}: '{each}'")
 
 
 @bot.event
