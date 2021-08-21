@@ -2,7 +2,6 @@ import time
 import re
 import asyncpg
 import asyncio
-import aiohttp
 import datetime
 import os
 import copy
@@ -17,10 +16,8 @@ from typing import Union, List, Optional, Dict, Any
 from utils.prefix_ai import PrefixNeuralNetwork, DerivativeNeuralNetwork
 from utils.useful import StellaContext, ListCall, count_python
 from utils.decorators import event_check, wait_ready, in_executor
-from utils.ipc import StellaClient, StellaWebSocket
+from utils.ipc import StellaClient
 from discord.ext import commands
-from discord.gateway import ReconnectWebSocket
-from discord.backoff import ExponentialBackoff
 from dotenv import load_dotenv
 from os.path import join, dirname
 from utils.useful import call, print_exception
@@ -43,7 +40,6 @@ class StellaBot(commands.Bot):
         self.user_db = kwargs.pop("user_db", None)
         self.pass_db = kwargs.pop("pass_db", None)
         self.color = kwargs.pop("color", None)
-        self.socket_states = kwargs.pop("socket_states")
         self.websocket_IP = kwargs.pop("websocket_ip")
         self.ipc_key = kwargs.pop("ipc_key")
         self.ipc_port = kwargs.pop("ipc_port")
@@ -250,61 +246,6 @@ class StellaBot(commands.Bot):
             await ctx.trigger_typing()
         await self.invoke(ctx)
 
-    async def connecting(self, ws_params: Dict[str, Any]) -> None:
-        """Attempt connection and establish events"""
-        coro = StellaWebSocket.from_client(self, **ws_params)
-        self.ws = await asyncio.wait_for(coro, timeout=120)
-        ws_params['initial'] = False
-        while True:
-            await self.ws.poll_event()
-
-    async def handle_connect_errors(self, ws_params: Dict[str, Any], reconnect: bool, err: Any, backoff: ExponentialBackoff) -> bool:
-        """Handles any connection errors if it is not a Reconnect Websocket error."""
-        self.dispatch('disconnect')
-        if not reconnect:
-            await self.close()
-            if isinstance(err, discord.ConnectionClosed) and err.code == 1000:
-                return False
-            raise
-
-        if self.is_closed():
-            return False
-
-        if isinstance(err, OSError) and err.errno in (54, 10054):
-            ws_params.update(sequence=self.ws.sequence, initial=False, resume=True, session=self.ws.session_id)
-            return True
-
-        if isinstance(err, discord.ConnectionClosed):
-            if err.code == 4014:
-                raise discord.PrivilegedIntentsRequired(err.shard_id) from None
-            if err.code != 1000:
-                await self.close()
-                raise
-
-        retry = backoff.delay()
-        await asyncio.sleep(retry)
-        ws_params.update(sequence=self.ws.sequence, resume=True, session=self.ws.session_id)
-        return True
-
-    async def connect(self, *, reconnect: bool = True) -> None:
-        """Handles discord connections"""
-        backoff = ExponentialBackoff()
-        ws_params = {
-            'initial': True,
-            'shard_id': self.shard_id
-        }
-        while not self.is_closed():
-            try:
-                await self.connecting(ws_params)
-            except ReconnectWebSocket as e:
-                self.dispatch('disconnect')
-                ws_params.update(sequence=self.ws.sequence, resume=e.resume, session=self.ws.session_id)
-            except (OSError, discord.HTTPException, discord.GatewayNotFound, discord.ConnectionClosed,
-                    aiohttp.ClientError, asyncio.TimeoutError) as exc:
-
-                if not await self.handle_connect_errors(ws_params, reconnect, exc, backoff):
-                    return
-
     def starter(self) -> None:
         """Starts the bot properly"""
         try:
@@ -343,11 +284,10 @@ bot_data = {
     "intents": intents,
     "owner_id": 591135329117798400,
     "websocket_ip": states.get("WEBSOCKET_IP"),
-    "socket_states": states.get("WEBSOCKET_STATES"),
     "prefix_weights": states.get("PREFIX_WEIGHT"),
     "prefix_derivative": states.get("PREFIX_DERIVATIVE_PATH"),
     "git_token": states.get("GIT_TOKEN"),
-    "activity": discord.Activity(type=discord.ActivityType.listening, name="phone. who dis doe"),
+    "activity": discord.Activity(type=discord.ActivityType.listening, name="logged to my pc."),
     "description": "{}'s personal bot that is partially for the public. "
                    f"Written with only `{count_python('.'):,}` lines. plz be nice"
 }

@@ -2,7 +2,6 @@ import asyncio
 import aiohttp
 import json
 import os
-from discord.gateway import DiscordWebSocket
 from discord.ext import ipc
 from typing import Any, AsyncGenerator, Callable, Optional, Union, Dict
 
@@ -101,64 +100,3 @@ class StellaClient(ipc.Client):
                         await coro(value)
             except Exception as e:
                 print("Ignoring error in gateway:", e)
-
-
-class StellaWebSocket(DiscordWebSocket):
-    def __init__(self, socket, *, loop):
-        super().__init__(socket, loop=loop)
-        self.socket_states = None
-
-    @classmethod
-    async def from_client(cls, client, *, initial=False, gateway=None, shard_id=None, session=None, sequence=None, resume=False):
-        gateway = gateway or await client.http.get_gateway()
-        socket = await client.http.ws_connect(gateway)
-        ws = cls(socket, loop=client.loop)
-
-        ws.token = client.http.token
-        ws._connection = client._connection
-        ws._discord_parsers = client._connection.parsers
-        ws._dispatch = client.dispatch
-        ws.gateway = gateway
-        ws.call_hooks = client._connection.call_hooks
-        ws._initial_identify = initial
-        ws.shard_id = shard_id
-        ws._rate_limiter.shard_id = shard_id
-        ws.shard_count = client._connection.shard_count
-        ws.session_id = session
-        ws.sequence = sequence
-        ws._max_heartbeat_timeout = client._connection.heartbeat_timeout
-        ws.socket_states = client.socket_states
-
-        client._connection._update_references(ws)
-
-        await ws.poll_event()
-
-        if not resume:
-            await ws.identify()
-            return ws
-
-        await ws.resume()
-        return ws
-
-    async def identify(self):
-        payload = {
-            'op': self.IDENTIFY,
-            'd': self.socket_states
-        }
-        if self.shard_id is not None and self.shard_count is not None:
-            payload['d']['shard'] = [self.shard_id, self.shard_count]
-
-        state = self._connection
-        if state._activity is not None or state._status is not None:
-            payload['d']['presence'] = {
-                'status': state._status,
-                'game': state._activity,
-                'since': 0,
-                'afk': False
-            }
-
-        if state._intents is not None:
-            payload['d']['intents'] = state._intents.value
-
-        await self.call_hooks('before_identify', self.shard_id, initial=self._initial_identify)
-        await self.send_as_json(payload)
