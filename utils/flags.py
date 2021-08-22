@@ -151,3 +151,7 @@ class ReplFlag(commands.FlagConverter):
                                             default=False)
     exec_timer: Optional[bool] = flag(help="Shows the execution time for each line. Defaults to False.",
                                       default=False)
+
+
+class BotVarFlag(commands.FlagConverter):
+    type: Optional[str] = flag(help="The type of variable to be converted to. Defaults to str", default="str")

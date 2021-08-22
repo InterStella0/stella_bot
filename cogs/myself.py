@@ -8,6 +8,7 @@ import asyncio
 import traceback
 import io
 import textwrap
+import json
 from typing import Union, Optional, Any, Tuple, Coroutine, Generator, Dict, TYPE_CHECKING, List
 from discord.ext import commands
 from discord.ext.commands import Greedy
@@ -489,6 +490,18 @@ class Myself(commands.Cog):
     async def botupdate(self, ctx: StellaContext):
         jsk = self.bot.get_command("jsk git")
         await jsk(ctx, argument=Codeblock("me", "pull"))
+
+    @greedy_parser.command()
+    async def changebotvar(self, ctx: StellaContext, key: str, value: UntilFlag[str], *, type: flg.BotVarFlag):
+        with open("d_json/bot_var.json") as b:
+            bot_var = json.load(b)
+
+        converter = eval(type.type)
+        new_val = converter(value)
+        bot_var[key] = new_val
+        with open("d_json/bot_var.json", "w") as w:
+            json.dump(bot_var, w, indent=4)
+        await ctx.confirmed()
 
 
 def setup(bot: StellaBot) -> None:
