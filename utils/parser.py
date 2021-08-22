@@ -519,7 +519,7 @@ import warnings
 import os
 import datetime
 import time
-from collections import namedtuple
+from collections import namedtuple, deque
 from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator, TypeVar
 def f(*args, **kwargs):
     return ['runner.py', 'bot_vars.json', 'server.py', 'main.py']

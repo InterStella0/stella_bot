@@ -122,14 +122,14 @@ class StellaBot(commands.Bot):
                 check = await self.can_run(ctx, call_once=flags.pop("call_once", True))
                 if check or not flags.pop("call_check", True):
                     ctx.running = True
-                    async with ctx.breaktyping(limit=60):
-                        if ctx.command.name == "jishaku":
-                            maximum = self._connection.max_messages
-                            self._connection.max_messages = "<:uwuqueen:785765496393433129>"
-                            await ctx.command.invoke(ctx)
-                            self._connection.max_messages = maximum
-                        else:
-                            await ctx.command.invoke(ctx)
+                    await ctx.trigger_typing()
+                    if ctx.command.name == "jishaku":
+                        maximum = self._connection.max_messages
+                        self._connection.max_messages = "<:uwuqueen:785765496393433129>"
+                        await ctx.command.invoke(ctx)
+                        self._connection.max_messages = maximum
+                    else:
+                        await ctx.command.invoke(ctx)
                 else:
                     raise commands.CheckFailure('The global check once functions failed.')
             except commands.CommandError as exc:
