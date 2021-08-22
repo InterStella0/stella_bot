@@ -307,7 +307,6 @@ class ReplParser:
                 else:
                     line = "\n".join(builder)
                     break
-
             self.space = re.match(r"(\s+)?", line).span()[-1]
             yield self.parsing(no, line)
             self.previous_line = line
@@ -391,7 +390,7 @@ class ReplReader:
             return "".join(lines), e
 
     async def reading_codeblock(self) -> AsyncGenerator[str, None]:
-        codes = self.codeblock.content.splitlines()
+        codes = itertools.dropwhile(lambda x: x == "", self.codeblock.content.splitlines())
         async for line, no, ex in self.runner(codes):
             if isinstance(indent := await self.handle_repl(line), tuple):
                 _, error = indent
@@ -435,6 +434,7 @@ class ReplReader:
             if x[no_space:] in ("", "\n", " "):
                 continue
             return x
+        return ""
 
     def form_compiler(self, build_str: str, global_vars: Dict[str, Any]) -> Tuple[Union[exec, eval], Any]:
         imported_compiled = self.importer("\n".join(build_str), global_vars)

@@ -251,7 +251,7 @@ class BooleanOwner(commands.Converter):
         raise NotOwnerConvert('Boolean')
 
 
-codeblock_re = re.compile(r'`{3}((?P<language>\w+)\n)?(\n)*(?P<code>((.|\n)+?(?=`{3})|(.|\n)+?(?=`{2})|(.|\n)+))(?P<end>`{1,3})?')
+codeblock_re = re.compile(r'`{3}((?P<language>\w+)\n)?(\n)*(?P<code>((.|\n)+?(?=`{3})|(.|\n)*?(?=`{2})|(.|\n)+))(?P<end>`{1,3})?')
 
 
 class CodeblockConverter(commands.Converter[Codeblock]):
@@ -261,6 +261,8 @@ class CodeblockConverter(commands.Converter[Codeblock]):
         rest = stringview.read_rest()
         if codes := codeblock_re.search(rest):
             value = Codeblock(codes['language'], codes['code'])
+            if value.content is None or value.content == "":
+                raise commands.CommandError("Codeblock is empty")
             if codes["end"] is None or len(codes["end"]) <= 2:
                 raise commands.CommandError("Codeblock was not properly ended")
             start, end = codes.span()
