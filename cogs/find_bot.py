@@ -1232,7 +1232,7 @@ class FindBot(commands.Cog, name="Bots"):
 
     @commands.command(aliases=["ab"], help="Shows the list of all bots in discord.py server and information.")
     @is_discordpy()
-    async def allbots(self, ctx):
+    async def allbots(self, ctx: StellaContext):
         command = self.allbots
         bots = [m for m in ctx.guild.members if m.bot]
         bots.sort(key=operator.attrgetter("id"))
@@ -1293,7 +1293,7 @@ class FindBot(commands.Cog, name="Bots"):
         await menu.start(ctx)
 
     @commands.command(aliases=["pp", "predictprefixes"], help="Shows how likely a prefix is valid for a bot.")
-    async def predictprefix(self, ctx, bot: IsBot):
+    async def predictprefix(self, ctx: StellaContext, bot: IsBot):
         data = await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE bot_id=$1", bot.id)
         if not data:
             raise commands.CommandError("Looks like i have no data to analyse sry.")
@@ -1308,6 +1308,36 @@ class FindBot(commands.Cog, name="Bots"):
             title=f"Top {size} {bot}'s prefixes",
             description=prefixes
         )
+
+    @commands.command(aliases=['findcommands', 'fc', 'fuck'], help="Finds all bots that has a particular command")
+    @commands.guild_only()
+    async def findcommand(self, ctx: StellaContext, *, command: str):
+        sql = 'SELECT bot_id, COUNT(command) "counter" ' \
+              'FROM commands_list ' \
+              'WHERE command LIKE $1 AND guild_id=$2 ' \
+              'GROUP BY bot_id ' \
+              'ORDER BY counter DESC'
+        data = await self.bot.pool_pg.fetch(sql, command, ctx.guild.id)
+        if not data:
+            raise commands.CommandError("Looks like i have no data to analyze maaf.")
+
+        @pages(per_page=6)
+        async def each_member_list(self, menu: InteractionPages,
+                                   entries: List[Dict[str, Union[str, int]]]) -> discord.Embed:
+            offset = menu.current_page * self.per_page
+            embed = StellaEmbed(title=f"All Bots that has `{command}`")
+            key = "(\u200b|\u200b)"
+
+            def getter(d):
+                return ctx.guild.get_member(d['bot_id']).display_name
+
+            contents = ["`{i}. {bot_name}{k}{counter}`".format(i=i, bot_name=getter(d), k=key, **d)
+                        for i, d in enumerate(entries, start=offset + 1)]
+            embed.description = "\n".join(realign(contents, key))
+            return embed
+
+        menu = InteractionPages(each_member_list(data), generate_page=True)
+        await menu.start(ctx)
 
 
 def setup(bot: StellaBot) -> None:
