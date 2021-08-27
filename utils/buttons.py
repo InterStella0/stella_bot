@@ -33,6 +33,7 @@ class BaseView(ui.View):
     def set_timeout(self, new_time):
         self._View__timeout_expiry = new_time
 
+
 class CallbackView(BaseView):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -539,3 +540,31 @@ class PersistentRespondView(ui.View):
 
     async def clean_up(self, message: discord.Message) -> None:
         await message.edit(view=None)
+
+
+command_cooldown = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
+
+
+class ButtonView(ViewAuthor, CallbackView):
+    @ui.button(label='Re-run', style=discord.ButtonStyle.blurple)
+    async def on_run(self, button: ui.Button, interaction: discord.Interaction):
+        if not (retry := command_cooldown.update_rate_limit(self.context.message)):
+            await interaction.response.edit_message(view=None)
+            await self.context.reinvoke()
+        else:
+            raise commands.CommandOnCooldown(command_cooldown._cooldown, retry, command_cooldown._type)
+
+    @ui.button(label='Delete', style=discord.ButtonStyle.danger)
+    async def on_delete(self, button: ui.Button, interaction: discord.Interaction):
+        await interaction.message.delete(delay=0)
+
+    async def handle_callback(self, callback, button: ui.Button, interaction: discord.Interaction):
+        try:
+            await callback(interaction)
+        except commands.CommandOnCooldown as cooldown:
+            await interaction.response.send_message(
+                content=f"Don't spam the button. You're on cooldown. Retry after: `{cooldown.retry_after:.2f}`",
+                ephemeral=True
+            )
+        else:
+            self.stop()

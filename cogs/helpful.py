@@ -12,12 +12,14 @@ import itertools
 from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
 from fuzzywuzzy import process
 from discord.ext import commands
-from utils.useful import StellaEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker, in_executor
+from utils.useful import StellaEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker, \
+    in_executor
 from utils.decorators import pages
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, repl_wrap
 from utils.greedy_parser import UntilFlag, command, GreedyParser
-from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, PersistentRespondView
+from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, PersistentRespondView, \
+    ButtonView
 from utils.new_converters import CodeblockConverter
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMenuBase
 from utils import flags as flg
@@ -512,13 +514,14 @@ class Helpful(commands.Cog):
         await concurrent.release(ctx.message)
 
         if len(text) > 1:
-            pages = InteractionPages(formatter(text))
-            await pages.start(ctx)
+            menu = InteractionPages(formatter(text))
+            await menu.start(ctx)
         elif len(text) == 1:
             code, = text
-            await ctx.maybe_reply(f"```py\n{code}```", allowed_mentions=discord.AllowedMentions.none())
+            view = ButtonView(ctx)
+            await ctx.maybe_reply(f"```py\n{code}```", view=view, allowed_mentions=discord.AllowedMentions.none())
         else:
-            raise commands.CommandError(f"It died sorry dan maaf")
+            await ctx.maybe_reply(f"```py\nNo Output```")
 
     @commands.command(help="Reports to the owner through the bot. Automatic blacklist if abuse.")
     @commands.cooldown(1, 60, commands.BucketType.user)
