@@ -74,7 +74,7 @@ class Myself(commands.Cog):
             for x in "author_id", "reason", "requested_at", "jump_url":
                 if new_data.get(x) is None:
                     new_data[x] = None
-            new_data['joined_at'] = bot.joined_at
+            new_data['joined_at'] = bot.joined_at.replace(tzinfo=None)
         values = [*new_data.values()]
         result = await self.bot.pool_pg.execute(query, *values)
         await ctx.maybe_reply(result)
