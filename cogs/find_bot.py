@@ -336,8 +336,9 @@ class FindBot(commands.Cog, name="Bots"):
                 time_left = (time_to_listen - time_rn).total_seconds()
                 done, didnt = await asyncio.wait(
                     [self.bot.wait_for(event, check=stuff_here[f"{event}_check"], timeout=time_left) 
-                     for event in ("reaction_add", "message")]
-                    )
+                     for event in ("reaction_add", "message")],
+                    return_when=asyncio.FIRST_COMPLETED
+                )
                 for coro in done:
                     coro.exception()
 
@@ -528,8 +529,7 @@ class FindBot(commands.Cog, name="Bots"):
         Checks if the message contains a valid prefix, which will wait for the bot to respond to count that message
         as a command.
         """
-        limit = min(len(message.content), 31)
-        if not (received := await self.search_respond(search_prefixes, message, message.content[:limit], "prefixes")):
+        if not (received := await self.search_respond(search_prefixes, message, message.content[:31], "prefixes")):
             return
 
         responded, result, message_sent = received
