@@ -246,7 +246,7 @@ async def bot_pending_list(self, menu: InteractionPages, entry: Dict[str, Union[
               ("Requested at", aware_utc(entry["requested_at"])),
               ("Message", f"[jump]({entry['jump_url']})"))
     embed = StellaEmbed(title=f"{bot}(`{bot.id}`)", fields=fields)
-    embed.set_thumbnail(url=bot.avatar.url)
+    embed.set_thumbnail(url=bot.display_avatar)
     return embed
 
 

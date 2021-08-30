@@ -197,7 +197,7 @@ def get_majority_color(b: io.BytesIO) -> Coroutine[Any, Any, discord.Color]:
 
 def islight(r: int, g: int, b: int) -> bool:
     # Found this equation in http://alienryderflex.com/hsp.html, fucking insane i tell ya
-    hsp = math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b))
+    hsp = math.sqrt(.299 * r**2 + .587 * g**2 + .114 * b**2)
     return hsp > 127.5
 
 

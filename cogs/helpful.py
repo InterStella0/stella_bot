@@ -79,7 +79,8 @@ class HelpMenuView(MenuViewBase):
     """This class is responsible for starting the view + menus activity for the help command.
        This accepts embed, help_command, context, page_source, dataset and optionally Menu.
        """
-    def __init__(self, *data: Any, embed: discord.Embed, help_object: StellaBotHelp, context: StellaContext, **kwargs: Any):
+    def __init__(self, *data: Any, embed: discord.Embed, help_object: StellaBotHelp, context: StellaContext,
+                 **kwargs: Any):
         super().__init__(context, HelpSource, *data,
                          button=HelpButton,
                          menu=HelpMenu,
@@ -280,7 +281,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             "context": ctx,
             "mapper": command_data
         }
-        cog_names = [{"selected": ch.name, "emoji": ch.emoji} for ch in sort_cog]
+        cog_names = [dict(selected=ch.name, emoji=ch.emoji) for ch in sort_cog]
         buttons = discord.utils.as_chunks(cog_names, 5)
         menu_view = HelpMenuView(*buttons, **loads)
         await ctx.reply(embed=embed, view=menu_view)
