@@ -721,7 +721,7 @@ class FindBot(commands.Cog, name="Bots"):
 
             value += f"**Created at:** `{default_date(dbot.bot.created_at)}`"
             embed.add_field(name=dbot, value=value, inline=False)
-        embed.set_thumbnail(url=author.avatar.url)
+        embed.set_thumbnail(url=author.display_avatar)
         if not list_bots:
             embed.description = f"{author} doesnt own any bot here."
         await ctx.embed(embed=embed)
@@ -738,7 +738,7 @@ class FindBot(commands.Cog, name="Bots"):
             author = await try_call(commands.UserConverter().convert, ctx, str(data.author), exception=UserNotFound)
 
         embed = discord.Embed(title=str(data.bot))
-        embed.set_thumbnail(url=data.bot.avatar.url)
+        embed.set_thumbnail(url=data.bot.display_avatar)
 
         def or_none(condition: bool, func: Callable[[bool], Any]) -> Optional[Any]:
             if condition:
@@ -899,10 +899,10 @@ class FindBot(commands.Cog, name="Bots"):
             embed.add_field(name="Bot Repository", value=f"[Source]({repo.html_url})")
             with contextlib.suppress(Exception):
                 author = await self.bot.git.get_user(repo.owner.login)
-                embed.set_author(name=f"Repository by {author.name}", icon_url=author.avatar_url)
+                embed.set_author(name=f"Repository by {author.name}", icon_url=author.display_avatar)
             embed.add_field(name="Written in", value=f"{repo.language}")
 
-        embed.set_thumbnail(url=bot.avatar)
+        embed.set_thumbnail(url=bot.display_avatar)
         embed.add_field(name="Created at", value=f"{aware_utc(bot.created_at, mode='f')}")
         return embed.add_field(name="Joined at", value=f"{aware_utc(bot.joined_at, mode='f')}")
 
@@ -989,9 +989,9 @@ class FindBot(commands.Cog, name="Bots"):
             list_commands = "\n".join(f"{x}. {c}[`{bot.get_command(c)}`]" for x, c in enumerate(entries, start=number))
             embed = StellaEmbed.default(ctx, title=f"{bot} Commands[`{bot.total_usage}`]", description=list_commands)
             if owner_info and owner_info.author:
-                embed.set_author(icon_url=owner_info.author.avatar.url, name=f"Owner {owner_info.author}")
+                embed.set_author(icon_url=owner_info.author.display_avatar, name=f"Owner {owner_info.author}")
 
-            return embed.set_thumbnail(url=bot.bot.avatar.url)
+            return embed.set_thumbnail(url=bot.bot.display_avatar)
         menu = InteractionPages(each_page(bot.commands))
         await menu.start(ctx)
 
@@ -1156,7 +1156,7 @@ class FindBot(commands.Cog, name="Bots"):
                         plural("\n\n**Top Contributor(s)**\n", len(value)) + ", ".join(value),
             url=repo.html_url
         )
-        embed.set_thumbnail(url=bot.bot.avatar)
+        embed.set_thumbnail(url=bot.bot.display_avatar)
         embed.add_field(name=plural("Star(s)", repo.stargazers_count), value=repo.stargazers_count)
         embed.add_field(name=plural("Fork(s)", repo.forks_count), value=repo.forks_count)
         embed.add_field(name="Language", value=repo.language)
@@ -1165,7 +1165,7 @@ class FindBot(commands.Cog, name="Bots"):
             embed.add_field(name=plural("Open Issue(s)", issue), value=issue)
 
         embed.add_field(name="Created At", value=aware_utc(repo.created_at))
-        embed.set_author(name=f"Repository by {author.name}", icon_url=author.avatar_url)
+        embed.set_author(name=f"Repository by {author.name}", icon_url=author.display_avatar)
         await ctx.maybe_reply(embed=embed)
 
     @commands.command(aliases=["agithub", "ag", "everygithub", "allgithubs"],

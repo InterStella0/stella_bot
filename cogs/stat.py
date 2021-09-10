@@ -249,7 +249,7 @@ class Stat(commands.Cog, name="Statistic"):
             query = "SELECT * FROM commands_list WHERE guild_id=$1 AND bot_id=$2 AND time_used > $3"
             values = (ctx.guild.id, target.id, time_given)
             error = "Looks like no data is present for this bot."
-            method = "avatar"
+            method = "display_avatar"
         else:
             query = "SELECT * FROM commands_list WHERE guild_id=$1 AND time_used > $2"
             values = (target.id, time_given)
@@ -315,7 +315,7 @@ class Stat(commands.Cog, name="Statistic"):
                     "ORDER BY usage DESC LIMIT 10"
             values = (ctx.guild.id, target.id)
             error = "Looks like no data is present for this bot."
-            method = "avatar"
+            method = "display_avatar"
         else:
             target = await ElseConverter().convert(ctx, target)
             query = "SELECT command, COUNT(command) AS usage FROM commands_list " \
