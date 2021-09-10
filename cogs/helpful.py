@@ -60,7 +60,7 @@ class HelpSource(ListPageInteractionBase):
                                                         for command_help in list_commands),
                               color=menu.bot.color)
         author = menu.ctx.author
-        return embed.set_footer(text=f"Requested by {author}", icon_url=author.avatar.url)
+        return embed.set_footer(text=f"Requested by {author}", icon_url=author.display_avatar)
 
     async def format_view(self, menu: HelpMenu, entry: Tuple[Optional[commands.Cog], List[CommandHelp]]) -> HelpMenuView:
         if not menu._running:
@@ -144,7 +144,7 @@ class Information(HelpMenuBase):
         embed = StellaEmbed.default(ctx, title="Information", description=self.description)
         curr = self.current_page + 1 if (p := self.current_page > -1) else "cover page"
         pa = ("page", "the")[not p]
-        embed.set_author(icon_url=ctx.bot.user.avatar, name=f"You were on {pa} {curr}")
+        embed.set_author(icon_url=ctx.bot.user.display_avatar, name=f"You were on {pa} {curr}")
         nav = '\n'.join(f"{e} {b.action.__doc__}" for e, b in super().buttons.items())
         embed.add_field(name="Navigation:", value=nav)
         await self.message.edit(embed=embed, allowed_mentions=discord.AllowedMentions(replied_user=False))
@@ -266,14 +266,14 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         payload = {
             "bot_name": str(bot.user),
             "name": str(bot.stella),
-            "author_avatar": ctx.author.avatar.url,
-            "author_avatar_hash": ctx.author.avatar.key,
+            "author_avatar": ctx.author.display_avatar.url,
+            "author_avatar_hash": ctx.author.display_avatar.key,
             "author_name": str(ctx.author)
         }
         banner = await bot.ipc_client.request("generate_banner", **payload)
         if isinstance(banner, str):
             embed.set_image(url=banner)
-        embed.set_author(name=f"By {stella}", icon_url=stella.avatar)
+        embed.set_author(name=f"By {stella}", icon_url=stella.display_avatar)
 
         loads = {
             "embed": embed,
@@ -575,8 +575,8 @@ class Helpful(commands.Cog):
         payload = {
             "bot_name": str(self.bot.user),
             "name": str(self.bot.stella),
-            "author_avatar": ctx.author.avatar.url,
-            "author_avatar_hash": ctx.author.avatar.key,
+            "author_avatar": ctx.author.display_avatar.url,
+            "author_avatar_hash": ctx.author.display_avatar.key,
             "author_name": str(ctx.author)
         }
         banner = await self.bot.ipc_client.request("generate_banner", **payload)

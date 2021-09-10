@@ -50,7 +50,7 @@ class ErrorHandler(commands.Cog):
                 command = self.bot.get_command('report')
                 command_sig = f"{ctx.clean_prefix}{command.qualified_name} {command.signature}"
                 text = f"If you think this is an error. Report via {command_sig}"
-                embed.set_footer(icon_url=self.bot.user.avatar, text=text)
+                embed.set_footer(icon_url=self.bot.user.display_avatar, text=text)
             await ctx.reply(*args, delete_after=60, **kwargs)
             if ctx.channel.permissions_for(ctx.me).manage_messages:
                 await ctx.message.delete(delay=60)
@@ -178,7 +178,7 @@ class ErrorHandler(commands.Cog):
             if not bucket.update_rate_limit():
                 embed.description += "**Command Example**"
                 embed.set_image(url=demo)
-        embed.set_footer(icon_url=ctx.me.avatar.url, text=f"{ctx.clean_prefix}help {ctx.command.qualified_name} for more information.")
+        embed.set_footer(icon_url=ctx.me.display_avatar, text=f"{ctx.clean_prefix}help {ctx.command.qualified_name} for more information.")
         return embed
 
 

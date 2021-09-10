@@ -63,7 +63,7 @@ class Useful(commands.Cog):
                         f"**Created:** `{member.created_at}`\n"
                         f"**Token Created:** `{timestamp}`"
         )
-        embed.set_thumbnail(url=member.avatar.url)
+        embed.set_thumbnail(url=member.display_avatar)
         await ctx.embed(embed=embed)
 
     @commands.command(aliases=["gt", "gtoken"],
@@ -104,7 +104,7 @@ class Useful(commands.Cog):
                         f"**ID:** `{member.id}`\n"
                         f"**Bot:** `{member.bot}`"
         )
-        embed.set_thumbnail(url=member.avatar.url)
+        embed.set_thumbnail(url=member.display_avatar)
         await ctx.embed(embed=embed, fields=fields)
 
     @commands.command(aliases=["replycounts", "repliescount", "replyscounts", "threadcount"],
