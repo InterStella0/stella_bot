@@ -34,6 +34,23 @@ if TYPE_CHECKING:
 ReactRespond = collections.namedtuple("ReactRespond", "created_at author reference")
 DISCORD_PY = 336642139381301249
 
+@dataclass
+class BotCommandActivity:
+    bot: discord.User
+    data: List[Tuple[str, datetime.datetime]]
+    @classmethod
+    async def convert(cls, ctx: StellaContext, argument: str) -> BotCommandActivity:
+        user = await IsBot().convert(ctx, argument)
+        query = "SELECT command, time_used " \
+                "FROM commands_list " \
+                "WHERE bot_id=$1 AND guild_id=$2 " \
+                "ORDER BY time_used DESC " \
+                "LIMIT 100"
+        if not (data := await ctx.bot.pool_pg.fetch(query, user.id, ctx.guild.id)):
+            raise NotInDatabase(user)
+
+        return cls(user, [(d['command'], d['time_used']) for d in data])
+
 
 @dataclass
 class BotPredictPrefixes:
@@ -1337,6 +1354,23 @@ class FindBot(commands.Cog, name="Bots"):
             return embed
 
         menu = InteractionPages(each_member_list(data), generate_page=True)
+        await menu.start(ctx)
+
+    @commands.command(aliases=['lastcommands', 'lastbotcommand', 'lastcommand'],
+                      help="Showing the first 100 commands of a bot.")
+    @commands.guild_only()
+    async def lastbotcommands(self, ctx, *, bot: BotCommandActivity):
+        @pages(per_page=10)
+        async def each_commands_list(self, menu: InteractionPages,
+                                     entries: List[Tuple[str, datetime.datetime]]) -> discord.Embed:
+            number = menu.current_page * self.per_page + 1
+            key = "(\u200b|\u200b)"
+            list_commands = [f"`{x}. {c} {key} `[{aware_utc(d, mode='R')}]"
+                             for x, (c, d) in enumerate(entries, start=number)]
+            content = "\n".join(realign(list_commands, key))
+            return StellaEmbed(title=f"{bot.bot}'s command activities", description=content)
+
+        menu = InteractionPages(each_commands_list(bot.data), generate_page=True)
         await menu.start(ctx)
 
 
