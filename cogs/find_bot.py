@@ -1165,7 +1165,7 @@ class FindBot(commands.Cog, name="Bots"):
             embed.add_field(name=plural("Open Issue(s)", issue), value=issue)
 
         embed.add_field(name="Created At", value=aware_utc(repo.created_at))
-        embed.set_author(name=f"Repository by {author.name}", icon_url=author.display_avatar)
+        embed.set_author(name=f"Repository by {author.name}", icon_url=author.avatar_url)
         await ctx.maybe_reply(embed=embed)
 
     @commands.command(aliases=["agithub", "ag", "everygithub", "allgithubs"],
