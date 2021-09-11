@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import io
 
 import discord
@@ -1298,14 +1299,23 @@ class FindBot(commands.Cog, name="Bots"):
                 super().__init__(*args, per_page=1)
                 self.bot_cache = {}
                 self.formatter = formatter
+                self.current_bot = None
+                self.current_embed = None
 
             async def format_page(self, menu: InteractionPages, entry: discord.Member) -> discord.Embed:
+                self.current_bot = entry
                 if not (embed := self.bot_cache.get(entry)):
                     embed = await self.formatter(ctx, entry)
 
+                self.current_embed = embed
                 return embed
 
         class InteractionBots(InteractionPages):
+            def __init__(self, cog, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.cog = cog
+                self.url_store = {}
+
             class BotPrompter(PromptView):
                 def __init__(self, *args, set_bots, timeout, **kwargs):
                     super().__init__(*args, timeout=timeout or 60, delete_after=True, **kwargs)
@@ -1345,7 +1355,23 @@ class FindBot(commands.Cog, name="Bots"):
                     await self.show_checked_page(value)
                     self.reset_timeout()
 
-        menu = InteractionBots(CacheListPageSource(bots, formatter=self.format_bot_info), generate_page=True)
+            @ui.button(label="Generate Bar")
+            async def generate_bar(self, button: ui.Button, interaction: discord.Interaction):
+                embed = self._source.current_embed
+                bot = self._source.current_bot
+                if url := self.url_store.get(bot.id):
+                    embed.set_image(url=url)
+                elif file := await self.cog.create_bar(self.ctx, bot):
+                    base = base64.b64encode(file.fp.read()).decode('utf-8')
+                    url = await self.cog.bot.ipc_client.request('upload_file', base64=base, filename=file.filename)
+                    embed.set_image(url=url)
+                    self.url_store.update({bot.id: url})
+                else:
+                    await interaction.response.send_message("No Command data for this bot.", ephemeral=True)
+                    return
+                await interaction.response.edit_message(embed=embed)
+
+        menu = InteractionBots(self, CacheListPageSource(bots, formatter=self.format_bot_info), generate_page=True)
         await menu.start(ctx)
 
     @commands.command(aliases=["pp", "predictprefixes"], help="Shows how likely a prefix is valid for a bot.")
