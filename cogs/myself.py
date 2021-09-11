@@ -314,48 +314,25 @@ class Myself(commands.Cog):
         await ctx.embed(description="\n".join(str(x) for x in outputs))
 
     @greedy_parser.command()
-    @flg.add_flag("--not_tabulate", "-NT", action="store_true", default=False)
     @flg.add_flag("--not_number", "-NN", action="store_true", default=False)
     @flg.add_flag("--max_row", "-MR", type=int, default=15)
     async def sql(self, ctx: StellaContext, query: UntilFlag[str], **flags: Union[int, bool]):
-        dont_tabulate = flags.pop("not_tabulate", False)
         MR = flags.get("max_row")
         rows = await self.bot.pool_pg.fetch(query)
-        if not dont_tabulate and rows:
-            to_pass = {"no": [*range(1, len(rows) + 1)]} if not flags.pop("not_number") else {}
-            for d in rows:
+        NN = flags.pop("not_number")
+
+        @pages(per_page=MR)
+        async def tabulation(self, menu, entries):
+            offset = menu.current_page * self.per_page + 1
+            to_pass = {"no": [*range(offset, offset + len(entries))]} if not NN else {}
+            for d in entries:
                 for k, v in d.items():
                     value = to_pass.setdefault(k, [])
                     value.append(v)
-            table = tabulate.tabulate(to_pass, 'keys', 'pretty').splitlines()
-            datarows = []
-            last_row = [(" " * int(len(table[0]) / 2 - 5)) + "-- More --"] 
-            was_size = 0
+            table = tabulate.tabulate(to_pass, 'keys', 'pretty')
+            return f"```py\n{table}```"
 
-            def check_content(size: int) -> bool:
-                nonlocal was_size
-                values = table[:size] + last_row
-                result = len("\n".join(values))
-                was_size = max(result, was_size)
-                return result > 1430
-            
-            while check_content(MR):
-                MR -= 1
-            if (given := flags.pop("max_row")) - MR:
-                await ctx.maybe_reply(
-                    f"Showing `{given}` rows was more than `1430` characters(`{was_size}`), showing `{MR}` rows instead.",
-                    delete_after=60
-                )
-
-            tabledata = [*discord.utils.as_chunks(table[3:], MR)]
-            for few_row in tabledata:
-                last_row = [] if few_row is tabledata[-1] else last_row
-                datarows.append(table[:3] + few_row + last_row)
-            to_display = ["\n".join(row) for row in datarows]
-        else:
-            to_display = textwrap.wrap(str(rows), 1000, replace_whitespace=False)
-        
-        menu = InteractionPages(show_result(to_display)) 
+        menu = InteractionPages(tabulation(rows))
         await menu.start(ctx)
 
     @greedy_parser.command()
