@@ -315,10 +315,16 @@ class Myself(commands.Cog):
 
     @greedy_parser.command()
     @flg.add_flag("--not_number", "-NN", action="store_true", default=False)
-    @flg.add_flag("--max_row", "-MR", type=int, default=15)
+    @flg.add_flag("--max_row", "-MR", type=int, default=12)
     async def sql(self, ctx: StellaContext, query: UntilFlag[CodeblockConverter], **flags: Union[int, bool]):
         MR = flags.get("max_row")
-        rows = await self.bot.pool_pg.fetch(query.content)
+        to_run = query.content
+        method = self.bot.pool_pg.fetch
+        if to_run.lower().startswith(("insert", "update", "delete", "create", "drop")):
+            if "returning" not in to_run.lower():
+                method = self.bot.pool_pg.execute
+
+        rows = await method(to_run)
         NN = flags.pop("not_number")
 
         @pages(per_page=MR)
@@ -333,9 +339,11 @@ class Myself(commands.Cog):
                     value.append(v)
             table = tabulate.tabulate(to_pass, 'keys', 'pretty')
             return f"```py\n{table}```"
-
-        menu = InteractionPages(tabulation(rows))
-        await menu.start(ctx)
+        if method is self.bot.pool_pg.fetch:
+            menu = InteractionPages(tabulation(rows))
+            await menu.start(ctx)
+        else:
+            await ctx.maybe_reply(rows)
 
     @greedy_parser.command()
     async def reinvoke(self, ctx: StellaContext, command: greedy_parser.UntilFlag[str], *, flags: flg.ReinvokeFlag):
