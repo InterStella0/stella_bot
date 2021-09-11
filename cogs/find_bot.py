@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+import io
+
 import discord
 import datetime
 import re
@@ -20,6 +23,7 @@ from discord.ext.menus import ListPageSource
 from aiogithub.objects import Repo
 from fuzzywuzzy import fuzz
 from utils import flags as flg
+from utils.image_manipulation import get_majority_color, islight, create_bar, process_image
 from utils.new_converters import BotPrefixes, IsBot, BotCommands
 from utils.buttons import InteractionPages, PromptView
 from utils.useful import try_call, StellaEmbed, compile_array, search_prefixes, default_date, plural, realign, search_commands, StellaContext, aware_utc
@@ -882,7 +886,42 @@ class FindBot(commands.Cog, name="Bots"):
     @is_discordpy()
     async def botinfo(self, ctx: StellaContext, *, bot: IsBot):
         embed = await self.format_bot_info(ctx, bot)
-        await ctx.embed(embed=embed)
+        kwargs = dict(embed=embed)
+        async with ctx.breaktyping(limit=60):
+            if file := await self.create_bar(ctx, bot):
+                embed.set_image(url="attachment://picture.png")
+                kwargs.update(dict(file=file))
+
+        await ctx.embed(**kwargs)
+
+    async def create_bar(self, ctx: StellaContext, bot: Union[discord.Member, discord.User]) -> Optional[discord.File]:
+        query = 'SELECT command, COUNT(command) "usage" ' \
+                'FROM commands_list ' \
+                'WHERE bot_id=$1 AND guild_id=$2 ' \
+                'GROUP BY command ' \
+                'ORDER BY usage DESC ' \
+                'LIMIT 5'
+
+        data = await self.bot.pool_pg.fetch(query, bot.id, ctx.guild.id)
+        if not data:
+            return
+
+        data.reverse()
+        names = [v["command"] for v in data]
+        usages = [v["usage"] for v in data]
+        payload = dict(title=f"Top {len(names)} commands for {bot}",
+                       xlabel="Usage",
+                       ylabel="Commands")
+
+        asset = bot.display_avatar
+        avatar_bytes = io.BytesIO(await asset.read())
+        color = major = await get_majority_color(avatar_bytes)
+        if not islight(*major.to_rgb()) or bot == ctx.me:
+            color = discord.Color(ctx.bot.color)
+
+        bar = await create_bar(names, usages, str(color), **payload)
+        to_send = await process_image(avatar_bytes, bar)
+        return discord.File(to_send, filename="picture.png")
 
     async def format_bot_info(self, ctx, bot: Union[discord.Member, discord.User]) -> discord.Embed:
         embed = StellaEmbed.default(ctx, title=str(bot))
