@@ -319,7 +319,8 @@ class Myself(commands.Cog):
     async def sql(self, ctx: StellaContext, query: UntilFlag[CodeblockConverter], **flags: Union[int, bool]):
         MR = flags.get("max_row")
         to_run = query.content
-        method = self.bot.pool_pg.fetch
+        fetch = self.bot.pool_pg.fetch
+        method = fetch
         if to_run.lower().startswith(("insert", "update", "delete", "create", "drop")):
             if "returning" not in to_run.lower():
                 method = self.bot.pool_pg.execute
@@ -339,7 +340,7 @@ class Myself(commands.Cog):
                     value.append(v)
             table = tabulate.tabulate(to_pass, 'keys', 'pretty')
             return f"```py\n{table}```"
-        if method is self.bot.pool_pg.fetch:
+        if method is fetch:
             menu = InteractionPages(tabulation(rows))
             await menu.start(ctx)
         else:
