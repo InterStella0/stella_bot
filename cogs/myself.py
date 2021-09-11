@@ -323,6 +323,8 @@ class Myself(commands.Cog):
 
         @pages(per_page=MR)
         async def tabulation(self, menu, entries):
+            if not isinstance(entries, list):
+                entries = [entries]
             offset = menu.current_page * self.per_page + 1
             to_pass = {"no": [*range(offset, offset + len(entries))]} if not NN else {}
             for d in entries:
