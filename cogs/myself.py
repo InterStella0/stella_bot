@@ -17,7 +17,7 @@ from utils.decorators import event_check, pages
 from utils.useful import call, empty_page_format, print_exception, StellaContext, StellaEmbed, aware_utc
 from utils.buttons import InteractionPages
 from utils.greedy_parser import GreedyParser, Separator, UntilFlag
-from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator
+from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator, CodeblockConverter
 from utils import flags as flg
 from utils import menus
 from jishaku.codeblocks import codeblock_converter, Codeblock
@@ -316,9 +316,9 @@ class Myself(commands.Cog):
     @greedy_parser.command()
     @flg.add_flag("--not_number", "-NN", action="store_true", default=False)
     @flg.add_flag("--max_row", "-MR", type=int, default=15)
-    async def sql(self, ctx: StellaContext, query: UntilFlag[str], **flags: Union[int, bool]):
+    async def sql(self, ctx: StellaContext, query: UntilFlag[CodeblockConverter], **flags: Union[int, bool]):
         MR = flags.get("max_row")
-        rows = await self.bot.pool_pg.fetch(query)
+        rows = await self.bot.pool_pg.fetch(query.content)
         NN = flags.pop("not_number")
 
         @pages(per_page=MR)
