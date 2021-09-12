@@ -200,9 +200,12 @@ time_dict = {"h": 3600, "s": 1, "m": 60, "d": 86400}
 
 class TimeConverter(commands.Converter):
     """Stole from discord.py because lazy, i'll make a better one later"""
-    def __init__(self, minimum_time: Optional[datetime.datetime] = None, maximum_time: Optional[datetime.datetime] = None):
+    def __init__(self, minimum_time: Optional[datetime.datetime] = None,
+                 maximum_time: Optional[datetime.datetime] = None,
+                 backward=True):
         self.minimum_time = minimum_time
         self.maximum_time = maximum_time
+        self.backward = backward
 
     async def __call__(self, argument: str) -> datetime.datetime:
         return await self.convert(0, argument)
@@ -217,8 +220,13 @@ class TimeConverter(commands.Converter):
                 raise commands.BadArgument(f"{k} is an invalid time-key! h/m/s/d are valid!")
             except ValueError:
                 raise commands.BadArgument(f"{v} is not a number!")
-        
-        time_converted = datetime.datetime.utcnow() - datetime.timedelta(seconds=time)
+
+        timedelta = datetime.timedelta(seconds=time)
+        if self.backward:
+            time_converted = datetime.datetime.utcnow() - timedelta
+        else:
+            time_converted = datetime.datetime.utcnow() + timedelta
+
         if self.minimum_time or self.maximum_time:
             if time_converted > datetime.datetime.utcnow() - self.minimum_time:
                 raise commands.BadArgument(f"Time must be longer than `{humanize.precisedelta(self.minimum_time)}`")
