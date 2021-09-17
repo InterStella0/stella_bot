@@ -51,7 +51,7 @@ class StellaEmbed(discord.Embed):
     @classmethod
     def default(cls, ctx: commands.Context, **kwargs) -> "StellaEmbed":
         instance = cls(**kwargs)
-        instance.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar)
+        instance.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar)
         return instance
 
     @classmethod
