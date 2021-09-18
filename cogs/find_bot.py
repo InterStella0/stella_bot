@@ -1318,7 +1318,10 @@ class FindBot(commands.Cog, name="Bots"):
 
             class BotPrompter(PromptView):
                 def __init__(self, *args, set_bots, timeout, **kwargs):
-                    super().__init__(*args, timeout=timeout or 60, delete_after=True, **kwargs)
+                    super().__init__(*args, timeout=timeout or 60, delete_after=True,
+                                     message_error="I'm still waiting for a bot for you to mention, you can't run "
+                                                   "another command.",
+                                     **kwargs)
                     self.set_bots = set_bots
                     self.user = None
 

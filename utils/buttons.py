@@ -9,6 +9,8 @@ from functools import partial
 from discord import ui
 from discord.ext import commands
 from typing import Optional, Any, Dict, Iterable, Union, Type, TYPE_CHECKING, Coroutine, Callable, Tuple, AsyncGenerator
+
+from utils.context_managers import UserLock
 from utils.useful import StellaEmbed
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, MenuBase
 
@@ -183,11 +185,12 @@ class MenuViewBase(ViewIterationAuthor):
 
 class ConfirmView(ViewAuthor, CallbackView):
     """ConfirmView literally handles confirmation where it asks the user at start() and returns a Tribool"""
-    def __init__(self, ctx: StellaContext, delete_after: Optional[bool] = False):
+    def __init__(self, ctx: StellaContext, *, delete_after: Optional[bool] = False, message_error=None):
         super().__init__(ctx)
         self.result = None
         self.message = None
         self.delete_after = delete_after
+        self.message_error = message_error or "I'm waiting for your confirm response. You can't run another command."
 
     async def handle_callback(self, callback, item, interaction):
         self.result = await callback(interaction)
@@ -201,7 +204,10 @@ class ConfirmView(ViewAuthor, CallbackView):
     async def start(self, message: Optional[discord.Message] = None, **kwargs: Any) -> Optional[bool]:
         self.message = message or await self.context.reply(view=self, **kwargs)
 
-        await self.wait()
+        lock = UserLock(self.context.author, self.message_error)
+        async with lock(self.context.bot):
+            await self.wait()
+
         if not self.delete_after:
             for x in self.children:
                 x.disabled = True
@@ -234,7 +240,7 @@ class PromptView(ViewAuthor):
     """PromptView literally handles prompting where it asks the user at start() and returns a Tribool or a discord.Message"""
     def __init__(self, ctx: StellaContext, *, delete_after: Optional[bool] = False,
                  ori_interaction: Optional[discord.Interaction] = None, accept_values: Optional[Tuple[str, ...]] = (),
-                 **kwargs: Any):
+                 message_error=None, **kwargs: Any):
         super().__init__(ctx, **kwargs)
         self.result = None
         self.message = None
@@ -242,6 +248,7 @@ class PromptView(ViewAuthor):
         self.ori_interaction = ori_interaction
         self.author_respond = self.wait_for_message()
         self.accept_values = accept_values
+        self.message_error = message_error or "I'm waiting for your response right now. Don't run another command."
 
     async def send(self, content: str, **kwargs: Any) -> Optional[Union[discord.Message, bool]]:
         return await self.start(content=content, **kwargs)
@@ -256,7 +263,9 @@ class PromptView(ViewAuthor):
                 self.message = await self.context.send(view=self, reference=reference, **kwargs)
 
         task = asyncio.create_task(self.handle_message())
-        await self.wait()
+        lock = UserLock(self.context.author, self.message_error)
+        async with lock(self.context.bot):
+            await self.wait()
         task.cancel()
         if self.message is None:
             coro = discord.utils.maybe_coroutine(lambda: True)
@@ -338,7 +347,9 @@ class InteractionPages(BaseView, MenuBase):
 
     class Prompter(PromptView):
         def __init__(self, *args, max_pages, timeout, **kwargs):
-            super().__init__(*args, timeout=timeout or 60, delete_after=True, **kwargs)
+            super().__init__(*args, timeout=timeout or 60, delete_after=True,
+                             message_error="I'm still waiting for a page number. You can't run another command.",
+                             **kwargs)
             self.max_pages = max_pages
 
         def invalid_response(self) -> str:

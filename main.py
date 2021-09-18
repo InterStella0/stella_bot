@@ -13,6 +13,8 @@ import numpy as np
 import collections
 from aiogithub import GitHub
 from typing import Union, List, Optional, Dict, Any
+
+from utils.context_managers import UserLock
 from utils.prefix_ai import PrefixNeuralNetwork, DerivativeNeuralNetwork
 from utils.useful import StellaContext, ListCall, count_python
 from utils.decorators import event_check, wait_ready, in_executor
@@ -58,6 +60,7 @@ class StellaBot(commands.Bot):
         self.existing_prefix = {}
         self.cached_context = collections.deque(maxlen=100)
         self.command_running = {}
+        self.user_lock = {}
         super().__init__(self.get_prefix, **kwargs)
 
         kweights = kwargs.pop("prefix_weights")
@@ -113,12 +116,25 @@ class StellaBot(commands.Bot):
         if not getattr(command._buckets, "_cooldown", None):
             command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
 
+    def add_user_lock(self, lock: UserLock):
+        self.user_lock.update({lock.user.id: lock})
+
+    async def check_user_lock(self, user: Union[discord.Member, discord.User]):
+        if lock := self.user_lock.get(user.id):
+            if lock.locked():
+                if isinstance(lock, UserLock):
+                    raise lock.error
+                raise commands.CommandError("You can't invoke another command while another command is running.")
+            else:
+                self.user_lock.pop(user.id, None)
+
     async def running_command(self, ctx: StellaContext, **flags):
         dispatch = flags.pop("dispatch", True)
         self.cached_context.append(ctx)
         if dispatch:
             self.dispatch('command', ctx)
         try:
+            await self.check_user_lock(ctx.author)
             check = await self.can_run(ctx, call_once=flags.pop("call_once", True))
             if check or not flags.pop("call_check", True):
                 ctx.running = True
@@ -136,8 +152,7 @@ class StellaBot(commands.Bot):
                 self.dispatch('command_completion', ctx)
         finally:
             ctx.running = False
-            with contextlib.suppress(KeyError):
-                self.command_running.pop(ctx.message.id)
+            self.command_running.pop(ctx.message.id, None)
 
     async def invoke(self, ctx: StellaContext, **flags) -> None:
         dispatch = flags.get("dispatch", True)
