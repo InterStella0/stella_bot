@@ -491,6 +491,15 @@ class Myself(commands.Cog):
             json.dump(bot_var, w, indent=4)
         await ctx.confirmed()
 
+    @commands.command()
+    async def cancel(self, ctx: StellaContext, message: Union[discord.Message, discord.Object]):
+        with contextlib.suppress(KeyError):
+            task = self.bot.command_running.get(message.id)
+            task.cancel()
+            await message.reply("This command was cancelled.")
+            return await ctx.confirmed()
+        await ctx.maybe_reply("Unable to find a running command from this message.")
+
 
 def setup(bot: StellaBot) -> None:
     cog = Myself(bot)

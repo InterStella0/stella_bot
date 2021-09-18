@@ -57,6 +57,7 @@ class StellaBot(commands.Bot):
         self.cached_users = {}
         self.existing_prefix = {}
         self.cached_context = collections.deque(maxlen=100)
+        self.command_running = {}
         super().__init__(self.get_prefix, **kwargs)
 
         kweights = kwargs.pop("prefix_weights")
@@ -112,35 +113,37 @@ class StellaBot(commands.Bot):
         if not getattr(command._buckets, "_cooldown", None):
             command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
 
-    async def invoke(self, ctx: StellaContext, **flags) -> None:
+    async def running_command(self, ctx: StellaContext, **flags):
         dispatch = flags.pop("dispatch", True)
-        if ctx.command is not None:
-            self.cached_context.append(ctx)
-            if dispatch:
-                self.dispatch('command', ctx)
-            try:
-                check = await self.can_run(ctx, call_once=flags.pop("call_once", True))
-                if check or not flags.pop("call_check", True):
-                    ctx.running = True
-                    await ctx.trigger_typing()
-                    if ctx.command.name == "jishaku":
-                        maximum = self._connection.max_messages
-                        self._connection.max_messages = "<:uwuqueen:785765496393433129>"
-                        await ctx.command.invoke(ctx)
-                        self._connection.max_messages = maximum
-                    else:
-                        await ctx.command.invoke(ctx)
-                else:
-                    raise commands.CheckFailure('The global check once functions failed.')
-            except commands.CommandError as exc:
-                if dispatch:
-                    await ctx.command.dispatch_error(ctx, exc)
-                if flags.pop("redirect_error", False):
-                    raise
+        self.cached_context.append(ctx)
+        if dispatch:
+            self.dispatch('command', ctx)
+        try:
+            check = await self.can_run(ctx, call_once=flags.pop("call_once", True))
+            if check or not flags.pop("call_check", True):
+                ctx.running = True
+                await ctx.trigger_typing()
+                await ctx.command.invoke(ctx)
             else:
-                if dispatch:
-                    self.dispatch('command_completion', ctx)
+                raise commands.CheckFailure('The global check once functions failed.')
+        except commands.CommandError as exc:
+            if dispatch:
+                await ctx.command.dispatch_error(ctx, exc)
+            if flags.pop("redirect_error", False):
+                raise
+        else:
+            if dispatch:
+                self.dispatch('command_completion', ctx)
+        finally:
             ctx.running = False
+            with contextlib.suppress(KeyError):
+                self.command_running.pop(ctx.message.id)
+
+    async def invoke(self, ctx: StellaContext, **flags) -> None:
+        dispatch = flags.get("dispatch", True)
+        if ctx.command is not None:
+            command_task = self.loop.create_task(self.running_command(ctx, dispatch=dispatch, **flags))
+            self.command_running.update({ctx.message.id: command_task})
         elif ctx.invoked_with:
             exc = commands.CommandNotFound('Command "{}" is not found'.format(ctx.invoked_with))
             if dispatch:
