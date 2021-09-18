@@ -494,9 +494,12 @@ class Myself(commands.Cog):
     @commands.command()
     async def cancel(self, ctx: StellaContext, message: Union[discord.Message, discord.Object]):
         with contextlib.suppress(KeyError):
-            task = self.bot.command_running.get(message.id)
-            task.cancel()
-            await message.reply("This command was cancelled.")
+            task = self.bot.command_running.pop(message.id)
+            if task is not None and not task.done():
+                task.cancel()
+                await message.reply("This command was cancelled.")
+            else:
+                await ctx.maybe_reply("This command was already done.")
             return await ctx.confirmed()
         await ctx.maybe_reply("Unable to find a running command from this message.")
 
