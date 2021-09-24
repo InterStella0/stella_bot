@@ -177,7 +177,9 @@ class StellaBotHelp(commands.DefaultHelpCommand):
             prefixmax = re.match(f'{re.escape(ctx.prefix)}', ctx.message.content).regs[0][1]
             return msg[prefixmax:msg.rindex(ctx.invoked_with)]
 
-        parent = get_invoke_with() if ctx else command.parent
+        parent = command.parent
+        with contextlib.suppress(ValueError):
+            parent = get_invoke_with() if ctx else command.parent
         command_name = ctx.invoked_with if ctx else command.name
         prefix = (ctx or self.context).clean_prefix
 
