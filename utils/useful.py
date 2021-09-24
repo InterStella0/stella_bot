@@ -200,7 +200,7 @@ class StellaContext(commands.Context):
 
     async def confirmation(self, content: str, delete_after: Optional[bool] = False, **kwargs: Any) -> Optional[bool]:
         from utils.buttons import ConfirmView
-        return await ConfirmView(self, delete_after).send(content, **kwargs)
+        return await ConfirmView(self, delete_after=delete_after).send(content, **kwargs)
 
     def breaktyping(self, /, *, limit: Optional[int] = None):
         return BreakableTyping(self, limit=limit)
