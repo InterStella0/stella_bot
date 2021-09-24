@@ -357,7 +357,7 @@ class Myself(commands.Cog):
             if c_flags.pop("redirect", True):
                 c_flags["redirect_error"] = True
                 c_flags["dispatch"] = False
-            await self.bot.invoke(context, **c_flags)
+            await self.bot.invoke(context, in_task=False, **c_flags)
             await ctx.confirmed()
         except commands.CommandError as e:
             error = print_exception(f'Exception raised while reinvoking {context.command}:', e, _print=False)

@@ -157,8 +157,12 @@ class StellaBot(commands.Bot):
     async def invoke(self, ctx: StellaContext, **flags) -> None:
         dispatch = flags.get("dispatch", True)
         if ctx.command is not None:
-            command_task = self.loop.create_task(self.running_command(ctx, **flags))
-            self.command_running.update({ctx.message.id: command_task})
+            run_in_task = flags.pop("in_task", True)
+            if run_in_task:
+                command_task = self.loop.create_task(self.running_command(ctx, **flags))
+                self.command_running.update({ctx.message.id: command_task})
+            else:
+                await self.running_command(ctx, **flags)
         elif ctx.invoked_with:
             exc = commands.CommandNotFound('Command "{}" is not found'.format(ctx.invoked_with))
             if dispatch:
