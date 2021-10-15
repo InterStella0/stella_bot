@@ -39,10 +39,12 @@ if TYPE_CHECKING:
 ReactRespond = collections.namedtuple("ReactRespond", "created_at author reference")
 DISCORD_PY = 336642139381301249
 
+
 @dataclass
 class BotCommandActivity:
     bot: discord.User
     data: List[Tuple[str, datetime.datetime]]
+
     @classmethod
     async def convert(cls, ctx: StellaContext, argument: str) -> BotCommandActivity:
         user = await IsBot().convert(ctx, argument)
@@ -128,6 +130,9 @@ class BotGitHubLink:
     @classmethod
     async def convert(cls, ctx: StellaContext, argument: str) -> BotGitHubLink:
         find = ctx.bot.get_cog("Bots")
+        if find is None or not isinstance(find, FindBot):
+            raise commands.CommandError("This converter is disabled until Bots cog is loaded")
+
         regex = find.re_github
         if found := regex.search(argument):
             repo_owner = found['repo_owner']
@@ -256,7 +261,7 @@ async def bot_added_list(self, menu: InteractionPages, entries: List[BotAdded]) 
 
 
 @pages()
-async def bot_pending_list(self, menu: InteractionPages, entry: Dict[str, Union[datetime.datetime, int, str]]) -> discord.Embed:
+async def bot_pending_list(_, menu: Any, entry: Dict[str, Union[datetime.datetime, int, str]]) -> discord.Embed:
     stellabot = menu.ctx.bot
     bot_id = entry["bot_id"]
     if not (bot := menu.cached_bots.get(bot_id)):
@@ -316,16 +321,16 @@ class FindBot(commands.Cog, name="Bots"):
         commands_data = await self.bot.pool_pg.fetch("SELECT DISTINCT bot_id, command FROM commands_list")
         for prefix, command in itertools.zip_longest(prefix_data, commands_data):
             if prefix:
-                prefixes = self.all_bot_prefixes.setdefault(prefix["bot_id"], set())
-                prefixes.add(prefix["prefix"])
+                prefix_list = self.all_bot_prefixes.setdefault(prefix["bot_id"], set())
+                prefix_list.add(prefix["prefix"])
             if command:
-                commands = self.all_bot_commands.setdefault(command["bot_id"], set())
-                commands.add(command["command"])
+                command_list = self.all_bot_commands.setdefault(command["bot_id"], set())
+                command_list.add(command["command"])
         self.update_compile()
 
     def update_compile(self) -> None:
-        temp = [*{prefix for prefixes in self.all_bot_prefixes.values() for prefix in prefixes}]
-        cmds = [*{command for commands in self.all_bot_commands.values() for command in commands}]
+        temp = [*{prefix for prefix_list in self.all_bot_prefixes.values() for prefix in prefix_list}]
+        cmds = [*{command for command_list in self.all_bot_commands.values() for command in command_list}]
         self.compiled_prefixes = compile_array(sorted(temp))
         self.compiled_commands = compile_array(sorted(x[::-1] for x in cmds))
 
@@ -349,7 +354,7 @@ class FindBot(commands.Cog, name="Bots"):
         time_to_listen = message.created_at + datetime.timedelta(seconds=5)
         flip = 0
 
-        def reaction_add_check(reaction: discord.Reaction, user: discord.User) -> bool:
+        def reaction_add_check(reaction: discord.Reaction, _: discord.User) -> bool:
             return reaction.message == message
 
         stuff_here = locals()
@@ -417,18 +422,18 @@ class FindBot(commands.Cog, name="Bots"):
         if not message_sent:
             return
 
-        prefixes = [(message.guild.id, x, prefix, 1, m.created_at.replace(tzinfo=None)) for x, m in message_sent.items()]
-        commands = [(message.guild.id, x, command, m.created_at.replace(tzinfo=None)) for x, m in message_sent.items()]
+        prefix_list = [(message.guild.id, x, prefix, 1, m.created_at.replace(tzinfo=None)) for x, m in message_sent.items()]
+        command_list = [(message.guild.id, x, command, m.created_at.replace(tzinfo=None)) for x, m in message_sent.items()]
 
-        await self.insert_both_prefix_command(prefixes, commands)
+        await self.insert_both_prefix_command(prefix_list, command_list)
 
-        for _, x, prefix, _, _ in prefixes:
-            prefixes = self.all_bot_prefixes.setdefault(x, set())
-            prefixes.add(prefix)
+        for _, x, prefix, _, _ in prefix_list:
+            prefix_list = self.all_bot_prefixes.setdefault(x, set())
+            prefix_list.add(prefix)
 
-        for _, bot, command, _ in commands:
-            commands = self.all_bot_commands.setdefault(bot, set())
-            commands.add(command)
+        for _, bot, command, _ in command_list:
+            command_list = self.all_bot_commands.setdefault(bot, set())
+            command_list.add(command)
 
         self.update_compile()
 
@@ -469,15 +474,15 @@ class FindBot(commands.Cog, name="Bots"):
     async def search_respond(
             self,
             callback: Callable[[Tuple[ctypes.c_char_p, int], ctypes.c_char_p], Coroutine[Any, Any, List[str]]],
-            message: discord.Message, word: str, type: str
+            message: discord.Message, word: str, _type: str
     ) -> Optional[Tuple[filter, List[str], Dict[int, discord.Message]]]:
         """Gets the prefix/command that are in this message, gets the bot that responded
            and return them."""
         content_compiled = ctypes.create_string_buffer(word.encode("utf-8"))
-        if not (result := await callback(getattr(self, f"compiled_{type}"), content_compiled)):
+        if not (result := await callback(getattr(self, f"compiled_{_type}"), content_compiled)):
             return
 
-        singular = type[:len(type) - ((type != "commands") + 1)]
+        singular = _type[:len(_type) - ((_type != "commands") + 1)]
 
         def check(msg):
             return msg.channel == message.channel
@@ -488,20 +493,20 @@ class FindBot(commands.Cog, name="Bots"):
 
         bot_found.update(after)
         bot_found_keys = list(bot_found)
-        query = f"SELECT DISTINCT bot_id, {singular} FROM {type}_list " \
+        query = f"SELECT DISTINCT bot_id, {singular} FROM {_type}_list " \
                 f"WHERE guild_id=$1 AND bot_id=ANY($2::BIGINT[]) AND {singular}=ANY($3::VARCHAR[])"
         bots = await self.bot.pool_pg.fetch(query, message.guild.id, bot_found_keys, result)
         responded = filter(lambda x: x["bot_id"] in bot_found, bots)
         return responded, result, bot_found
 
-    async def insert_both_prefix_command(self, prefixes: List[Union[int, str]], commands: List[Union[int, str]]) -> None:
-        commands_query = "INSERT INTO commands_list VALUES($1, $2, $3, $4)"
-        prefixes_query = "INSERT INTO prefixes_list VALUES($1, $2, $3, $4, $5) " \
-                         "ON CONFLICT (guild_id, bot_id, prefix) DO " \
-                         "UPDATE SET usage=prefixes_list.usage + 1, last_usage=$5"
+    async def insert_both_prefix_command(self, prefix_list: List[Union[int, str]], command_list: List[Union[int, str]]) -> None:
+        command_list_query = "INSERT INTO commands_list VALUES($1, $2, $3, $4)"
+        prefix_list_query = "INSERT INTO prefixes_list VALUES($1, $2, $3, $4, $5) " \
+                            "ON CONFLICT (guild_id, bot_id, prefix) DO " \
+                            "UPDATE SET usage=prefixes_list.usage + 1, last_usage=$5"
         
-        for type in "commands", "prefixes":
-            await self.bot.pool_pg.executemany(locals()[f"{type}_query"], locals()[type])
+        for key in "command_list", "prefix_list":
+            await self.bot.pool_pg.executemany(locals()[f"{key}_query"], locals()[key])
 
     # @commands.Cog.listener("on_message")
     # @wait_ready()
@@ -569,8 +574,8 @@ class FindBot(commands.Cog, name="Bots"):
                     commands_values.append((message.guild.id, bot_id, got_command, message_respond))
 
         for _, bot, command, _ in commands_values:
-            commands = self.all_bot_commands.setdefault(bot, set())
-            commands.add(command)
+            command_list = self.all_bot_commands.setdefault(bot, set())
+            command_list.add(command)
         self.update_compile()
 
         await self.insert_both_prefix_command(prefixes_values, commands_values)
@@ -580,11 +585,11 @@ class FindBot(commands.Cog, name="Bots"):
     @event_check(lambda _, m: m.author.bot)
     async def is_it_bot_repo(self, message: discord.Message):
         def get_content(m: discord.Message) -> str:
-            values = m.content
+            content_inner = m.content
             if m.embeds:
                 embed = m.embeds[0]
-                values += " / " + str(embed.to_dict())
-            return values
+                content_inner += " / " + str(embed.to_dict())
+            return content_inner
 
         content = get_content(message)
         bot = message.author
@@ -837,6 +842,7 @@ class FindBot(commands.Cog, name="Bots"):
     #                   brief="Shows every bot's prefix in the server.",
     #                   help="Shows a list of every single bot's prefix in a server.",
     #                   cls=flg.SFlagCommand) Disabled for now until i have time
+    # Disabled until i optimize this, which is never
     @commands.guild_only()
     @flg.add_flag("--count", type=bool, default=False, action="store_true",
                   help="Create a rank of the highest prefix that is being use by bots. This flag accepts True or False, "
@@ -849,13 +855,14 @@ class FindBot(commands.Cog, name="Bots"):
 
         attr = "count" if (count_mode := flags.pop("count", False)) else "prefix"
         reverse = flags.pop("reverse", False)
+        bot_getter = operator.itemgetter("bot_id")
 
         def mem(x):
             return ctx.guild.get_member(x)
 
         data = []
-        for bot in filter(lambda b: mem(b["bot_id"]), bots):
-            bot_id = bot["bot_id"]
+        for bot in filter(lambda b: mem(bot_getter(b)), bots):
+            bot_id = bot_getter(bot)
             data.append(await BotPrefixes.convert(ctx, str(bot_id)))
 
         if count_mode:
@@ -1041,8 +1048,8 @@ class FindBot(commands.Cog, name="Bots"):
             owner_info = await try_call(BotAdded.convert, ctx, str(int(bot)))
 
         @pages(per_page=6)
-        def each_page(self, menu: menus.MenuPages, entries: List[str]) -> discord.Embed:
-            number = menu.current_page * self.per_page + 1
+        def each_page(instance, menu_inter: InteractionPages, entries: List[str]) -> discord.Embed:
+            number = menu_inter.current_page * instance.per_page + 1
             list_commands = "\n".join(f"{x}. {c}[`{bot.get_command(c)}`]" for x, c in enumerate(entries, start=number))
             embed = StellaEmbed.default(ctx, title=f"{bot} Commands[`{bot.total_usage}`]", description=list_commands)
             if owner_info and owner_info.author:
@@ -1114,7 +1121,7 @@ class FindBot(commands.Cog, name="Bots"):
         raw_prefixes = await self.bot.pool_pg.fetch(query, bot.bot.id, ctx.guild.id)
 
         @pages(per_page=10)
-        async def show_result(self, menu: menus.MenuPages, entry: List[Dict[str, str]]) -> discord.Embed:
+        async def show_result(_, menu: menus.MenuPages, entry: List[Dict[str, str]]) -> discord.Embed:
             to_show = "\n".join(f"{i}. `{x['prefix']}`" for i, x in enumerate(entry, start=menu.current_page * 10 + 1))
             return discord.Embed(title=f"{bot}'s raw prefixes", description=to_show)
 
@@ -1170,9 +1177,9 @@ class FindBot(commands.Cog, name="Bots"):
         data = await self.bot.pool_pg.fetch(query, ctx.guild.id)
 
         @pages(per_page=6)
-        async def each_commands_list(self, menu: InteractionPages,
+        async def each_commands_list(instance, menu_inter: InteractionPages,
                                      entries: List[Dict[str, Union[str, int]]]) -> discord.Embed:
-            offset = menu.current_page * self.per_page
+            offset = menu_inter.current_page * instance.per_page
             embed = StellaEmbed(title=f"All Commands")
             key = "(\u200b|\u200b)"
             contents = ["`{i}. {command}{k}{command_count}`".format(i=i, k=key, **b)
@@ -1235,9 +1242,9 @@ class FindBot(commands.Cog, name="Bots"):
             return await ctx.reply("I dont know any github here.")
 
         @pages(per_page=6)
-        async def each_git_list(self, menu: InteractionPages,
-                                     entries: List[Dict[str, Union[str, int]]]) -> discord.Embed:
-            offset = menu.current_page * self.per_page
+        async def each_git_list(instance, menu_inter: InteractionPages,
+                                entries: List[Dict[str, Union[str, int]]]) -> discord.Embed:
+            offset = menu_inter.current_page * instance.per_page
             embed = StellaEmbed(title=f"All GitHub Repository in {ctx.guild}")
             members = [ctx.guild.get_member(b['bot_id']) for b in entries]
             contents = ["{i}. [{m}](https://github.com/{owner_repo}/{bot_name})".format(i=i, m=m, **b)
@@ -1302,7 +1309,7 @@ class FindBot(commands.Cog, name="Bots"):
                 self.current_bot = None
                 self.current_embed = None
 
-            async def format_page(self, menu: InteractionPages, entry: discord.Member) -> discord.Embed:
+            async def format_page(self, menu_inter: InteractionPages, entry: discord.Member) -> discord.Embed:
                 self.current_bot = entry
                 if not (embed := self.bot_cache.get(entry)):
                     embed = await self.formatter(ctx, entry)
@@ -1339,7 +1346,7 @@ class FindBot(commands.Cog, name="Bots"):
                         return user.id in self.set_bots
 
             @ui.button(label="Select Bot")
-            async def select_bot(self, button: ui.Button, interaction: discord.Interaction):
+            async def select_bot(self, _: ui.Button, interaction: discord.Interaction):
                 await interaction.response.edit_message(view=None)
                 prompt_timeout = 60
                 # Ensures the winteractionpages doesn't get remove after timeout
@@ -1359,7 +1366,7 @@ class FindBot(commands.Cog, name="Bots"):
                     self.reset_timeout()
 
             @ui.button(label="Generate Bar")
-            async def generate_bar(self, button: ui.Button, interaction: discord.Interaction):
+            async def generate_bar(self, _: ui.Button, interaction: discord.Interaction):
                 embed = self._source.current_embed
                 bot = self._source.current_bot
                 if url := self.url_store.get(bot.id):
@@ -1407,14 +1414,16 @@ class FindBot(commands.Cog, name="Bots"):
             raise commands.CommandError("Looks like i have no data to analyze maaf.")
 
         @pages(per_page=6)
-        async def each_member_list(self, menu: InteractionPages,
+        async def each_member_list(instance, menu_inter: InteractionPages,
                                    entries: List[Dict[str, Union[str, int]]]) -> discord.Embed:
-            offset = menu.current_page * self.per_page
+            offset = menu_inter.current_page * instance.per_page
             embed = StellaEmbed(title=f"All Bots that has `{command}`")
             key = "(\u200b|\u200b)"
 
             def getter(d):
-                return ctx.guild.get_member(d['bot_id']).display_name
+                bot_id = d['bot_id']
+                member = ctx.guild.get_member(bot_id)
+                return member.display_name if member else bot_id
 
             contents = ["`{i}. {bot_name}{k}{counter}`".format(i=i, bot_name=getter(d), k=key, **d)
                         for i, d in enumerate(entries, start=offset + 1)]
@@ -1429,9 +1438,9 @@ class FindBot(commands.Cog, name="Bots"):
     @commands.guild_only()
     async def lastbotcommands(self, ctx, *, bot: BotCommandActivity):
         @pages(per_page=10)
-        async def each_commands_list(self, menu: InteractionPages,
+        async def each_commands_list(instance, menu_interact: InteractionPages,
                                      entries: List[Tuple[str, datetime.datetime]]) -> discord.Embed:
-            number = menu.current_page * self.per_page + 1
+            number = menu_interact.current_page * instance.per_page + 1
             key = "(\u200b|\u200b)"
             list_commands = [f"`{x}. {c} {key} `[{aware_utc(d, mode='R')}]"
                              for x, (c, d) in enumerate(entries, start=number)]
