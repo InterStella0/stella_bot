@@ -91,10 +91,11 @@ class ErrorHandler(commands.Cog):
 
             contexts = multiget(
                 reversed(self.bot.cached_context),
-                size=min(error.number, 5),
+                size=5,
                 author__id=ctx.author.id,
                 command__qualified_name=ctx.command.qualified_name
             )
+            contexts = filter(lambda c: c is not ctx, contexts)
 
             def context_format(c):
                 content, *_ = c.message.content.partition("\n")
