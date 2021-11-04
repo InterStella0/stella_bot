@@ -101,7 +101,7 @@ class ErrorHandler(commands.Cog):
                 shorten = textwrap.shorten(content, 50)
                 return f"[{shorten}]({c.message.jump_url})"
 
-            formatted = reversed(map(context_format, contexts))
+            formatted = reversed([*map(context_format, contexts)])
             embed = StellaEmbed.to_error(
                 title="Concurrency Error",
                 description="{}\n**Current Running Command(s):**\n{}".format(fmt, "\n".join(formatted))
