@@ -967,8 +967,8 @@ class FindBot(commands.Cog, name="Bots"):
             embed.add_field(name="Written in", value=f"{repo.language}")
 
         embed.set_thumbnail(url=bot.display_avatar)
-        if bot.joined_at:
-            embed.add_field(name="Joined at", value=f"{aware_utc(bot.joined_at, mode='f')}")
+        if date := getattr(bot, "joined_at", None):
+            embed.add_field(name="Joined at", value=f"{aware_utc(date, mode='f')}")
 
         return embed.add_field(name="Created at", value=f"{aware_utc(bot.created_at, mode='f')}")
 
