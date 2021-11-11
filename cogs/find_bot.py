@@ -967,8 +967,10 @@ class FindBot(commands.Cog, name="Bots"):
             embed.add_field(name="Written in", value=f"{repo.language}")
 
         embed.set_thumbnail(url=bot.display_avatar)
-        embed.add_field(name="Created at", value=f"{aware_utc(bot.created_at, mode='f')}")
-        return embed.add_field(name="Joined at", value=f"{aware_utc(bot.joined_at, mode='f')}")
+        if bot.joined_at:
+            embed.add_field(name="Joined at", value=f"{aware_utc(bot.joined_at, mode='f')}")
+
+        return embed.add_field(name="Created at", value=f"{aware_utc(bot.created_at, mode='f')}")
 
     @commands.command(aliases=["rba", "recentbot", "recentadd"],
                       brief="Shows a list of bots that has been added in a day.",
