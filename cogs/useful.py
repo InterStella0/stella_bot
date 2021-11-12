@@ -66,7 +66,7 @@ class Useful(commands.Cog):
             description=f"**User:** `{member}`\n"
                         f"**ID:** `{member.id}`\n"
                         f"**Bot:** `{member.bot}`\n"
-                        f"**Created:** `{aware_utc(member.created_at, mode='f')}`\n"
+                        f"**Created:** {aware_utc(member.created_at, mode='f')}\n"
                         f"**Token Created:** `{timestamp}`"
         )
         embed.set_thumbnail(url=member.display_avatar)
