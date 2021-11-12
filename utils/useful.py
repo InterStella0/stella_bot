@@ -161,6 +161,26 @@ class StellaContext(commands.Context):
         from utils.greedy_parser import WithCommaStringView
         self.view = WithCommaStringView(kwargs.get("view"))
         self.__dict__.update(dict.fromkeys(["waiting", "result", "channel_used", "running", "failed"]))
+        self.sent_messages = {}
+
+    async def send(self, *args: Any, **kwargs: Any) -> discord.Message:
+        message = await super().send(*args, **kwargs)
+        return self.process_message(message)
+
+    async def reply(self, *args: Any, **kwargs: Any):
+        message = await super().reply(*args, **kwargs)
+        return self.process_message(message)
+
+    def process_message(self, message: discord.Message) -> discord.Message:
+        self.sent_messages.update({message.id: message})
+        return message
+
+    async def delete_all(self) -> None:
+        for message in self.sent_messages.values():
+            await message.delete(delay=0)
+
+    def get_message(self, message_id: int) -> Optional[discord.Message]:
+        return self.sent_messages.get(message_id)
 
     async def maybe_reply(self, content: str = None, mention_author: bool = False, **kwargs: Any) -> discord.Message:
         """Replies if there is a message in between the command invoker and the bot's message."""

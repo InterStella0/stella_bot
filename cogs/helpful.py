@@ -14,7 +14,7 @@ from fuzzywuzzy import process
 from discord.ext import commands
 from utils.useful import StellaEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker, \
     in_executor
-from utils.decorators import pages
+from utils.decorators import pages, event_check
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, repl_wrap
 from utils.greedy_parser import UntilFlag, command, GreedyParser
@@ -40,6 +40,12 @@ emoji_dict = {"Bots": '<:robot_mark:848257366587211798>',
               "Myself": '<:me:848262873783205888>',
               None: '<:question:848263403604934729>'}
 home_emoji = '<:house_mark:848227746378809354>'
+
+
+def is_command_message():
+    def inner(self, message):
+        return discord.utils.get(self.bot.cached_context, message__id=message.id) is not None
+    return event_check(inner)
 
 
 @pages()
@@ -602,6 +608,12 @@ class Helpful(commands.Cog):
         content = f"`{len(self.bot.guilds):,}` servers, `{len(self.bot.users) - bots:,}` users, `{bots:,}` bots"
         embed.add_field(name="Users", value=content)
         await ctx.embed(embed=embed)
+
+    @commands.Cog.listener("on_message_delete")
+    @is_command_message()
+    async def on_command_delete(self, message):
+        context = discord.utils.get(self.bot.cached_context, message__id=message.id)
+        await context.delete_all()
 
     def cog_unload(self) -> None:
         self.bot.help_command = self._default_help_command
