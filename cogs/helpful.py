@@ -25,7 +25,7 @@ from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMe
 from utils import flags as flg
 from collections import namedtuple
 from jishaku.codeblocks import Codeblock
-from typing import Any, Tuple, List, Union, Optional, Dict, TYPE_CHECKING
+from typing import Any, Tuple, List, Union, Optional, Dict, TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -42,10 +42,39 @@ emoji_dict = {"Bots": '<:robot_mark:848257366587211798>',
 home_emoji = '<:house_mark:848227746378809354>'
 
 
+def message_getter(message_id: int) -> Callable[[StellaContext], Optional[discord.Message]]:
+    def inner(context: StellaContext) -> Optional[discord.Message]:
+        return context.get_message(message_id)
+    return inner
+
+
+def is_message_older_context(bot: StellaBot, message_id: int) -> bool:
+    if not (cached_context := bot.cached_context):
+        return False
+
+    return message_id < cached_context[0].message.id
+
+
 def is_command_message():
-    def inner(self, message):
-        return discord.utils.get(self.bot.cached_context, message__id=message.id) is not None
+    def inner(self, payload):
+        bot = self.bot
+        if is_message_older_context(bot, payload.message_id):
+            return False
+
+        return discord.utils.get(bot.cached_context, message__id=payload.message_id) is not None
     return event_check(inner)
+
+
+def is_message_context():
+    async def inner(self, payload):
+        bot = self.bot
+        if is_message_older_context(bot, payload.message_id):
+            return False
+
+        return discord.utils.find(message_getter(payload.message_id), bot.cached_context)
+    return event_check(inner)
+
+
 
 
 @pages()
@@ -609,10 +638,27 @@ class Helpful(commands.Cog):
         embed.add_field(name="Users", value=content)
         await ctx.embed(embed=embed)
 
-    @commands.Cog.listener("on_message_delete")
+    @commands.Cog.listener("on_raw_bulk_message_delete")
+    async def remove_context_messages(self, payload: discord.RawBulkMessageDeleteEvent):
+        bot = self.bot
+        for message_id in payload.message_ids:
+            if is_message_older_context(bot, message_id):
+                continue
+
+            if ctx := discord.utils.find(message_getter(message_id), bot.cached_context):
+                ctx.remove_message(message_id)
+
+    @commands.Cog.listener("on_raw_message_delete")
+    @is_message_context()
+    async def remove_context_message(self, payload: discord.RawMessageDeleteEvent):
+        target = payload.message_id
+        if ctx := discord.utils.find(message_getter(target), self.bot.cached_context):
+            ctx.remove_message(target)
+
+    @commands.Cog.listener("on_raw_message_delete")
     @is_command_message()
-    async def on_command_delete(self, message):
-        context = discord.utils.get(self.bot.cached_context, message__id=message.id)
+    async def on_command_delete(self, payload: discord.RawMessageDeleteEvent):
+        context = discord.utils.get(self.bot.cached_context, message__id=payload.message_id)
         await context.delete_all()
 
     def cog_unload(self) -> None:
