@@ -179,8 +179,17 @@ class StellaContext(commands.Context):
         for message in self.sent_messages.values():
             await message.delete(delay=0)
 
+        self.sent_messages.clear()
+
     def get_message(self, message_id: int) -> Optional[discord.Message]:
         return self.sent_messages.get(message_id)
+
+    @property
+    def created_at(self) -> datetime.datetime:
+        return self.message.created_at
+
+    def remove_message(self, message_id: int) -> Optional[discord.Message]:
+        return self.sent_messages.pop(message_id, None)
 
     async def maybe_reply(self, content: str = None, mention_author: bool = False, **kwargs: Any) -> discord.Message:
         """Replies if there is a message in between the command invoker and the bot's message."""
