@@ -7,7 +7,7 @@ import itertools
 import functools
 from discord.ext import commands
 from collections import namedtuple
-from utils.useful import try_call, call, StellaContext
+from utils.useful import try_call, call, StellaContext, aware_utc
 from typing import Union, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -45,12 +45,18 @@ class Useful(commands.Cog):
             user_bytes = user.encode()
             user_id_decoded = base64.b64decode(user_bytes)
             return user_id_decoded.decode("ascii")
+
         str_id = call(decode_user, token_part[0])
         if not str_id or not str_id.isdigit():
             return await ctx.maybe_reply("Invalid user")
+
         user_id = int(str_id)
         coro_user = functools.partial(try_call, self.bot.fetch_user, user_id, exception=discord.NotFound)
-        member = ctx.guild.get_member(user_id) or self.bot.get_user(user_id) or await coro_user()
+        member = None
+        if ctx.guild:
+            member = ctx.guild.get_member(user_id)
+
+        member = member or self.bot.get_user(user_id) or await coro_user()
         if not member:
             return await ctx.maybe_reply("Invalid user")
         timestamp = call(self.parse_date, token_part[1]) or "Invalid date"
@@ -60,7 +66,7 @@ class Useful(commands.Cog):
             description=f"**User:** `{member}`\n"
                         f"**ID:** `{member.id}`\n"
                         f"**Bot:** `{member.bot}`\n"
-                        f"**Created:** `{member.created_at}`\n"
+                        f"**Created:** `{aware_utc(member.created_at, mode='f')}`\n"
                         f"**Token Created:** `{timestamp}`"
         )
         embed.set_thumbnail(url=member.display_avatar)
