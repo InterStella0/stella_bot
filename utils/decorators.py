@@ -32,6 +32,8 @@ def event_check(func: Callable[[Any], Union[Coroutine[Any, Any, bool], bool]]) -
             if await discord.utils.maybe_coroutine(func, *args, **kwargs):
                 await method(*args, **kwargs)
         return wrapper
+
+    check.predicate = func
     return check
 
 
