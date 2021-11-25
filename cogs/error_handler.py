@@ -5,7 +5,9 @@ import copy
 import discord
 import textwrap
 from typing import Any, TYPE_CHECKING
-from discord.ext import commands, flags
+from discord.ext import commands
+
+from utils.flags import ArgumentParsingError
 from utils.useful import StellaEmbed, print_exception, multiget
 from utils.errors import NotInDpy, BypassError
 from utils.buttons import BaseButton, ViewIterationAuthor
@@ -74,7 +76,7 @@ class ErrorHandler(commands.Cog):
                 return
 
         ignored = (commands.CommandNotFound,)
-        default_error = (commands.NotOwner, commands.TooManyArguments, flags.ArgumentParsingError, NotInDpy)
+        default_error = (commands.NotOwner, commands.TooManyArguments, ArgumentParsingError, NotInDpy)
 
         error = getattr(error, 'original', error)
 

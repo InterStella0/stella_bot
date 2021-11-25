@@ -12,7 +12,7 @@ import json
 import numpy as np
 import collections
 from aiogithub import GitHub
-from typing import Union, List, Optional, Dict, Any
+from typing import Union, List, Optional
 
 from utils.context_managers import UserLock
 from utils.prefix_ai import PrefixNeuralNetwork, DerivativeNeuralNetwork
