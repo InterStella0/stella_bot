@@ -17,7 +17,7 @@ import subprocess
 import re
 import inspect
 from jishaku.functools import AsyncSender
-from typing import Union, AsyncGenerator, Callable
+from typing import Union, AsyncGenerator, Callable, Optional
 from collections import namedtuple
 from discord.ext import commands
 
@@ -121,3 +121,26 @@ jishaku.shell.ShellReader.__init__ = shell_init
 
 # Fix old flag converter pointing to core file
 commands.core._convert_to_bool = commands.converter._convert_to_bool
+
+
+class StellaMessage(discord.Message):
+    __slots__ = ("_to_delete",)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._to_delete = False
+
+    @property
+    def to_delete(self):
+        return self._to_delete
+
+    @to_delete.setter
+    def to_delete(self, value):
+        self._to_delete = value
+
+    async def delete(self, *, delay: Optional[float]=None):
+        self.to_delete = True
+        await super().delete(delay=delay)
+
+
+discord.state.Message = StellaMessage

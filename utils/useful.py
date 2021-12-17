@@ -1,3 +1,4 @@
+import copy
 import inspect
 import discord
 import datetime
@@ -162,13 +163,47 @@ class StellaContext(commands.Context):
         self.view = WithCommaStringView(kwargs.get("view"))
         self.__dict__.update(dict.fromkeys(["waiting", "result", "channel_used", "running", "failed"]))
         self.sent_messages = {}
+        self.reinvoked = False
+
+    async def reinvoke(self, *, message=None, **kwargs) -> None:
+        self.reinvoked = True
+        if message is None:
+            await super().reinvoke(**kwargs)
+        else:
+            if self.message != message:
+                raise Exception("Context Message and Given Message does not match.")
+            self.message = message
+            new_ctx = await self.bot.get_context(message)
+            self.view = new_ctx.view
+            self.invoked_with = new_ctx.invoked_with
+            self.prefix = new_ctx.prefix
+            self.command = new_ctx.command
+            await self.bot.invoke(self)
+
+    async def edit_if_found(self, callback: Callable[[...], discord.Message], /, *args: Any, **kwargs: Any) -> discord.Message:
+        if self.reinvoked and self.sent_messages:
+            message = discord.utils.find(lambda m: not getattr(m, "to_delete", False), reversed(self.sent_messages.values()))
+            if message is not None:
+                if args:
+                    kwargs.update({"content": args[0]})
+
+                if "mention_author" in kwargs:
+                    value = kwargs.pop("mention_author")
+                    if "allowed_mentions" not in kwargs:
+                        kwargs.update({"allowed_mentions": discord.AllowedMentions(replied_user=value)})
+                    else:
+                        kwargs.get("allowed_mentions").replied_user = value
+                return await message.edit(**kwargs)
+
+        message = await callback(*args, **kwargs)
+        return message
 
     async def send(self, *args: Any, **kwargs: Any) -> discord.Message:
-        message = await super().send(*args, **kwargs)
+        message = await self.edit_if_found(super().send, *args, **kwargs)
         return self.process_message(message)
 
     async def reply(self, *args: Any, **kwargs: Any):
-        message = await super().reply(*args, **kwargs)
+        message = await self.edit_if_found(super().reply, *args, **kwargs)
         return self.process_message(message)
 
     def process_message(self, message: discord.Message) -> discord.Message:
@@ -243,7 +278,7 @@ async def maybe_method(func: Union[Awaitable, Callable], cls: Optional[Type] = N
 
 
 @pages()
-def empty_page_format(_, __, entry: Any) -> Any:
+def empty_page_format(_, __, entry: T) -> T:
     """This is for Code Block ListPageSource and for help Cog ListPageSource"""
     return entry
 

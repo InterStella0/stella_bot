@@ -561,7 +561,8 @@ class ButtonView(ViewAuthor, CallbackView):
     async def on_run(self, button: ui.Button, interaction: discord.Interaction):
         if not (retry := command_cooldown.update_rate_limit(self.context.message)):
             await interaction.response.edit_message(view=None)
-            await self.context.reinvoke()
+            new_message = await self.context.fetch_message(self.context.message.id)
+            await self.context.reinvoke(message=new_message)
         else:
             raise commands.CommandOnCooldown(command_cooldown._cooldown, retry, command_cooldown._type)
 
