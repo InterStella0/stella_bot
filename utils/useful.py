@@ -193,6 +193,12 @@ class StellaContext(commands.Context):
                         kwargs.update({"allowed_mentions": discord.AllowedMentions(replied_user=value)})
                     else:
                         kwargs.get("allowed_mentions").replied_user = value
+
+                allowed_kwargs = list(inspect.signature(discord.Message.edit).parameters)
+                for key in list(kwargs):
+                    if key not in allowed_kwargs:
+                        kwargs.pop(key)
+
                 return await message.edit(**kwargs)
 
         message = await callback(*args, **kwargs)
