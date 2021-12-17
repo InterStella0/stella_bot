@@ -255,7 +255,10 @@ class Myself(commands.Cog):
     @event_check(lambda s, b, a: (b.content and a.content) or b.author.bot)
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
         if await self.bot.is_owner(before.author) and not before.embeds and not after.embeds:
-            await self.bot.process_commands(after)
+            if context := discord.utils.find(lambda ctx: ctx.message == after, self.bot.cached_context):
+                await context.reinvoke(message=after)
+            else:
+                await self.bot.process_commands(after)
 
     @greedy_parser.command()
     @flg.add_flag("--must", type=bool, action="store_true", default=False)

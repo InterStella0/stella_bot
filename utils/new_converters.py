@@ -1,3 +1,5 @@
+import typing
+
 import discord
 import os
 import re
@@ -6,7 +8,7 @@ import datetime
 import humanize
 import numpy as np
 from collections import namedtuple, Counter
-from typing import Any, List, Optional, Union, Tuple, Generator
+from typing import Any, List, Optional, Union, Tuple, Generator, TypeVar
 from jishaku.codeblocks import Codeblock, codeblock_converter
 from fuzzywuzzy import fuzz
 from discord.ext import commands
@@ -14,10 +16,12 @@ from utils.errors import NotValidCog, ThisEmpty, NotBot, NotInDatabase, UserNotF
 from discord.utils import _unique
 from utils.useful import unpack, RenameClass, StellaContext
 
+T = TypeVar("T")
+
 
 class CleanListGreedy:
     @classmethod
-    async def after_greedy(cls, _: StellaContext, greedy_list: List[Any]) -> List[Any]:
+    async def after_greedy(cls, _: StellaContext, greedy_list: List[T]) -> List[T]:
         """
         This method will be called after greedy was processed. This will remove any duplicates of a list, putting list
         within a list into the current list. Set was not used to keep the original order.

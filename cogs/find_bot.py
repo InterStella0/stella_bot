@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
 ReactRespond = collections.namedtuple("ReactRespond", "created_at author reference")
 DISCORD_PY = 336642139381301249
+T = TypeVar("T")
 
 
 @dataclass
@@ -662,38 +663,43 @@ class FindBot(commands.Cog, name="Bots"):
                     if all((reason, member and member.bot and str(member.id) not in self.bot.pending_bots)):
                         if str(member.id) not in self.bot.confirmed_bots:
                             await self.update_pending(
-                                BotAdded(author=message.author,
-                                         bot=member,
-                                         reason=reason,
-                                         requested_at=message.created_at.replace(tzinfo=None),
-                                         jump_url=message.jump_url))
+                                BotAdded(
+                                    author=message.author,
+                                    bot=member,
+                                    reason=reason,
+                                    requested_at=message.created_at.replace(tzinfo=None),
+                                    jump_url=message.jump_url)
+                            )
                         return
 
             else:
                 if member := get_member(int(result["id"])):
                     if int(result["id"]) not in self.bot.confirmed_bots and \
                             await self.check_author(member.id, message.author.id, "confirmed_bots"):
-                        newAddBot = BotAdded(author=message.author,
-                                             bot=member,
-                                             reason=reason,
-                                             requested_at=message.created_at.replace(tzinfo=None),
-                                             jump_url=message.jump_url,
-                                             joined_at=member.joined_at.replace(tzinfo=None))
-                        await self.update_confirm(newAddBot)
+                        new_add_bot = BotAdded(
+                            author=message.author,
+                            bot=member,
+                            reason=reason,
+                            requested_at=message.created_at.replace(tzinfo=None),
+                            jump_url=message.jump_url,
+                            joined_at=member.joined_at.replace(tzinfo=None)
+                        )
+                        await self.update_confirm(new_add_bot)
                     return
                 member = await try_call(self.bot.fetch_user, int(result["id"]), exception=discord.NotFound)
             if all((reason, member and member.bot)):
                 join = None
                 if isinstance(member, discord.Member):
-                    join = member.joined_at
-                    if join < message.created_at:
+                    if (join := member.joined_at) < message.created_at:
                         return
-                return BotAdded(author=message.author,
-                                bot=member,
-                                reason=reason,
-                                requested_at=message.created_at.replace(tzinfo=None),
-                                jump_url=message.jump_url,
-                                joined_at=join)
+                return BotAdded(
+                    author=message.author,
+                    bot=member,
+                    reason=reason,
+                    requested_at=message.created_at.replace(tzinfo=None),
+                    jump_url=message.jump_url,
+                    joined_at=join
+                )
 
     async def update_pending(self, result: BotAdded) -> None:
         """Insert a new addbot request which is yet to enter the discord.py server."""
@@ -781,7 +787,8 @@ class FindBot(commands.Cog, name="Bots"):
 
         await ctx.embed(embed=embed, fields=fields)
 
-    def clean_prefix(self, ctx: StellaContext, prefix: str) -> str:
+    @staticmethod
+    def clean_prefix(ctx: StellaContext, prefix: str) -> str:
         value = (ctx.guild, ctx.bot)[ctx.guild is None]
         prefix = pprefix(value, prefix)
         if prefix == "":
@@ -937,7 +944,6 @@ class FindBot(commands.Cog, name="Bots"):
         embed = StellaEmbed.default(ctx, title=str(bot))
         bot_id = str(bot.id)
         embed.add_field(name="ID", value=f"`{bot_id}`")
-        T = TypeVar("T")
 
         async def handle_convert(converter: Type[T]) -> Optional[T]:
             with contextlib.suppress(Exception):
@@ -986,7 +992,10 @@ class FindBot(commands.Cog, name="Bots"):
         reverse = flags.pop("reverse", False)
 
         def predicate(m):
-            return m.bot and m.joined_at.replace(tzinfo=None) > ctx.message.created_at.replace(tzinfo=None) - datetime.timedelta(days=1)
+            return m.bot and \
+                   m.joined_at.replace(tzinfo=None) > \
+                   ctx.message.created_at.replace(tzinfo=None) - datetime.timedelta(days=1)
+
         members = {m.id: m for m in filter(predicate, ctx.guild.members)}
         if not members:
             member = max(filter(lambda x: x.bot, ctx.guild.members), key=lambda x: x.joined_at)

@@ -79,10 +79,10 @@ class Stat(commands.Cog, name="Statistic"):
         bot_based_time = {}
         total_seconds = (time_rn - time_given).total_seconds()
         each_time = datetime.timedelta(seconds=total_seconds / 10)
-        for each in range(1, 11):
+        for each in range(10):
             within_time = []
-            after = time_rn - each_time * (each - 1)
-            before = time_rn - each_time * each
+            after = time_rn - each_time * each
+            before = time_rn - each_time * (each + 1)
             for row in data:
                 if before < row["time_used"] < after:
                     within_time.append(row)

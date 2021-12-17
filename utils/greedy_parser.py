@@ -104,7 +104,7 @@ class BaseGreedy(GreedyAllowStr):
         instance.escapes |= set(escapes)
         return instance
 
-    def __class_getitem__(cls, param: Any):
+    def __class_getitem__(cls, param: T) -> T:
         new_param = param
         if isiterable(param):
             new_param = new_param[0]
@@ -114,7 +114,9 @@ class BaseGreedy(GreedyAllowStr):
             instance = cls.add_into_instance(instance, separators, escapes)
         return instance
 
-    def __call__(self, *separators: Any, escapes: Optional[Set[str]] = set()):
+    def __call__(self, *separators: Any, escapes: Optional[Set] = None):
+        if escapes is None:
+            escapes = set()
         instance = self.add_into_instance(self, separators, escapes)
         return instance
     

@@ -86,7 +86,7 @@ class ErrorHandler(commands.Cog):
         if isinstance(error, commands.DisabledCommand):
             await send_del(f'{ctx.command} has been disabled.')
         elif isinstance(error, commands.MaxConcurrencyReached):
-            if error.per.name in ("user", "member"):
+            if error.per in (commands.BucketType.user, commands.BucketType.member):
                 fmt = f"You can only use this command {error.number} at a time."
             else:
                 fmt, *_ = str(error).partition(".")
@@ -181,7 +181,10 @@ class ErrorHandler(commands.Cog):
             if not bucket.update_rate_limit():
                 embed.description += "**Command Example**"
                 embed.set_image(url=demo)
-        embed.set_footer(icon_url=ctx.me.display_avatar, text=f"{ctx.clean_prefix}help {ctx.command.qualified_name} for more information.")
+        embed.set_footer(
+            icon_url=ctx.me.display_avatar,
+            text=f"{ctx.clean_prefix}help {ctx.command.qualified_name} for more information."
+        )
         return embed
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 import discord
 import functools
 import asyncio
-from typing import Callable, Optional, Any, Union, Coroutine, Type, Iterable, TYPE_CHECKING
+from typing import Callable, Optional, Any, Union, Coroutine, Type, Iterable, TYPE_CHECKING, Awaitable
 from utils.menus import MenuBase
 from discord.ext import commands, menus
 from utils.errors import NotInDpy
@@ -51,14 +51,14 @@ def wait_ready(bot: Optional[Union[StellaBot, commands.Bot]] = None) -> Callable
     return event_check(predicate)
 
 
-def pages(per_page: Optional[int] = 1, show_page: Optional[bool] = True) -> Type[menus.ListPageSource]:
+def pages(per_page: Optional[int] = 1, show_page: Optional[bool] = True) -> Callable[[...], Type[menus.ListPageSource]]:
     """Compact ListPageSource that was originally made teru but was modified"""
     def page_source(coro: Callable[[MenuBase, Any], Coroutine[Any, Any, discord.Embed]]) -> Type[menus.ListPageSource]:
         async def create_page_header(self, menu: MenuBase, entry: Any) -> Union[discord.Embed, str]:
             result = await discord.utils.maybe_coroutine(coro, self, menu, entry)
             return menu.generate_page(result, self._max_pages)
 
-        def __init__(self, list_pages: Iterable):
+        def __init__(self: menus.ListPageSource, list_pages: Iterable):
             super(self.__class__, self).__init__(list_pages, per_page=per_page)
         kwargs = {
             '__init__': __init__,
@@ -76,13 +76,13 @@ def listen_for_guilds() -> Callable:
     return event_check(predicate)
 
 
-def in_executor(loop: Optional[asyncio.AbstractEventLoop] = None) -> Callable[..., Coroutine[Any, Any, Any]]:
+def in_executor(loop: Optional[asyncio.AbstractEventLoop] = None) -> Callable[[Callable], Callable[..., Awaitable]]:
     """Makes a sync blocking function unblocking"""
     loop = loop or asyncio.get_event_loop()
 
-    def inner_function(func: Callable) -> Callable:
+    def inner_function(func: Callable) -> Callable[[...], Awaitable]:
         @functools.wraps(func)
-        def function(*args: Any, **kwargs: Any) -> Coroutine:
+        def function(*args: Any, **kwargs: Any) -> Awaitable:
             partial = functools.partial(func, *args, **kwargs)
             return loop.run_in_executor(None, partial)
         return function

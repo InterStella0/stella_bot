@@ -159,7 +159,7 @@ def save_matplotlib(fig: Figure, axes: Axes) -> io.BytesIO:
 
 
 @in_executor()
-def process_image(avatar_bytes: io.BytesIO, target: io.BytesIO) -> Coroutine[Any, Any, io.BytesIO]:
+def process_image(avatar_bytes: io.BytesIO, target: io.BytesIO) -> io.BytesIO:
     with Image.open(avatar_bytes).convert('RGBA') as avatar, Image.open(target) as target:
         side = max(avatar.size)
         avatar = avatar.crop((0, 0, side, side))
@@ -182,7 +182,7 @@ def process_image(avatar_bytes: io.BytesIO, target: io.BytesIO) -> Coroutine[Any
 
 
 @in_executor()
-def get_majority_color(b: io.BytesIO) -> Coroutine[Any, Any, discord.Color]:
+def get_majority_color(b: io.BytesIO) -> discord.Color:
     with Image.open(b) as target:
         smol = target.quantize(4)
         return discord.Color.from_rgb(*smol.getpalette()[:3])
