@@ -20,7 +20,7 @@ from jishaku.functools import AsyncSender
 from typing import Union, AsyncGenerator, Callable, Optional
 from collections import namedtuple
 from discord.ext import commands
-
+from discord.ext.commands.converter import CONVERTER_MAPPING
 EmojiSettings = namedtuple('EmojiSettings', 'start back forward end close')
 
 
@@ -144,3 +144,4 @@ class StellaMessage(discord.Message):
 
 
 discord.state.Message = StellaMessage
+discord.message.Message = StellaMessage
