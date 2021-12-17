@@ -180,7 +180,7 @@ class StellaContext(commands.Context):
             self.command = new_ctx.command
             await self.bot.invoke(self)
 
-    async def edit_if_found(self, callback: Callable[[...], discord.Message], /, *args: Any, **kwargs: Any) -> discord.Message:
+    async def edit_if_found(self, callback: Callable[..., discord.Message], /, *args: Any, **kwargs: Any) -> discord.Message:
         if self.reinvoked and self.sent_messages:
             message = discord.utils.find(lambda m: not getattr(m, "to_delete", False), reversed(self.sent_messages.values()))
             if message is not None:
