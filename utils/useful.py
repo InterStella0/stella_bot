@@ -217,8 +217,11 @@ class StellaContext(commands.Context):
         return message
 
     async def delete_all(self) -> None:
-        for message in self.sent_messages.values():
-            await message.delete(delay=0)
+        if self.channel.permissions_for(self.me).manage_messages:
+            await self.channel.delete_messages(self.sent_messages.values())
+        else:
+            for message in self.sent_messages.values():
+                await message.delete(delay=0)
 
         self.sent_messages.clear()
 
