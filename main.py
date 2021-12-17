@@ -174,7 +174,11 @@ class StellaBot(commands.Bot):
     @property
     def stella(self) -> Optional[discord.User]:
         """Returns discord.User of the owner"""
-        return self.get_user(self.owner_id)
+        owner_id = self.owner_id or self.owner_ids
+        if isinstance(owner_id, set):
+            owner_id, *_ = owner_id
+
+        return self.get_user(owner_id)
 
     @property
     def error_channel(self) -> discord.TextChannel:
