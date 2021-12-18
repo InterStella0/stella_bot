@@ -562,6 +562,7 @@ class ButtonView(ViewAuthor, CallbackView):
         if not (retry := command_cooldown.update_rate_limit(self.context.message)):
             await interaction.response.edit_message(view=None)
             new_message = await self.context.fetch_message(self.context.message.id)
+            new_message._edited_timestamp = discord.utils.utcnow() # take account cooldown
             await self.context.reinvoke(message=new_message)
         else:
             raise commands.CommandOnCooldown(command_cooldown._cooldown, retry, command_cooldown._type)
