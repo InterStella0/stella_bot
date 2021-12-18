@@ -479,7 +479,17 @@ class Helpful(commands.Cog):
 
     @commands.command(help="Gives you the invite link")
     async def invite(self, ctx: StellaContext):
-        await ctx.maybe_reply(f"Thx\n<{discord.utils.oauth_url(ctx.me.id)}>")
+        embed = StellaEmbed.default(
+            ctx,
+            title="Invite Me",
+            description='You can invite me by clicking on the the "Invite Me".',
+            url=discord.utils.oauth_url(ctx.me.id)
+        )
+        embed.set_author(name=self.bot.stella, icon_url=self.bot.stella.display_avatar)
+        embed.set_thumbnail(url=ctx.me.display_avatar)
+        embed.add_field(name="Total Guilds", value=len(self.bot.guilds))
+        embed.add_field(name="Total Users", value=len(self.bot.users))
+        await ctx.maybe_reply(embed=embed)
 
     @in_executor()
     def get_wrapped(self, ctx, code, **flags):
