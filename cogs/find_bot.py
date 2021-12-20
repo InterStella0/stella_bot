@@ -778,9 +778,11 @@ class FindBot(commands.Cog, name="Bots"):
         def or_none(condition: bool, func: Callable[[bool], Any]) -> Optional[Any]:
             if condition:
                 return func(condition)
+        if not (reason := data.reason):
+            reason = "Unknown"
 
         fields = (("Added by", f"{author.mention} (`{author.id}`)"),
-                  ("Reason", textwrap.shorten(data.reason, width=1000, placeholder='...')),
+                  ("Reason", textwrap.shorten(reason, width=1000, placeholder='...')),
                   ("Requested", or_none(data.requested_at, default_date)),
                   ("Joined", or_none(data.joined_at, default_date)),
                   ("Message Request", or_none(data.jump_url, "[jump]({})".format)))
