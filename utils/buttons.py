@@ -286,8 +286,12 @@ class PromptView(ViewAuthor):
         return self.result
 
     async def handle_message(self) -> None:
+        bot = self.context.bot
         async for message in self.author_respond:
-            value = await self.message_respond(message)
+            value = None
+            check_context = await bot.get_context(message)
+            if not check_context.valid:
+                value = await self.message_respond(message)
             await self.author_respond.asend(value)
 
     def invalid_response(self) -> str:
