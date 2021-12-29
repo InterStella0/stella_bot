@@ -541,11 +541,12 @@ class Helpful(commands.Cog):
             'commands': commands
         }
         flags = dict(flags)
-        if flags.get('exec') and not await self.bot.is_owner(ctx.author):
-            if code.language is None:
-                content = code.content
-                code = Codeblock("py", f"\n{content}\n")
+        if code.language is None:
+            content = code.content
+            code = Codeblock("py", f"\n{content}\n")
 
+        code = Codeblock(code.language, code.content.rstrip("\n"))
+        if flags.get('exec') and not await self.bot.is_owner(ctx.author):
             coded = await self.get_wrapped(ctx, code, **flags)
             accepted = await self.bot.ipc_client.request("execute_python", code=coded)
             if output := accepted.get("output"):

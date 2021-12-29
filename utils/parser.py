@@ -102,11 +102,13 @@ class ReplParser:
         self.allow_nextline = False
         next(self.multiblock_reader)
 
-    def set_default(self, target: Dict[str, int]):
+    @staticmethod
+    def set_default(target: Dict[str, int]):
         for x in target:
             target[x] = 0
 
-    def counter(self, target: Dict[str, Optional[int]], line: str) -> None:
+    @staticmethod
+    def counter(target: Dict[str, Optional[int]], line: str) -> None:
         counted = {key: line.count(key) for key in target}
         for key, count in counted.items():
             target[key] += count
