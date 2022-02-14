@@ -6,14 +6,12 @@ import os
 from typing import Any, Optional, Dict, Union, List, TypeVar
 
 import discord
-from discord import Component
-from discord.enums import try_enum, InteractionResponseType
+from discord.enums import InteractionResponseType
 from discord.webhook.async_ import async_context
 
 # if you're looking at here, its not done yet hoes dont copy yet
-from .enums import ComponentType, InputStyle
+from .enums import ComponentType, InputStyle, InteractionType
 from .raw import _RawTextInput, ResponseModal
-
 
 class Modal:
     def __init__(self, title: str, *, timeout: Optional[int] = 180, custom_id: Optional[str] = None):
@@ -40,7 +38,7 @@ class Modal:
         parent = response._parent
         adapter = async_context.get()
         type_defer: int = 0
-        if parent.type is UpInteractionType.modal_submit or parent.type.value == UpInteractionType.modal_submit.value:  # type: ignore
+        if parent.type is InteractionType.modal_submit or parent.type.value == InteractionType.modal_submit.value:
             type_defer = InteractionResponseType.deferred_message_update.value
 
         if type_defer:
