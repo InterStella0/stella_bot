@@ -1,17 +1,17 @@
 from __future__ import annotations
+
 import asyncio
 import contextlib
 import copy
-import discord
 import textwrap
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+import discord
 from discord.ext import commands
-
-from utils.flags import ArgumentParsingError
-from utils.useful import StellaEmbed, print_exception, multiget
-from utils.errors import NotInDpy, BypassError
 from utils.buttons import BaseButton, ViewIterationAuthor
-
+from utils.errors import BypassError, NotInDpy
+from utils.flags import ArgumentParsingError
+from utils.useful import StellaEmbed, multiget, print_exception
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -112,7 +112,7 @@ class ErrorHandler(commands.Cog):
             await send_del(embed=embed)
 
         elif isinstance(error, commands.CommandOnCooldown):
-            if ctx.author == self.bot.stella:
+            if await self.bot.is_owner(ctx.author):
                 return await ctx.reinvoke()
             await send_del(embed=StellaEmbed.to_error(
                 title="Cooldown Error",

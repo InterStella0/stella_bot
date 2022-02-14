@@ -1,26 +1,30 @@
 from __future__ import annotations
-import discord
-import datetime
-import contextlib
-import time
-import tabulate
+
 import asyncio
-import traceback
+import contextlib
+import datetime
 import io
-import textwrap
 import json
-from typing import Union, Optional, Any, Tuple, Coroutine, Generator, Dict, TYPE_CHECKING, List
+import textwrap
+import time
+import traceback
+from typing import (TYPE_CHECKING, Any, Coroutine, Dict, Generator, List,
+                    Optional, Tuple, Union)
+
+import discord
+import tabulate
 from discord.ext import commands
 from discord.ext.commands import Greedy
-from utils import greedy_parser
-from utils.decorators import event_check, pages
-from utils.useful import call, empty_page_format, print_exception, StellaContext, StellaEmbed, aware_utc
-from utils.buttons import InteractionPages
-from utils.greedy_parser import GreedyParser, Separator, UntilFlag
-from utils.new_converters import ValidCog, IsBot, DatetimeConverter, JumpValidator, CodeblockConverter
+from jishaku.codeblocks import Codeblock, codeblock_converter
 from utils import flags as flg
-from utils import menus
-from jishaku.codeblocks import codeblock_converter, Codeblock
+from utils import greedy_parser, menus
+from utils.buttons import InteractionPages
+from utils.decorators import event_check, pages
+from utils.greedy_parser import GreedyParser, Separator, UntilFlag
+from utils.new_converters import (CodeblockConverter, DatetimeConverter, IsBot,
+                                  JumpValidator, ValidCog)
+from utils.useful import (StellaContext, StellaEmbed, aware_utc, call,
+                          empty_page_format, print_exception)
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -107,7 +111,7 @@ class Myself(commands.Cog):
         uses = flags["uses"]
 
         def check(ctx: StellaContext) -> bool:
-            return ctx.command.qualified_name == coding[command].qualified_name and self.bot.stella == ctx.author
+            return ctx.command.qualified_name == coding[command].qualified_name and self.bot.sync_is_owner(ctx.author)
 
         await ctx.message.add_reaction("<:next_check:754948796361736213>")
         while c := await self.bot.wait_for("command_completion", check=check):

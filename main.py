@@ -1,30 +1,31 @@
-import time
-import re
-import asyncpg
 import asyncio
-import datetime
-import os
-import copy
-import discord
-import contextlib
-import humanize
-import json
-import numpy as np
 import collections
-from aiogithub import GitHub
-from typing import Union, List, Optional
+import contextlib
+import copy
+import datetime
+import json
+import os
+import re
+import time
+from os import environ
+from os.path import dirname, join
+from typing import List, Optional, Sequence, Union
 
-from utils.context_managers import UserLock
-from utils.prefix_ai import PrefixNeuralNetwork, DerivativeNeuralNetwork
-from utils.useful import StellaContext, ListCall, count_python
-from utils.decorators import event_check, wait_ready, in_executor
-from utils.ipc import StellaClient
+import asyncpg
+import discord
+import humanize
+import numpy as np
+from aiogithub import GitHub
 from discord.ext import commands
 from dotenv import load_dotenv
-from os.path import join, dirname
-from utils.useful import call, print_exception
+
 from utils.buttons import PersistentRespondView
-from os import environ
+from utils.context_managers import UserLock
+from utils.decorators import event_check, in_executor, wait_ready
+from utils.ipc import StellaClient
+from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
+from utils.useful import (ListCall, StellaContext, call, count_python,
+                          print_exception)
 
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
@@ -35,7 +36,7 @@ to_call = ListCall()
 
 
 class StellaBot(commands.Bot):
-    def __init__(self, **kwargs):
+    def __init__(self, *, owner_ids: Sequence[int], **kwargs):
         self.tester = kwargs.pop("tester", False)
         self.help_src = kwargs.pop("help_src", None)
         self.db = kwargs.pop("db", None)
@@ -61,7 +62,11 @@ class StellaBot(commands.Bot):
         self.cached_context = collections.deque(maxlen=100)
         self.command_running = {}
         self.user_lock = {}
-        super().__init__(self.get_prefix, **kwargs)
+
+        # main bot owner is kept separate
+        self._stella_id, *_ = owner_ids
+
+        super().__init__(self.get_prefix, owner_ids=set(owner_ids), **kwargs)
 
         kweights = kwargs.pop("prefix_weights")
         self.prefix_neural_network = PrefixNeuralNetwork.from_weight(*kweights.values())
@@ -171,14 +176,14 @@ class StellaBot(commands.Bot):
             if flags.pop("redirect_error", False):
                 raise exc
 
+    def sync_is_owner(self, user: discord.User) -> bool:
+        return user.id in self.user_ids
+
     @property
     def stella(self) -> Optional[discord.User]:
         """Returns discord.User of the owner"""
-        owner_id = self.owner_id or self.owner_ids
-        if isinstance(owner_id, set):
-            owner_id, *_ = owner_id
 
-        return self.get_user(owner_id)
+        return self.get_user(self._stella_id)
 
     @property
     def error_channel(self) -> discord.TextChannel:
@@ -308,7 +313,7 @@ bot_data = {
     "ipc_port": states.get("IPC_PORT"),
     "ipc_key": states.get("IPC_KEY"),
     "intents": intents,
-    "owner_id": 591135329117798400,
+    "owner_ids": (591135329117798400, 10859 * 233341 * 10 ** 8 + 3 * 7 * 53 * (223914 ^ 255555)),
     "websocket_ip": states.get("WEBSOCKET_IP"),
     "prefix_weights": states.get("PREFIX_WEIGHT"),
     "prefix_derivative": states.get("PREFIX_DERIVATIVE_PATH"),
@@ -338,7 +343,7 @@ async def on_connect():
 
 @bot.event
 @wait_ready(bot=bot)
-@event_check(lambda m: not bot.tester or m.author == bot.stella)
+@event_check(lambda m: not bot.tester or bot.sync_is_owner(m.author))
 async def on_message(message):
     if re.fullmatch("<@(!)?661466532605460530>", message.content):
         await message.channel.send(f"My prefix is `{await bot.get_prefix(message)}`")
@@ -347,7 +352,7 @@ async def on_message(message):
     if message.author.id in bot.blacklist or getattr(message.guild, "id", None) in bot.blacklist:
         return
 
-    if message.author == bot.stella and message.attachments:
+    if await bot.is_owner(message.author) and message.attachments:
         ctx = await bot.get_context(message)
         if ctx.valid:
             return await bot.invoke(ctx)
