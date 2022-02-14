@@ -9,7 +9,7 @@ import re
 import time
 from os import environ
 from os.path import dirname, join
-from typing import List, Optional, Sequence, Union
+from typing import List, Optional, Union
 
 import asyncpg
 import discord
@@ -222,6 +222,7 @@ class StellaBot(commands.Bot):
                 print_exception('Ignoring exception while loading up {}:'.format(cog), error)
             else:
                 print(f"cog {cog} is loaded")
+        self.load_extension("addons.modal")
 
     @to_call.append
     async def fill_bots(self) -> None:
