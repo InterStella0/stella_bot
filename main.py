@@ -25,7 +25,6 @@ from os.path import join, dirname
 from utils.useful import call, print_exception
 from utils.buttons import PersistentRespondView
 from os import environ
-
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
 
@@ -217,6 +216,7 @@ class StellaBot(commands.Bot):
                 print_exception('Ignoring exception while loading up {}:'.format(cog), error)
             else:
                 print(f"cog {cog} is loaded")
+        self.load_extension("addons.modal")
 
     @to_call.append
     async def fill_bots(self) -> None:
