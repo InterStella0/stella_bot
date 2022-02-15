@@ -177,7 +177,7 @@ class StellaBot(commands.Bot):
                 raise exc
 
     def sync_is_owner(self, user: discord.User) -> bool:
-        return user.id in self.user_ids
+        return user.id in self.owner_ids
 
     @property
     def stella(self) -> Optional[discord.User]:
