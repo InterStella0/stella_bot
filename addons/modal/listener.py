@@ -1,7 +1,6 @@
 import asyncio
 import sys
-import traceback
-from typing import Optional
+from typing import Optional, List
 
 import discord
 from discord.ext import commands
@@ -14,18 +13,33 @@ class ModalStore:
     def __init__(self):
         self._modals = {}
 
-    def get_modal(self, custom_id: str) -> Optional[Modal]:
+    def get_modal(self, custom_id: str) -> Optional[List[Modal]]:
         return self._modals.get(custom_id)
 
     def add_modal(self, modal: Modal) -> None:
-        self._modals[modal.custom_id] = modal
+        modals = self._modals.setdefault(modal.custom_id, [])
+        modals.append(modal)
 
     def remove_modal(self, modal: Modal) -> Optional[Modal]:
-        return self._modals.pop(modal.custom_id, None)
+        modals = self.get_modal(modal.custom_id)
+        if modals is None:
+            return
+
+        if not modals:
+            self._modals.pop(modal.custom_id, None)
+            return
+
+        try:
+            modals.remove(modal)
+        except IndexError:
+            pass
 
     def dispatch(self, custom_id: str, interaction: discord.Interaction) -> None:
-        modal: Optional[Modal] = self.get_modal(custom_id)
-        if modal:
+        modals: Optional[List[Modal]] = self.get_modal(custom_id)
+        if not modals:
+            return
+
+        for modal in modals:
             asyncio.create_task(modal.invoke(interaction))
 
 
@@ -40,7 +54,7 @@ class ModalListener(commands.Cog, name='Modal Listener'):
     @commands.Cog.listener("on_interaction")
     async def _handle_modal_interaction(self, interaction: discord.Interaction) -> None:
         if interaction.type.value == InteractionType.modal_submit.value:  # type: ignore
-            interaction.type = InteractionType.modal_submit # this is due to dpy not supporting it.
+            interaction.type = InteractionType.modal_submit  # this is due to dpy not supporting it.
             custom_id = interaction.data.get('custom_id')
             self.store.dispatch(custom_id, interaction)
 

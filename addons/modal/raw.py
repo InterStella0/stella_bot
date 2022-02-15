@@ -73,7 +73,7 @@ class PayloadTextInput:
         self.type: ComponentType = try_enum(ComponentType, data.get('type'))
 
 
-class _RawTextInput(Component):
+class TextInputComponent(Component):
     __slots__ = (
         'style',
         'label',
