@@ -1,18 +1,22 @@
 from __future__ import annotations
-import discord
-import inspect
+
 import asyncio
 import contextlib
+import inspect
 import time
 from copy import copy
 from functools import partial
+from typing import (TYPE_CHECKING, Any, AsyncGenerator, Callable, Coroutine,
+                    Dict, Iterable, Optional, Tuple, Type, Union)
+
+import discord
 from discord import ui
 from discord.ext import commands
-from typing import Optional, Any, Dict, Iterable, Union, Type, TYPE_CHECKING, Coroutine, Callable, Tuple, AsyncGenerator
 
 from utils.context_managers import UserLock
+from utils.menus import (ListPageInteractionBase, MenuBase,
+                         MenuViewInteractionBase)
 from utils.useful import StellaEmbed
-from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, MenuBase
 
 if TYPE_CHECKING:
     from utils.useful import StellaContext
@@ -85,7 +89,7 @@ class ViewAuthor(BaseView):
         """Only allowing the context author to interact with the view"""
         ctx = self.context
         author = ctx.author
-        if interaction.user == ctx.bot.stella:
+        if await ctx.bot.is_owner(interaction.user):
             return True
         if interaction.user != author:
             bucket = self.cooldown.get_bucket(ctx.message)
@@ -441,7 +445,7 @@ class InteractionPages(BaseView, MenuBase):
         """Only allowing the context author to interact with the view"""
         ctx = self.ctx
         author = ctx.author
-        if interaction.user == ctx.bot.stella:
+        if await ctx.bot.is_owner(interaction.user):
             return True
         if interaction.user != author:
             bucket = self.cooldown.get_bucket(ctx.message)
