@@ -9,7 +9,7 @@ import re
 import time
 from os import environ
 from os.path import dirname, join
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Sequence
 
 import asyncpg
 import discord
