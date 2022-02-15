@@ -41,7 +41,7 @@ class Myself(commands.Cog):
         self.bot = bot
 
     async def cog_check(self, ctx: StellaContext) -> bool:
-        return await commands.is_owner().predicate(ctx)
+        return await commands.is_owner().predicate(ctx)  # type: ignore
 
     @greedy_parser.command()
     @flg.add_flag("--joined_at", type=DatetimeConverter)
@@ -342,7 +342,7 @@ class Myself(commands.Cog):
             offset = menu.current_page * self.per_page + 1
             to_pass = {"no": [*range(offset, offset + len(entries))]} if not NN else {}
             for d in entries:
-                for k, v in d.items():
+                for k, v in d.children():
                     value = to_pass.setdefault(k, [])
                     value.append(v)
             table = tabulate.tabulate(to_pass, 'keys', 'pretty')
