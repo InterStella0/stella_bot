@@ -342,7 +342,7 @@ class Myself(commands.Cog):
             offset = menu.current_page * self.per_page + 1
             to_pass = {"no": [*range(offset, offset + len(entries))]} if not NN else {}
             for d in entries:
-                for k, v in d.children():
+                for k, v in d.items():
                     value = to_pass.setdefault(k, [])
                     value.append(v)
             table = tabulate.tabulate(to_pass, 'keys', 'pretty')
