@@ -13,6 +13,8 @@ import discord
 from discord import ui
 from discord.ext import commands
 
+from addons.modal import Modal, TextInput
+from addons.modal.raw import ResponseModal
 from utils.context_managers import UserLock
 from utils.menus import (ListPageInteractionBase, MenuBase,
                          MenuViewInteractionBase)
@@ -353,22 +355,52 @@ class InteractionPages(BaseView, MenuBase):
         self.current_interaction = None
         self.cooldown = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
 
-    class Prompter(PromptView):
-        def __init__(self, *args, max_pages, timeout, **kwargs):
-            super().__init__(*args, timeout=timeout or 60, delete_after=True,
-                             message_error="I'm still waiting for a page number. You can't run another command.",
-                             **kwargs)
+    class PagePrompt(Modal):
+        def __init__(self, *, ctx: StellaContext, max_pages: int, timeout=60):
+            super().__init__(f"Pick a page from 1 to {max_pages}", timeout=timeout)
+            self.add_item(TextInput(label="Page Number", min_length=1, max_length=len(str(max_pages)), required=True))
             self.max_pages = max_pages
+            self.valid = False
+            self.ctx = ctx
+            self.original = None
 
-        def invalid_response(self) -> str:
-            return f"Invalid Input. Please select a page number within `1` to `{self.max_pages}`"
+        async def prompt(self, interaction, **kwargs):
+            self.original = interaction
+            return await super().prompt(interaction, **kwargs)
 
-        async def message_respond(self, message: discord.Message) -> bool:
-            value = message.content
+        async def on_timeout(self) -> None:
+            await self.original.followup.send("You failed to respond in 60 seconds. Timeout.", ephemeral=True)
+
+        async def interaction_check(self, interaction: discord.Interaction) -> Optional[bool]:
+            # extra measures
+            if interaction.user == self.ctx.author:
+                return True
+
+            await interaction.response.send_message("You can't fill up this modal.", ephemeral=True)
+
+        async def send(self, *args, **kwargs):
+            modal = await self.prompt(*args, wait=True, **kwargs)
+            if self.valid and isinstance(modal, ResponseModal):
+                page = modal['Page Number']
+                return int(page.value)
+
+        async def callback(self, modal: ResponseModal, interaction: discord.Interaction):
+            text = modal['Page Number']
+            value = text.value.strip()
+            if value.isdigit() and 0 < int(value) <= self.max_pages:
+                self.valid = True
+                return
+
+            def send(content):
+                return interaction.response.send_message(content, ephemeral=True)
+
             if not value.isdigit():
-                await message.reply("Please enter a valid number.", delete_after=60)
+                if value.lower() == "cancel":
+                    return
+
+                await send(f"{value} is not a page number")
             else:
-                return 0 < int(value) <= self.max_pages
+                await send(f"Please pick a number between 1 and {self.max_pages}. Not {value}")
 
     async def start(self, ctx: StellaContext, /) -> None:
         self.ctx = ctx
@@ -408,19 +440,17 @@ class InteractionPages(BaseView, MenuBase):
 
     @ui.button(label="Select Page", style=discord.ButtonStyle.gray)
     async def select_page(self, button, interaction):
-        await interaction.response.edit_message(view=None)
+        await self.message.edit(view=None)
         prompt_timeout = 60
         # Ensures the winteractionpages doesn't get remove after timeout
         self.set_timeout(time.monotonic() + self.timeout + prompt_timeout)
         max_pages = self._source.get_max_pages()
-        prompt = self.Prompter(self.ctx, max_pages=max_pages, timeout=prompt_timeout)
-        message = self.message
-        content = f"{self.ctx.author.mention}, give a page number to jump to within `1` to `{max_pages}`"
+        prompt = self.PagePrompt(ctx=self.ctx, max_pages=max_pages, timeout=prompt_timeout)
         value = self.current_page
         try:
-            respond = await prompt.send(content, reference=message.to_reference())
-            if isinstance(respond, discord.Message):  # Handles both timeout and False
-                value = int(respond.content) - 1
+            respond = await prompt.send(interaction)
+            if isinstance(respond, int):  # Handles timeout
+                value = respond - 1
         except Exception as e:
             await self.ctx.reply(f"Something went wrong. {e}")
         finally:
