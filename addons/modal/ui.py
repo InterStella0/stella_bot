@@ -14,6 +14,11 @@ from discord.webhook.async_ import async_context
 from .enums import ComponentType, InputStyle, InteractionType
 from .raw import TextInputComponent, ResponseModal
 
+__all__ = (
+    'Modal',
+    'TextInput',
+)
+
 
 class Modal:
     def __init__(self, title: str, *, timeout: Optional[float] = 180.0, custom_id: Optional[str] = None):
@@ -110,6 +115,9 @@ class Modal:
     async def callback(self, modal: ResponseModal, interaction: discord.Interaction) -> None:
         pass
 
+    async def interaction_check(self, interaction: discord.Interaction) -> Optional[bool]:
+        return True
+
     async def invoke(self, interaction) -> None:
         modal = ResponseModal(self, interaction.data)
 
@@ -117,6 +125,9 @@ class Modal:
             item.refresh_state(interaction)
 
         try:
+            if not await self.interaction_check(interaction):
+                return
+
             await self.callback(modal, interaction)
             if not interaction.response._responded:
                 await self.defer(interaction)
