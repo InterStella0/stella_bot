@@ -21,6 +21,8 @@ from aiogithub import GitHub
 from discord.ext import commands
 from dotenv import load_dotenv
 
+import utils.library_override
+
 from utils.buttons import PersistentRespondView
 from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
@@ -30,8 +32,6 @@ from utils.useful import ListCall, StellaContext, call, count_python, print_exce
 
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
-
-import utils.library_override
 
 to_call = ListCall()
 
