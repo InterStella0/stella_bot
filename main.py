@@ -9,7 +9,7 @@ import re
 import time
 from os import environ
 from os.path import dirname, join
-from typing import List, Optional, Union, Sequence
+from typing import List, Optional, Sequence, Union
 
 import asyncpg
 import discord
@@ -49,7 +49,6 @@ class StellaBot(commands.Bot):
         self.ipc_client = StellaClient(host=self.websocket_IP, secret_key=self.ipc_key, port=self.ipc_port)
         self.git_token = kwargs.pop("git_token")
         self.git = GitHub(self.git_token)
-        self.strip_after_prefix = True
         self.pool_pg = None
         self.uptime = None
         self.global_variable = None
@@ -58,7 +57,6 @@ class StellaBot(commands.Bot):
         self.confirmed_bots = set()
         self.token = kwargs.pop("token", None)
         self.blacklist = set()
-        self.cached_users = {}
         self.existing_prefix = {}
         self.cached_context = collections.deque(maxlen=100)
         self.command_running = {}
@@ -67,7 +65,12 @@ class StellaBot(commands.Bot):
         # main bot owner is kept separate
         self._stella_id, *_ = owner_ids
 
-        super().__init__(self.get_prefix, owner_ids=set(owner_ids), **kwargs)
+        super().__init__(
+            self.get_prefix,
+            owner_ids=set(owner_ids),
+            strip_after_prefix=True,
+            **kwargs,
+        )
 
         kweights = kwargs.pop("prefix_weights")
         self.prefix_neural_network = PrefixNeuralNetwork.from_weight(*kweights.values())
@@ -241,22 +244,25 @@ class StellaBot(commands.Bot):
         self.blacklist = {r["snowflake_id"] for r in records}
 
     async def get_prefix(self, message: discord.Message) -> Union[List[str], str]:
-        """Handles custom prefixes, this function is invoked every time process_command method is invoke thus returning
+        """Handles custom prefixes, this function is invoked every time process_command method is invoked thus returning
         the appropriate prefixes depending on the guild."""
-        query = "SELECT prefix FROM internal_prefix WHERE snowflake_id=$1"
-        snowflake_id = message.guild.id if message.guild else message.author.id
         if self.tester:
             return "+="
 
-        if not (prefix := self.existing_prefix.get(snowflake_id)):
-            data = await self.pool_pg.fetchrow(query, snowflake_id) or {}
-            prefix = self.existing_prefix.setdefault(snowflake_id, data.get("prefix") or "uwu ")
+        snowflake_id = message.guild.id if message.guild else message.author.id
 
-        comp = re.compile(f"^({re.escape(prefix)}).*", flags=re.I)
-        match = comp.match(message.content)
+        if (prefix := self.existing_prefix.get(snowflake_id)) is None:
+            data = await self.pool_pg.fetchrow(
+                "SELECT prefix FROM internal_prefix WHERE snowflake_id=$1",
+                snowflake_id,
+            )
+            prefix = "uwu " if data is None else data["prefix"]
+            self.existing_prefix[snowflake_id] = prefix
+
+        match = re.match(re.escape(prefix), message.content, flags=re.I)
         if match is not None:
-            return match.group(1)
-        return prefix
+            return match.group(0)
+        return []
 
     def get_message(self, message_id: int) -> discord.Message:
         """Gets the message from the cache"""
@@ -347,7 +353,7 @@ async def on_connect():
 @wait_ready(bot=bot)
 @event_check(lambda m: not bot.tester or bot.sync_is_owner(m.author))
 async def on_message(message):
-    if re.fullmatch("<@(!)?661466532605460530>", message.content):
+    if re.fullmatch(r"<@!?661466532605460530>", message.content):
         await message.channel.send(f"My prefix is `{await bot.get_prefix(message)}`")
         return
 
