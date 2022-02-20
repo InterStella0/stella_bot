@@ -49,6 +49,7 @@ class StellaBot(commands.Bot):
         self.ipc_client = StellaClient(host=self.websocket_IP, secret_key=self.ipc_key, port=self.ipc_port)
         self.git_token = kwargs.pop("git_token")
         self.git = GitHub(self.git_token)
+        self.strip_after_prefix = True
         self.pool_pg = None
         self.uptime = None
         self.global_variable = None
@@ -314,7 +315,7 @@ bot_data = {
     "ipc_port": states.get("IPC_PORT"),
     "ipc_key": states.get("IPC_KEY"),
     "intents": intents,
-    "owner_ids": (591135329117798400, ),
+    "owner_ids": states.get("OWNER_IDS"),
     "websocket_ip": states.get("WEBSOCKET_IP"),
     "prefix_weights": states.get("PREFIX_WEIGHT"),
     "prefix_derivative": states.get("PREFIX_DERIVATIVE_PATH"),
