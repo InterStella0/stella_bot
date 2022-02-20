@@ -134,7 +134,8 @@ class Modal:
         except Exception as e:
             await self.on_error(e)
         finally:
-            self.__waiter.set_result(modal)
+            if self.__waiter:
+                self.__waiter.set_result(modal)
 
     def add_item(self, item: discord.ui.Item) -> Modal:
         if not isinstance(item, discord.ui.Item):
