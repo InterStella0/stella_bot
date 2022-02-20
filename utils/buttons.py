@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import inspect
+import os
 import time
 from copy import copy
 from functools import partial
@@ -354,41 +355,31 @@ class InteractionPages(BaseView, MenuBase):
         self.current_button = None
         self.current_interaction = None
         self.cooldown = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
+        self.prompter = None
 
     class PagePrompt(Modal):
-        def __init__(self, *, ctx: StellaContext, max_pages: int, timeout=60):
-            super().__init__(f"Pick a page from 1 to {max_pages}", timeout=timeout)
+        def __init__(self, view: InteractionPages):
+            max_pages = view._source.get_max_pages()
+            super().__init__(f"Pick a page from 1 to {max_pages}", custom_id=os.urandom(16).hex(), timeout=None)
             self.add_item(TextInput(label="Page Number", min_length=1, max_length=len(str(max_pages)), required=True))
+            self.view = view
             self.max_pages = max_pages
             self.valid = False
-            self.ctx = ctx
-            self.original = None
-
-        async def prompt(self, interaction, **kwargs):
-            self.original = interaction
-            return await super().prompt(interaction, **kwargs)
-
-        async def on_timeout(self) -> None:
-            await self.original.followup.send("You failed to respond in 60 seconds. Timeout.", ephemeral=True)
+            self.ctx = view.ctx
 
         async def interaction_check(self, interaction: discord.Interaction) -> Optional[bool]:
-            # extra measures
+            # extra measures, there isn't a way for this to trigger.
             if interaction.user == self.ctx.author:
                 return True
 
             await interaction.response.send_message("You can't fill up this modal.", ephemeral=True)
 
-        async def send(self, *args, **kwargs):
-            modal = await self.prompt(*args, wait=True, **kwargs)
-            if self.valid and isinstance(modal, ResponseModal):
-                page = modal['Page Number']
-                return int(page.value)
-
         async def callback(self, modal: ResponseModal, interaction: discord.Interaction):
             text = modal['Page Number']
             value = text.value.strip()
-            if value.isdigit() and 0 < int(value) <= self.max_pages:
-                self.valid = True
+            if value.isdigit() and 0 < (page := int(value)) <= self.max_pages:
+                await self.view.show_checked_page(page - 1)
+                self.view.reset_timeout()
                 return
 
             def send(content):
@@ -401,6 +392,18 @@ class InteractionPages(BaseView, MenuBase):
                 await send(f"{value} is not a page number")
             else:
                 await send(f"Please pick a number between 1 and {self.max_pages}. Not {value}")
+
+    def stop(self):
+        if self.prompter:
+            self.prompter.stop()
+
+        super().stop()
+
+    def selecting_page(self, interaction):
+        if self.prompter is None:
+            self.prompter = self.PagePrompt(self)
+
+        return self.prompter.prompt(interaction)
 
     async def start(self, ctx: StellaContext, /) -> None:
         self.ctx = ctx
@@ -440,22 +443,7 @@ class InteractionPages(BaseView, MenuBase):
 
     @ui.button(label="Select Page", style=discord.ButtonStyle.gray)
     async def select_page(self, button, interaction):
-        await self.message.edit(view=None)
-        prompt_timeout = 60
-        # Ensures the winteractionpages doesn't get remove after timeout
-        self.set_timeout(time.monotonic() + self.timeout + prompt_timeout)
-        max_pages = self._source.get_max_pages()
-        prompt = self.PagePrompt(ctx=self.ctx, max_pages=max_pages, timeout=prompt_timeout)
-        value = self.current_page
-        try:
-            respond = await prompt.send(interaction)
-            if isinstance(respond, int):  # Handles timeout
-                value = respond - 1
-        except Exception as e:
-            await self.ctx.reply(f"Something went wrong. {e}")
-        finally:
-            await self.show_checked_page(value)
-            self.reset_timeout()
+        await self.selecting_page(interaction)
 
     async def _get_kwargs_from_page(self, page: Any) -> Dict[str, Any]:
         value = await super()._get_kwargs_from_page(page)
