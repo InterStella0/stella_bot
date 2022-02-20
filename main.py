@@ -7,6 +7,7 @@ import json
 import os
 import re
 import time
+
 from os import environ
 from os.path import dirname, join
 from typing import List, Optional, Sequence, Union
@@ -15,6 +16,7 @@ import asyncpg
 import discord
 import humanize
 import numpy as np
+
 from aiogithub import GitHub
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -24,8 +26,7 @@ from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
 from utils.ipc import StellaClient
 from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
-from utils.useful import (ListCall, StellaContext, call, count_python,
-                          print_exception)
+from utils.useful import ListCall, StellaContext, call, count_python, print_exception
 
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
@@ -259,9 +260,8 @@ class StellaBot(commands.Bot):
             prefix = "uwu " if data is None else data["prefix"]
             self.existing_prefix[snowflake_id] = prefix
 
-        match = re.match(re.escape(prefix), message.content, flags=re.I)
-        if match is not None:
-            return match.group(0)
+        if match := re.match(re.escape(prefix), message.content, flags=re.I):
+            return match[0]
         return []
 
     def get_message(self, message_id: int) -> discord.Message:
