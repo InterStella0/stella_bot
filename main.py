@@ -259,7 +259,8 @@ class StellaBot(commands.Bot):
 
         Escape special characters in prefix, then compile it as regular expression using case insensivity flag (yes, i
         know i could compile them in cache but has anyone asked?). Try matching the beginning of message content using
-        regex. If match found, return match group 0 which will be just the prefix itself. Otherwise return empty list.
+        regex. If match found, return match group 0 which will be just the prefix itself. Otherwise return the stored
+        prefix/the default prefix.
         """
         if self.tester:
             return "+="
@@ -276,7 +277,7 @@ class StellaBot(commands.Bot):
 
         if match := re.match(re.escape(prefix), message.content, flags=re.I):
             return match[0]
-        return []
+        return prefix
 
     def get_message(self, message_id: int) -> discord.Message:
         """Gets the message from the cache"""
