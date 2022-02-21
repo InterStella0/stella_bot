@@ -21,8 +21,6 @@ from aiogithub import GitHub
 from discord.ext import commands
 from dotenv import load_dotenv
 
-import utils.library_override
-
 from utils.buttons import PersistentRespondView
 from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
@@ -32,6 +30,8 @@ from utils.useful import ListCall, StellaContext, call, count_python, print_exce
 
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
+
+import utils.library_override
 
 to_call = ListCall()
 
@@ -245,8 +245,22 @@ class StellaBot(commands.Bot):
         self.blacklist = {r["snowflake_id"] for r in records}
 
     async def get_prefix(self, message: discord.Message) -> Union[List[str], str]:
-        """Handles custom prefixes, this function is invoked every time process_command method is invoked thus returning
-        the appropriate prefixes depending on the guild."""
+        """A note to self: update this docstring each time i edit code.
+
+        Check if bot is in woman mode. If true, return "+=".
+
+        Set snowflake_id to id of guild if message originates in guild (guild object is present). Otherwise author id.
+
+        Go to cached prefixes and try to get prefix using snowflake_id i created above. If found, skip next paragraph.
+
+        If prefix is not present, select prefix field from internal_prefix postgres table using snowflake_id i created
+        earlier as a key then try to get prefix from returned data. If nothing was returned then just use "uwu ", idc.
+        After doing that put resulting prefix back into in-memory cache because constant postgres lookups are no good.
+
+        Escape special characters in prefix, then compile it as regular expression using case insensivity flag (yes, i
+        know i could compile them in cache but has anyone asked?). Try matching the beginning of message content using
+        regex. If match found, return match group 0 which will be just the prefix itself. Otherwise return empty list.
+        """
         if self.tester:
             return "+="
 
