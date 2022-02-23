@@ -80,9 +80,15 @@ class Modal:
         def remove_modal(modal, modal_store):
             modal_store.remove_modal(modal)
 
-        if self.timeout is not None:
-            loop = interaction._state.loop
+        loop = interaction._state.loop
+        if self.__waiter is None:
             self.__waiter = loop.create_future()
+        else:
+            if not self.__waiter.done():
+                self.__waiter.cancel()
+            self.__waiter = loop.create_future()
+
+        if self.timeout is not None:
             self.__start_timer()
 
         if hasattr(interaction._state, '_modal_store'):
@@ -134,7 +140,7 @@ class Modal:
         except Exception as e:
             await self.on_error(e)
         finally:
-            if self.__waiter:
+            if self.__waiter and not self.__waiter.done():  # There is no way __waiter to be done at this point but making sure.
                 self.__waiter.set_result(modal)
 
     def add_item(self, item: discord.ui.Item) -> Modal:

@@ -18,6 +18,9 @@ class ModalStore:
 
     def add_modal(self, modal: Modal) -> None:
         modals = self._modals.setdefault(modal.custom_id, [])
+        if modal in modals:
+            return
+
         modals.append(modal)
 
     def remove_modal(self, modal: Modal) -> Optional[Modal]:
