@@ -247,7 +247,7 @@ class StellaBot(commands.Bot):
     async def get_prefix(self, message: discord.Message) -> Union[List[str], str]:
         """A note to self: update this docstring each time i edit code.
 
-        Check if bot is in woman mode. If true, return "+=".
+        Check if bot is in woman mode. If true, return "?uwu ".
 
         Set snowflake_id to id of guild if message originates in guild (guild object is present). Otherwise author id.
 
@@ -263,7 +263,7 @@ class StellaBot(commands.Bot):
         prefix/the default prefix.
         """
         if self.tester:
-            return "+="
+            return "?uwu "
 
         snowflake_id = message.guild.id if message.guild else message.author.id
 
