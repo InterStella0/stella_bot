@@ -10,7 +10,7 @@ import time
 
 from os import environ
 from os.path import dirname, join
-from typing import List, Optional, Sequence, Union
+from typing import List, Optional, Union
 
 import asyncpg
 import discord
@@ -37,7 +37,7 @@ to_call = ListCall()
 
 
 class StellaBot(commands.Bot):
-    def __init__(self, *, owner_ids: Sequence[int], **kwargs):
+    def __init__(self, **kwargs):
         self.tester = kwargs.pop("tester", False)
         self.help_src = kwargs.pop("help_src", None)
         self.db = kwargs.pop("db", None)
@@ -62,8 +62,11 @@ class StellaBot(commands.Bot):
         self.cached_context = collections.deque(maxlen=100)
         self.command_running = {}
         self.user_lock = {}
+        self._default_prefix = kwargs.pop("default_prefix")
+        self._tester_prefix = kwargs.pop("tester_prefix")
 
         # main bot owner is kept separate
+        owner_ids = kwargs.pop("owner_ids")
         self._stella_id, *_ = owner_ids
 
         super().__init__(
@@ -247,14 +250,14 @@ class StellaBot(commands.Bot):
     async def get_prefix(self, message: discord.Message) -> Union[List[str], str]:
         """A note to self: update this docstring each time i edit code.
 
-        Check if bot is in woman mode. If true, return "?uwu ".
+        Check if bot is in woman mode. If true, return tester prefix.
 
         Set snowflake_id to id of guild if message originates in guild (guild object is present). Otherwise author id.
 
         Go to cached prefixes and try to get prefix using snowflake_id i created above. If found, skip next paragraph.
 
         If prefix is not present, select prefix field from internal_prefix postgres table using snowflake_id i created
-        earlier as a key then try to get prefix from returned data. If nothing was returned then just use "uwu ", idc.
+        earlier as a key then try to get prefix from returned data. If nothing was returned, use default prefix, idrc.
         After doing that put resulting prefix back into in-memory cache because constant postgres lookups are no good.
 
         Escape special characters in prefix, then compile it as regular expression using case insensivity flag (yes, i
@@ -263,7 +266,7 @@ class StellaBot(commands.Bot):
         prefix/the default prefix.
         """
         if self.tester:
-            return "?uwu "
+            return self._tester_prefix
 
         snowflake_id = message.guild.id if message.guild else message.author.id
 
@@ -272,7 +275,7 @@ class StellaBot(commands.Bot):
                 "SELECT prefix FROM internal_prefix WHERE snowflake_id=$1",
                 snowflake_id,
             )
-            prefix = "uwu " if data is None else data["prefix"]
+            prefix = self._default_prefix if data is None else data["prefix"]
             self.existing_prefix[snowflake_id] = prefix
 
         if match := re.match(re.escape(prefix), message.content, flags=re.I):
@@ -327,6 +330,8 @@ with open("d_json/bot_var.json") as states_bytes:
     states = json.load(states_bytes)
 bot_data = {
     "token": states.get("TOKEN"),
+    "default_prefix": states.get("DEFAULT_PREFIX", "uwu "),
+    "tester_prefix": states.get("TESTER_PREFIX", "?uwu "),
     "color": 0xffcccb,
     "db": states.get("DATABASE"),
     "user_db": states.get("USER"),
@@ -368,7 +373,7 @@ async def on_connect():
 @wait_ready(bot=bot)
 @event_check(lambda m: not bot.tester or bot.sync_is_owner(m.author))
 async def on_message(message):
-    if re.fullmatch(r"<@!?661466532605460530>", message.content):
+    if re.fullmatch(rf"<@!?{bot.user.id}>", message.content):
         await message.channel.send(f"My prefix is `{await bot.get_prefix(message)}`")
         return
 
