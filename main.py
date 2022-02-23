@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import collections
 import contextlib
@@ -12,7 +10,7 @@ import time
 
 from os import environ
 from os.path import dirname, join
-from typing import Any, Callable, Coroutine, List, Optional, Sequence, Union
+from typing import List, Optional, Sequence, Union
 
 import asyncpg
 import discord
