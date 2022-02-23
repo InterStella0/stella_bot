@@ -2,16 +2,25 @@ from __future__ import annotations
 import contextlib
 import inspect
 import json
+import os
 import re
+import traceback
+
 import discord
 import copy
 import humanize
 import datetime
 import textwrap
 import itertools
+
+from discord import InteractionResponse
+from discord.ui import View
 from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
 from fuzzywuzzy import process
 from discord.ext import commands
+
+from addons.modal import Modal, TextInput
+from addons.modal.raw import ResponseModal
 from utils.useful import StellaEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker, \
     in_executor
 from utils.decorators import pages, event_check
@@ -19,7 +28,7 @@ from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, repl_wrap
 from utils.greedy_parser import UntilFlag, command, GreedyParser
 from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, PersistentRespondView, \
-    ButtonView
+    ButtonView, BaseView
 from utils.new_converters import CodeblockConverter
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMenuBase
 from utils import flags as flg
@@ -75,8 +84,6 @@ def is_message_context():
     return event_check(inner)
 
 
-
-
 @pages()
 async def formatter(self, menu, entry):
     return f"```py\n{entry}```"
@@ -103,11 +110,47 @@ class HelpSource(ListPageInteractionBase):
         _, list_commands = entry
         commands = [c.command_obj.name for c in list_commands]
         menu.view.clear_items()
-        menu.view.add_item(HomeButton(style=discord.ButtonStyle.success, selected="Home", row=None, emoji=home_emoji))
+        menu.view.add_item(HomeButton())
         for c in commands:
             menu.view.add_item(HelpSearchButton(style=discord.ButtonStyle.secondary, selected=c, row=None))
 
         return menu.view
+
+
+class SearchHelp(discord.ui.Button):
+    def __init__(self):
+        super().__init__(
+            emoji="<:search:945890885533573150>",
+            label="Search Command",
+            row=3,
+            style=discord.ButtonStyle.success
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        prompter = self.view.get_prompt_search()
+        await prompter.prompt(interaction)
+
+
+class HelpDropDown(discord.ui.Select):
+    def __init__(self, cmds: List[CommandGroup]):
+        options = [discord.SelectOption(
+            label=cmd.name,
+            description=textwrap.shorten(cmd.short_doc, width=80)
+        ) for cmd in cmds]
+        self.commands = {cmd.name: cmd for cmd in cmds}
+        amount = len(cmds)
+        value = plural(f'{amount} result(s)', amount)
+        super().__init__(placeholder=value, min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if not self.values:
+            return
+
+        help_obj = self.view.help_command
+        command_name = self.values[0]
+        command = self.commands.get(command_name)
+        embed = help_obj.get_command_help(command)
+        await interaction.response.send_message(content=f"Help for **{command_name}**", embed=embed, ephemeral=True)
 
 
 class HelpMenuView(MenuViewBase):
@@ -123,17 +166,59 @@ class HelpMenuView(MenuViewBase):
                          **kwargs)
         self.original_embed = embed
         self.help_command = help_object
+        self._search_prompt: Optional[Modal] = None
+        self.add_item(SearchHelp())
+        self.old_items = []
+
+    class PromptSearch(Modal):
+        def __init__(self, view: HelpMenuView):
+            super().__init__("Help Command Search", timeout=None, custom_id=os.urandom(16).hex())
+            self.add_item(TextInput(label="command", max_length=20))
+            self.help_command = view.help_command
+            self.original = view.message
+            self.view = view
+
+        async def callback(self, modal: ResponseModal, interaction: discord.Interaction) -> None:
+            cmd = modal["command"].value.strip()
+            if not cmd.strip():
+                await interaction.response.send_message(content="I can't search an empty command", ephemeral=True)
+                return
+
+            if view := await self.help_command.search_command(cmd):
+                message = f"Showing closest to `{cmd}` with :"
+                view.add_item(HomeButton(view=self.view))
+                await self.original.edit(content=message, embed=None, view=view)
+            else:
+                await interaction.response.send_message(f"No command with the name {cmd} found.", ephemeral=True)
+
+        async def on_error(self, error: Exception) -> None:
+            print(traceback.format_exc())
+
+    def get_prompt_search(self):
+        if self._search_prompt is None:
+            self._search_prompt = self.PromptSearch(self)
+
+        return self._search_prompt
+
+    def stop(self) -> None:
+        if self._search_prompt is not None:
+            self._search_prompt.stop()
 
 
 class HomeButton(BaseButton):
     """This button redirects the view from the menu, into the category section, which
        adds the old buttons back."""
+    def __init__(self, *, view=None):
+        super().__init__(style=discord.ButtonStyle.success, selected="Home", row=None, emoji=home_emoji)
+        self.diff_view = view
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        self.view.clear_items()
-        for b in self.view.old_items:
-            self.view.add_item(b)
-        await interaction.message.edit(view=self.view, embed=self.view.original_embed)
+        view = self.diff_view or self.view
+        if self.diff_view is None:
+            view.clear_items()
+            for b in view.old_items:
+                view.add_item(b)
+        await interaction.message.edit(content=None, view=view, embed=view.original_embed)
 
 
 class HelpButton(BaseButton):
@@ -151,14 +236,15 @@ class HelpButton(BaseButton):
         await view.update(self, interaction, data)
 
 
-class HelpSearchView(ViewButtonIteration):
+class HelpSearchView(BaseView):
     """This view class is specifically for command_callback method"""
 
-    def __init__(self, help_object: StellaBotHelp, *args: Any, **kwargs: Any):
+    def __init__(self, help_object: StellaBotHelp, cmds: List[CommandGroup], *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.help_command = help_object
         self.ctx = help_object.context
         self.bot = help_object.context.bot
+        self.add_item(HelpDropDown(cmds))
 
 
 class HelpSearchButton(BaseButton):
@@ -321,7 +407,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         cog_names = [dict(selected=ch.name, emoji=ch.emoji) for ch in sort_cog]
         buttons = discord.utils.as_chunks(cog_names, 5)
         menu_view = HelpMenuView(*buttons, **loads)
-        await ctx.reply(embed=embed, view=menu_view)
+        menu_view.message = await ctx.reply(embed=embed, view=menu_view)
 
     def get_command_help(self, command: commands.Command) -> discord.Embed:
         """Returns an Embed version of the command object given."""
@@ -383,13 +469,23 @@ class StellaBotHelp(commands.DefaultHelpCommand):
     async def send_error_message(self, error: Tuple[str, str, Optional[commands.Group]]) -> None:
         await self.handle_error_message(*error)
 
+    async def search_command(self, cmd: str) -> Optional[View]:
+        to_search = [x.name for x in self.context.bot.commands]
+        filtered = filter(lambda x: x[1] > 50, process.extract(cmd, to_search, limit=25))
+        result = itertools.starmap(lambda x, *_: x, filtered)
+        unfiltered_cmds = [self.context.bot.get_command(name) for name in result]
+        cmds = await self.filter_commands(unfiltered_cmds)
+        if cmds:
+            return HelpSearchView(self, cmds)
+
     async def handle_error_message(self, error: str, command: str, group: Optional[commands.Group] = None) -> None:
         ctx = self.context
         to_search = group.commands if group else ctx.bot.commands
-        filtered = filter(lambda x: x[1] > 50, process.extract(command, [x.name for x in to_search], limit=5))
+        filtered = filter(lambda x: x[1] > 50, process.extract(command, [x.name for x in to_search], limit=25))
         mapped = itertools.starmap(lambda x, *_: f"{group} {x}" if group else x, filtered)
-        if result := list(discord.utils.as_chunks(mapped, 2)):
-            button_view = HelpSearchView(self, *result, button=HelpSearchButton, style=discord.ButtonStyle.secondary)
+        result = await self.filter_commands([ctx.bot.get_command(name) for name in mapped])
+        if result:
+            button_view = HelpSearchView(self, result)
             message = f"{error}.\nShowing results for the closest command to `{command}`:"
             await ctx.reply(message, view=button_view, delete_after=180)
         else:
