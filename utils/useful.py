@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import copy
 import ctypes
 import datetime
 import inspect
@@ -19,6 +18,7 @@ from typing import (
     Coroutine,
     Generator,
     Iterable,
+    Iterator,
     List,
     Optional,
     Tuple,
@@ -352,18 +352,23 @@ async def cancel_gen(agen: AsyncGenerator) -> None:
     await agen.aclose() 
 
 
-def reading_recursive(root: str, /) -> int:
-    for x in os.listdir(root):
-        if os.path.isdir(x):
-            yield from reading_recursive(root + "/" + x)
+def _iterate_source_line_counts(root: str) -> Iterator[int]:
+    for child in os.listdir(root):
+        # ignore nasty hidden files
+        if child.startswith("."):
+            continue
+
+        path = f"{root}/{child}"
+        if os.path.isdir(path):
+            yield from _iterate_source_line_counts(path)
         else:
-            if x.endswith((".py", ".c")):
-                with open(f"{root}/{x}") as r:
-                    yield len(r.readlines())
+            if path.endswith((".py", ".c")):
+                with open(path) as f:
+                    yield len(f.readlines())
 
 
-def count_python(root: str) -> int:
-    return sum(reading_recursive(root))
+def count_source_lines(root: str) -> int:
+    return sum(_iterate_source_line_counts(root))
 
 
 def aware_utc(dt: datetime.datetime, format: Optional[bool] = True, *,

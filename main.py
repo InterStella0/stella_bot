@@ -26,7 +26,7 @@ from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
 from utils.ipc import StellaClient
 from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
-from utils.useful import ListCall, StellaContext, call, count_python, print_exception
+from utils.useful import ListCall, StellaContext, call, count_source_lines, print_exception
 
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
@@ -348,7 +348,7 @@ bot_data = {
     "git_token": states.get("GIT_TOKEN"),
     "activity": discord.Activity(type=discord.ActivityType.listening, name="logged to my pc."),
     "description": "{}'s personal bot that is partially for the public. "
-                   f"Written with only `{count_python('.'):,}` lines. plz be nice"
+                   f"Written with only `{count_source_lines('.'):,}` lines. plz be nice"
 }
 
 bot = StellaBot(**bot_data)
