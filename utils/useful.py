@@ -1,38 +1,59 @@
-import copy
-import inspect
-import discord
-import datetime
-import ctypes
-import traceback
-import sys
+from __future__ import annotations
+
 import asyncio
 import contextlib
-import typing
-import os
-import pytz
-import textwrap
+import ctypes
+import datetime
+import inspect
 import operator
-from typing import Callable, Any, Awaitable, Union, Tuple, List, Iterable, Coroutine, Optional, Type, AsyncGenerator, TypeVar, Generator, Iterator
-from utils.decorators import pages, in_executor
-from utils.context_managers import BreakableTyping
-from discord.utils import maybe_coroutine
+import os
+import sys
+import textwrap
+import traceback
+import typing
+
+from typing import (
+    Any,
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
+
+import discord
+import pytz
+
 from discord.ext import commands
+from discord.utils import maybe_coroutine
+
+from utils.context_managers import BreakableTyping
+from utils.decorators import in_executor, pages
 
 # TODO: do some detail documentation, cause im lazy
 
 
-async def try_call(method: Union[Awaitable, Callable], *args: Tuple[Any], exception: Exception = Exception,
-                   ret: bool = False, **kwargs) -> Any:
+async def try_call(method: Union[Awaitable[Any], Callable[..., Any]], *args: Any,
+                   exception: Type[Exception] = Exception, ret: bool = False, **kwargs: Any) -> Any:
     """one liner method that handles all errors in a single line which returns None, or Error instance depending on ret
        value.
     """
     try:
-        return await maybe_coroutine(method, *args, **kwargs)
+        return await maybe_coroutine(method, *args, **kwargs)  # type: ignore[no-untyped-call]
     except exception as e:
         return (None, e)[ret]
 
 
-def call(func: Callable, *args: Tuple[Any], exception: Exception = Exception, ret: bool = False, **kwargs) -> Any:
+def call(func: Callable[..., Any], *args: Any,
+         exception: Type[Exception] = Exception, ret: bool = False, **kwargs: Any) -> Any:
     """one liner method that handles all errors in a single line which returns None, or Error instance depending on ret
        value.
     """
@@ -44,32 +65,34 @@ def call(func: Callable, *args: Tuple[Any], exception: Exception = Exception, re
 
 class StellaEmbed(discord.Embed):
     """Main purpose is to get the usual setup of Embed for a command or an error embed"""
-    def __init__(self, color: Union[discord.Color, int] = 0xffcccb, timestamp: datetime.datetime = None,
-                 fields: Tuple[Tuple[str, str]] = (), field_inline: Optional[bool] = False, **kwargs):
+    def __init__(self, color: Union[discord.Color, int] = 0xffcccb, timestamp: Optional[datetime.datetime] = None,
+                 fields: Iterable[Tuple[str, str]] = (), field_inline: bool = False, **kwargs: Any):
         super().__init__(color=color, timestamp=timestamp or discord.utils.utcnow(), **kwargs)
         for n, v in fields:
             self.add_field(name=n, value=v, inline=field_inline)
 
     @classmethod
-    def default(cls, ctx: commands.Context, **kwargs) -> "StellaEmbed":
+    def default(cls, ctx: commands.Context, **kwargs: Any) -> StellaEmbed:
         instance = cls(**kwargs)
         instance.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar)
         return instance
 
     @classmethod
     def to_error(cls, title: Optional[str] = "Error",
-                 color: Union[discord.Color, int] = discord.Color.red(), **kwargs) -> "StellaEmbed":
+                 color: Union[discord.Color, int] = discord.Color.red(), **kwargs: Any) -> StellaEmbed:
         return cls(title=title, color=color, **kwargs)
 
 
 T = TypeVar("T")
 
 
+# this cannot be typed properly yet
+# stella, check this periodically https://github.com/python/mypy/issues/731
 def unpack(li: List[Union[List[T], T]], /) -> Iterable[T]:
     """Flattens list of list while leaving alone any other element."""
     for item in li:
         if isinstance(item, list):
-            yield from unpack(item)
+            yield from unpack(item)  # type: ignore
         else:
             yield item
 
@@ -108,7 +131,7 @@ def decode_result(return_result: int, /) -> List[Any]:
     return to_return
 
 
-def actually_calls(param: tuple, callback: Callable, /) -> List[Any]:
+def actually_calls(param: Tuple[Any, Any], callback: Callable[[Any, Any, Any], int], /) -> List[Any]:
     """Handles C functions and return value."""
     array_stuff, content_buffer = param
     if array_stuff:
@@ -116,6 +139,8 @@ def actually_calls(param: tuple, callback: Callable, /) -> List[Any]:
         callback.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
         return_result = callback(array_string, content_buffer, size)
         return decode_result(return_result)
+
+    return []
 
 
 @in_executor()
@@ -150,23 +175,25 @@ def plural(text: str, size: int) -> str:
     return text
 
 
-def realign(iterable: Iterable[str], key: int, discrim: str = '|') -> List[str]:
+def realign(iterable: Iterable[str], key: str, discrim: str = '|') -> List[str]:
     """Auto align a list of str with the highest substring before the key."""
     high = max(cont.index(key) for cont in iterable)
     reform = [high - cont.index(key) for cont in iterable]
     return [x.replace(key, f'{" " * off} {discrim}') for x, off in zip(iterable, reform)]
 
 
-class StellaContext(commands.Context):
+# mypy does not pick up star imports in discord.ext.commands for some reason
+# it thinks commands.Context is Any here, so disallow_subclassing_any fails
+class StellaContext(commands.Context):  # type: ignore[misc]
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
         from utils.greedy_parser import WithCommaStringView
-        self.view = WithCommaStringView(kwargs.get("view"))
+        self.view = WithCommaStringView(kwargs.get("view"))  # type: ignore[no-untyped-call]
         self.__dict__.update(dict.fromkeys(["waiting", "result", "channel_used", "running", "failed"]))
-        self.sent_messages = {}
+        self.sent_messages: Dict[int, discord.Message] = {}
         self.reinvoked = False
 
-    async def reinvoke(self, *, message=None, **kwargs) -> None:
+    async def reinvoke(self, *, message: Optional[discord.Message] = None, **kwargs: Any) -> None:
         self.reinvoked = True
         if message is None:
             await super().reinvoke(**kwargs)
@@ -181,9 +208,12 @@ class StellaContext(commands.Context):
             self.command = new_ctx.command
             await self.bot.invoke(self)
 
-    async def edit_if_found(self, callback: Callable[..., discord.Message], /, *args: Any, **kwargs: Any) -> discord.Message:
+    async def edit_if_found(self, callback: Callable[..., Awaitable[discord.Message]], /,
+                            *args: Any, **kwargs: Any) -> discord.Message:
         if self.reinvoked and self.sent_messages:
-            message = discord.utils.find(lambda m: not getattr(m, "to_delete", False), reversed(self.sent_messages.values()))
+            message = discord.utils.find(
+                lambda m: not getattr(m, "to_delete", False), reversed(self.sent_messages.values())
+            )
             if message is not None:
                 if args:
                     kwargs.update({"content": args[0]})
@@ -193,7 +223,7 @@ class StellaContext(commands.Context):
                     if "allowed_mentions" not in kwargs:
                         kwargs.update({"allowed_mentions": discord.AllowedMentions(replied_user=value)})
                     else:
-                        kwargs.get("allowed_mentions").replied_user = value
+                        kwargs["allowed_mentions"].replied_user = value
 
                 allowed_kwargs = list(inspect.signature(discord.Message.edit).parameters)
                 for key in list(kwargs):
@@ -209,7 +239,7 @@ class StellaContext(commands.Context):
         message = await self.edit_if_found(super().send, *args, **kwargs)
         return self.process_message(message)
 
-    async def reply(self, *args: Any, **kwargs: Any):
+    async def reply(self, *args: Any, **kwargs: Any) -> discord.Message:
         message = await self.edit_if_found(super().reply, *args, **kwargs)
         return self.process_message(message)
 
@@ -236,31 +266,37 @@ class StellaContext(commands.Context):
     def remove_message(self, message_id: int) -> Optional[discord.Message]:
         return self.sent_messages.pop(message_id, None)
 
-    async def maybe_reply(self, content: str = None, mention_author: bool = False, **kwargs: Any) -> discord.Message:
+    async def maybe_reply(self, content: Optional[str] = None, mention_author: bool = False,
+                          **kwargs: Any) -> discord.Message:
         """Replies if there is a message in between the command invoker and the bot's message."""
         await asyncio.sleep(0.05)
         with contextlib.suppress(discord.HTTPException):
             if ref := self.message.reference:
                 author = ref.cached_message.author
-                mention_author = mention_author or author in self.message.mentions and author.id not in self.message.raw_mentions
+                mention_author = mention_author or author in self.message.mentions \
+                    and author.id not in self.message.raw_mentions
                 return await self.send(content, mention_author=mention_author, reference=ref, **kwargs)
 
             if getattr(self.channel, "last_message", False) != self.message:
                 return await self.reply(content, mention_author=mention_author, **kwargs)
         return await self.send(content, **kwargs)
 
-    async def embed(self, content: str = None, *, reply: bool = True, mention_author: bool = False,
-                    embed: discord.Embed = None, **kwargs: Any) -> discord.Message:
-        embed_only_kwargs = ["colour", "color", "title", "type", "url", "description", "timestamp", "fields", "field_inline"]
-        ori_embed = StellaEmbed.default(self, **{key: value for key, value in kwargs.items() if key in embed_only_kwargs})
+    async def embed(self, content: Optional[str] = None, *, reply: bool = True, mention_author: bool = False,
+                    embed: Optional[discord.Embed] = None, **kwargs: Any) -> discord.Message:
+        embed_only_kwargs = [
+            "colour", "color", "title", "type", "url", "description", "timestamp", "fields", "field_inline"
+        ]
+        ori_embed = StellaEmbed.default(
+            self, **{key: value for key, value in kwargs.items() if key in embed_only_kwargs}
+        )
         if embed:
             new_embed = embed.to_dict()
             new_embed.update(ori_embed.to_dict())
-            ori_embed = discord.Embed.from_dict(new_embed)
+            ori_embed = StellaEmbed.from_dict(new_embed)
         to_send = (self.send, self.maybe_reply)[reply]
         if not self.channel.permissions_for(self.me).embed_links:
             raise commands.BotMissingPermissions(["embed_links"])
-        send_dict = {'tts': False, 'file': None, 'files': None, 
+        send_dict = {'tts': False, 'file': None, 'files': None,
                      'delete_after': None, 'nonce': None}
         for x, v in kwargs.items():
             if x in send_dict:
@@ -268,7 +304,7 @@ class StellaContext(commands.Context):
 
         return await to_send(content, mention_author=mention_author, embed=ori_embed, **send_dict)
 
-    def confirmed(self, message_id: Optional[int] = None) -> Coroutine:
+    def confirmed(self, message_id: Optional[int] = None) -> Awaitable[None]:
         message = self.message if not message_id else self.channel.get_partial_message(message_id)
         return message.add_reaction("<:checkmark:753619798021373974>")
 
@@ -276,40 +312,43 @@ class StellaContext(commands.Context):
         from utils.buttons import ConfirmView
         return await ConfirmView(self, delete_after=delete_after).send(content, **kwargs)
 
-    def breaktyping(self, /, *, limit: Optional[int] = None):
-        return BreakableTyping(self, limit=limit)
+    def breaktyping(self, /, *, limit: Optional[int] = None) -> BreakableTyping:
+        return BreakableTyping(self, limit=limit)  # type: ignore[no-untyped-call]
 
 
-async def maybe_method(func: Union[Awaitable, Callable], cls: Optional[Type] = None, *args: Any, **kwargs: Any) -> Any:
+async def maybe_method(func: Union[Awaitable[Any], Callable[..., Any]], cls: Optional[type] = None,
+                       *args: Any, **kwargs: Any) -> Any:
     """Pass the class if func is not a method."""
     if not inspect.ismethod(func):
-        return await maybe_coroutine(func, cls, *args, **kwargs)
-    return await maybe_coroutine(func, *args, **kwargs)
+        return await maybe_coroutine(func, cls, *args, **kwargs)  # type: ignore[no-untyped-call]
+    return await maybe_coroutine(func, *args, **kwargs)  # type: ignore[no-untyped-call]
 
 
 @pages()
-def empty_page_format(_, __, entry: T) -> T:
+def empty_page_format(_: Any, __: Any, entry: T) -> T:
     """This is for Code Block ListPageSource and for help Cog ListPageSource"""
     return entry
 
 
-class ListCall(list):
+class ListCall(List[Any]):
     """Quick data structure for calling every element in the array regardless of awaitable or not"""
-    def append(self, rhs: Awaitable) -> list:
-        return super().append(rhs)
+    def append(self, rhs: Awaitable[Any]) -> None:
+        super().append(rhs)
 
-    def call(self, *args: Any, **kwargs: Any) -> Coroutine:
-        return asyncio.gather(*(maybe_coroutine(func, *args, **kwargs) for func in self))
+    def call(self, *args: Any, **kwargs: Any) -> asyncio.Future[List[Any]]:
+        return asyncio.gather(
+            *(maybe_coroutine(func, *args, **kwargs) for func in self))  # type: ignore[no-untyped-call]
 
 
-def in_local(func: Callable, target: Any) -> Any:
+def in_local(func: Callable[[], Any], target: Any) -> Any:
     """Useless function"""
     return func()[target]
 
 
-class RenameClass(typing._ProtocolMeta):
+# note: do not even think about changing superclass, it will end badly
+class RenameClass(typing._ProtocolMeta):  # type: ignore[name-defined,misc]
     """It rename a class based on name kwargs, what do you expect"""
-    def __new__(cls, names: tuple, bases: tuple, attrs: dict, *, name: str = None) -> Type:
+    def __new__(cls, _orig_name: str, bases: Tuple[type, ...], attrs: Dict[str, Any], *, name: str) -> Any:
         new_class = super().__new__(cls, name, bases, attrs)
         if name:
             new_class.__name__ = name
@@ -321,17 +360,17 @@ def isiterable(obj: Any) -> Optional[bool]:
         iter(obj) and obj[0]
     except TypeError:
         return False
-    except:
+    except IndexError:
         pass
     return True
 
 
-async def cancel_gen(agen: AsyncGenerator) -> None:
+async def cancel_gen(agen: AsyncGenerator[Any, Any]) -> None:
     task = asyncio.create_task(agen.__anext__())
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await task
-    await agen.aclose() 
+    await agen.aclose()
 
 
 def _iterate_source_line_counts(root: str) -> Iterator[int]:
@@ -353,22 +392,22 @@ def count_source_lines(root: str) -> int:
     return sum(_iterate_source_line_counts(root))
 
 
-def aware_utc(dt: datetime.datetime, format: Optional[bool] = True, *,
-              mode: Optional[str] = 'F') -> Union[datetime.datetime, str]:
+def aware_utc(dt: datetime.datetime, format: bool = True, *,
+              mode: discord.utils.TimestampStyle = 'F') -> Union[datetime.datetime, str]:
     new_dt = dt.replace(tzinfo=pytz.UTC)
     if format:
         return discord.utils.format_dt(new_dt, mode)
     return dt.replace(tzinfo=pytz.UTC)
 
 
-def islicechunk(sequence: List[T], *, chunk: Optional[int] = 1) -> Generator[T, None, None]:
+def islicechunk(sequence: Sequence[T], *, chunk: int = 1) -> Iterator[Sequence[T]]:
     """works like islice, it cuts a sequence into chunks, instead of only getting the end of the sequence elements
-        sequence: List[Any]
+        sequence: Sequence[Any]
             The sequence that you want to cut
-        chunk: Optional[int]
+        chunk: int
             Cut the sequence every given number. Defaults to 1
 
-        return: T
+        return: Iterator[Sequence[T]]
             An iterable that got cut up given by chunk
      """
     end = 0
@@ -378,41 +417,46 @@ def islicechunk(sequence: List[T], *, chunk: Optional[int] = 1) -> Generator[T, 
             yield sequence[end - chunk: end]
 
 
-def text_chunker(text: str, *, width: Optional[int] = 1880, max_newline: Optional[int] = 20, wrap: Optional[bool] = True,
-                 wrap_during_chunk: Optional[bool] = True) -> List[str]:
+def text_chunker(text: str, *, width: int = 1880, max_newline: int = 20, wrap: bool = True,
+                 wrap_during_chunk: bool = True) -> List[str]:
     """Chunks a given text into a flattened list.
         text: str
             massive text that needs to be chunked
-        width: Optional[int]
+        width: int
             maximum character per chunks
-        max_newline: Optional[int]
+        max_newline: int
             maximum new line per chunks
-        wrap: Optional[bool]
+        wrap: bool
             whether to chunk before the max_newline pagination
-        wrap_during_chunk: Optional[bool]
+        wrap_during_chunk: bool
             maximum character during max_newline pagination
 
         return: List[str]
     """
     # idk i just write this long ass doc so i remember how to use it later lmao
+
+    # these recursive lists are too cursed to type, i gave up
     if wrap:
-        text = textwrap.wrap(text, width=width, replace_whitespace=False)
+        wrapped_text = textwrap.wrap(text, width=width, replace_whitespace=False)
+    else:
+        wrapped_text = [text]
 
     for i, each in enumerate(text):
         elems = each.splitlines()
         if len(elems) >= max_newline:
-            new_elems = []
+            new_elems: List[Union[str, List[str]]] = []
             for values in islicechunk(elems, chunk=20):
                 elem = "\n".join(values)
                 if wrap_during_chunk:
-                    elem = textwrap.wrap(elem, width=width, replace_whitespace=False)
-                new_elems.append(elem)
-            text[i] = new_elems
+                    new_elems.append(textwrap.wrap(elem, width=width, replace_whitespace=False))
+                else:
+                    new_elems.append(elem)
+            wrapped_text[i] = new_elems  # type: ignore
 
-    return [*unpack(text)]
+    return [*unpack(wrapped_text)]  # type: ignore
 
 
-def multiget(iterable: Iterable[T], *, size: Optional[int] = 2, **kwargs: Any) -> List[T]:
+def multiget(iterable: Iterable[T], *, size: int = 2, **kwargs: Any) -> List[T]:
     converted = [(operator.attrgetter(attr.replace('__', '.')), value) for attr, value in kwargs.items()]
 
     value = []
