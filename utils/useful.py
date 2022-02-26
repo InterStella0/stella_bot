@@ -1,40 +1,22 @@
+import copy
+import inspect
+import discord
+import datetime
+import ctypes
+import traceback
+import sys
 import asyncio
 import contextlib
-import ctypes
-import datetime
-import inspect
-import operator
-import os
-import sys
-import textwrap
-import traceback
 import typing
-
-from typing import (
-    Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Coroutine,
-    Generator,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
-
-import discord
+import os
 import pytz
-
-from discord.ext import commands
-from discord.utils import maybe_coroutine
-
+import textwrap
+import operator
+from typing import Callable, Any, Awaitable, Union, Tuple, List, Iterable, Coroutine, Optional, Type, AsyncGenerator, TypeVar, Generator, Iterator
+from utils.decorators import pages, in_executor
 from utils.context_managers import BreakableTyping
-from utils.decorators import in_executor, pages
+from discord.utils import maybe_coroutine
+from discord.ext import commands
 
 # TODO: do some detail documentation, cause im lazy
 
