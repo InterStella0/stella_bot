@@ -12,22 +12,8 @@ import textwrap
 import traceback
 import typing
 
-from typing import (
-    Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import (Any, AsyncGenerator, Awaitable, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple,
+                    Type, TypeVar, Union)
 
 import discord
 import pytz
@@ -188,7 +174,7 @@ class StellaContext(commands.Context):  # type: ignore[misc]
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
         from utils.greedy_parser import WithCommaStringView
-        self.view = WithCommaStringView(kwargs.get("view"))  # type: ignore[no-untyped-call]
+        self.view = WithCommaStringView(kwargs.get("view"))
         self.__dict__.update(dict.fromkeys(["waiting", "result", "channel_used", "running", "failed"]))
         self.sent_messages: Dict[int, discord.Message] = {}
         self.reinvoked = False
@@ -266,19 +252,19 @@ class StellaContext(commands.Context):  # type: ignore[misc]
     def remove_message(self, message_id: int) -> Optional[discord.Message]:
         return self.sent_messages.pop(message_id, None)
 
-    async def maybe_reply(self, content: Optional[str] = None, mention_author: bool = False,
+    async def maybe_reply(self, content: Optional[str] = None, mention_author: Optional[bool] = False,
                           **kwargs: Any) -> discord.Message:
         """Replies if there is a message in between the command invoker and the bot's message."""
         await asyncio.sleep(0.05)
         with contextlib.suppress(discord.HTTPException):
             if ref := self.message.reference:
                 author = ref.cached_message.author
-                mention_author = mention_author or author in self.message.mentions \
-                    and author.id not in self.message.raw_mentions
+                if mention_author is None:
+                    mention_author = author in self.message.mentions and author.id not in self.message.raw_mentions
                 return await self.send(content, mention_author=mention_author, reference=ref, **kwargs)
 
-            if getattr(self.channel, "last_message", False) != self.message:
-                return await self.reply(content, mention_author=mention_author, **kwargs)
+            if getattr(self.channel, "last_message", None) != self.message:
+                return await self.reply(content, mention_author=bool(mention_author), **kwargs)
         return await self.send(content, **kwargs)
 
     async def embed(self, content: Optional[str] = None, *, reply: bool = True, mention_author: bool = False,
@@ -313,7 +299,7 @@ class StellaContext(commands.Context):  # type: ignore[misc]
         return await ConfirmView(self, delete_after=delete_after).send(content, **kwargs)
 
     def breaktyping(self, /, *, limit: Optional[int] = None) -> BreakableTyping:
-        return BreakableTyping(self, limit=limit)  # type: ignore[no-untyped-call]
+        return BreakableTyping(self, limit=limit)
 
 
 async def maybe_method(func: Union[Awaitable[Any], Callable[..., Any]], cls: Optional[type] = None,
@@ -346,7 +332,7 @@ def in_local(func: Callable[[], Any], target: Any) -> Any:
 
 
 # note: do not even think about changing superclass, it will end badly
-class RenameClass(typing._ProtocolMeta):  # type: ignore[name-defined,misc]
+class RenameClass(typing._ProtocolMeta):
     """It rename a class based on name kwargs, what do you expect"""
     def __new__(cls, _orig_name: str, bases: Tuple[type, ...], attrs: Dict[str, Any], *, name: str) -> Any:
         new_class = super().__new__(cls, name, bases, attrs)
@@ -393,7 +379,7 @@ def count_source_lines(root: str) -> int:
 
 
 def aware_utc(dt: datetime.datetime, format: bool = True, *,
-              mode: discord.utils.TimestampStyle = 'F') -> Union[datetime.datetime, str]:
+              mode: Optional[discord.utils.TimestampStyle] = 'F') -> Union[datetime.datetime, str]:
     new_dt = dt.replace(tzinfo=pytz.UTC)
     if format:
         return discord.utils.format_dt(new_dt, mode)
@@ -448,9 +434,8 @@ def text_chunker(text: str, *, width: int = 1880, max_newline: int = 20, wrap: b
             for values in islicechunk(elems, chunk=20):
                 elem = "\n".join(values)
                 if wrap_during_chunk:
-                    new_elems.append(textwrap.wrap(elem, width=width, replace_whitespace=False))
-                else:
-                    new_elems.append(elem)
+                    elem = textwrap.wrap(elem, width=width, replace_whitespace=False)  # type: ignore[assignment]
+                new_elems.append(elem)
             wrapped_text[i] = new_elems  # type: ignore
 
     return [*unpack(wrapped_text)]  # type: ignore
