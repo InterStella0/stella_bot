@@ -143,7 +143,7 @@ class LewdleGame:
     def create_embed(self, *, content: Optional[str] = None, url: Optional[str] = None):
         embed = StellaEmbed(title="Lewdle Game")
         amount = self.max_tries - self.user_tries
-        embed.description = content or f"You have {amount} {plural('attempt(s)', amount)} left"
+        embed.description = content or f"You have {amount} {plural('attempt(s)', amount)} left. Press 'Guess' button to guess!"
         url = url or self._previous_url
         if url is not None:
             embed.set_image(url=url)
@@ -420,7 +420,7 @@ class MultiLewdle:
 class LewdleCommandCog(commands.Cog):
     def __init__(self, bot: StellaBot):
         self.bot = bot
-        self.list_guess = []
+        self.list_guess = None
         bot.loop.create_task(self.fill_list_guess())
 
     async def fill_list_guess(self):
