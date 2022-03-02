@@ -52,7 +52,7 @@ class ReplParser:
                               r"(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)()" \
                               r"(\((?P<parameter>[^\)]*)\)(\s+)?(->(\s+)?(?P<returnhint>.*))?:)"
         
-        self.WITH_DEF_REGEX = r"(\s+)?(?P<captured>async with|with)(\s+)(?P<statement>[^\s]+)" \
+        self.WITH_DEF_REGEX = r"(\s+)?(?P<captured>async with|with)(\s+)(?P<statement>.*)" \
                               r"(\s+)?(as(\s+)(?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?(\s+)"\
                               r"?(((\s+)?\,(\s+)?(?P<statement2>[^\s]+)(\s+)?(as(\s+)" \
                               r"(?P<var2>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?)+)?(\s+)?:(\s+)?"
