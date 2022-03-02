@@ -152,7 +152,7 @@ def print_exception(text: str, error: Exception, *, _print: bool = True) -> str:
     return "".join(lines)
 
 
-def plural(text: str, size: int, *, selections=()) -> str:
+def plural(text: str, size: int, *, selections: Iterable[Tuple[str, Tuple[str, str]]] = ()) -> str:
     """Auto corrects text to show plural or singular depending on the size number."""
     logic = size == 1
     target = (("(s)", ("s", "")), ("(is/are)", ("are", "is")), *selections)
@@ -295,7 +295,9 @@ class StellaContext(commands.Context):  # type: ignore[misc]
         message = self.message if not message_id else self.channel.get_partial_message(message_id)
         return message.add_reaction("<:checkmark:753619798021373974>")
 
-    async def confirmation(self, content: str, delete_after: Optional[bool] = False, *, to_respond: Optional[discord.Member] = None, **kwargs: Any) -> Optional[bool]:
+    async def confirmation(self, content: str, delete_after: Optional[bool] = False, *,
+                           to_respond: Optional[Union[discord.User, discord.Member]] = None,
+                           **kwargs: Any) -> Optional[bool]:
         from utils.buttons import ConfirmView
         return await ConfirmView(self, to_respond=to_respond, delete_after=delete_after).send(content, **kwargs)
 
