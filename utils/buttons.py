@@ -190,14 +190,22 @@ class MenuViewBase(ViewIterationAuthor):
         await message.edit(view=self)
 
 
-class ConfirmView(ViewAuthor, CallbackView):
+class ConfirmView(CallbackView):
     """ConfirmView literally handles confirmation where it asks the user at start() and returns a Tribool"""
-    def __init__(self, ctx: StellaContext, *, delete_after: Optional[bool] = False, message_error=None):
-        super().__init__(ctx)
+    def __init__(self, ctx: StellaContext, *, to_respond: Optional[discord.User] = None, delete_after: Optional[bool] = False, message_error=None):
+        super().__init__()
         self.result = None
         self.message = None
+        self.to_respond = to_respond or ctx.author
+        self.context = ctx
         self.delete_after = delete_after
         self.message_error = message_error or "I'm waiting for your confirm response. You can't run another command."
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if self.to_respond.id == getattr(interaction.user, "id", None):
+            return True
+
+        await interaction.response.send_message(f"Sorry, only {self.to_respond} can respond to this prompt.", ephemeral=True)
 
     async def handle_callback(self, callback, item, interaction):
         self.result = await callback(interaction)
