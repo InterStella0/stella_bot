@@ -49,7 +49,7 @@ class Letter:
 
     def render_letter(self, draw: ImageDraw, x1: int, y1: int):
         create_block(draw, x1, y1, self.kind.value.to_rgb())
-        font = ImageFont.truetype("arialbd.ttf", 40)
+        font = ImageFont.truetype("fonts/arialbd.ttf", 40)
         x2, y2 = draw.textsize(self.char, font=font)
         x = x1 + ((BOX_SIZE - x2) / 2)
         y = y1 - (MARGIN_BOX / 2) + ((BOX_SIZE - y2) / 2)  # for some reason i need to subtract 2
