@@ -8,7 +8,6 @@ import dataclasses
 import io
 import json
 import random
-import traceback
 from enum import Enum
 from typing import Generator, Optional, List, Dict, TYPE_CHECKING
 
@@ -16,7 +15,6 @@ import discord
 from PIL import ImageDraw, ImageFont
 from PIL import Image
 from discord.ext import commands
-from discord.ext.commands import Greedy
 
 from addons.modal import Modal, TextInput
 from addons.modal.raw import ResponseModal
