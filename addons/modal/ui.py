@@ -23,9 +23,6 @@ __all__ = (
 class Modal:
     def __init__(self, title: str, *, timeout: Optional[float] = 180.0, custom_id: Optional[str] = None):
         self.timeout: Optional[float] = timeout
-        if timeout is None and custom_id is None:
-            raise ValueError("'Custom_id' must be filled on persistent modal.")
-
         self.custom_id: str = custom_id or os.urandom(16).hex()
         self.title: str = title
         self.children: List[discord.ui.Item] = []

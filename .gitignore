@@ -3,9 +3,9 @@
 *.env
 *.so
 *.service
-venv
 .venv
 .idea
+fonts
 nppBackup
 eros.py
 command_search.c

@@ -77,3 +77,16 @@ CREATE TABLE bot_tasks(
      last_execution TIMESTAMP WITH TIME ZONE,
      next_execution TIMESTAMP WITH TIME ZONE
 );
+
+CREATE TABLE lewdle_word(
+    word VARCHAR(20) PRIMARY KEY,
+);
+
+CREATE TABLE lewdle_rank(
+    user_id BIGINT NOT NULL,
+    word VARCHAR(20) NOT NULL,
+    attempt INT NOT NULL,
+    amount INT NOT NULL,
+    FOREIGN KEY (word) REFERENCES lewdle_word(word),
+    UNIQUE (user_id, word, attempt)
+);

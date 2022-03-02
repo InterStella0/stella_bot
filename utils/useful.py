@@ -152,10 +152,10 @@ def print_exception(text: str, error: Exception, *, _print: bool = True) -> str:
     return "".join(lines)
 
 
-def plural(text: str, size: int) -> str:
+def plural(text: str, size: int, *, selections=()) -> str:
     """Auto corrects text to show plural or singular depending on the size number."""
     logic = size == 1
-    target = (("(s)", ("s", "")), ("(is/are)", ("are", "is")))
+    target = (("(s)", ("s", "")), ("(is/are)", ("are", "is")), *selections)
     for x, y in target:
         text = text.replace(x, y[logic])
     return text
@@ -235,7 +235,8 @@ class StellaContext(commands.Context):  # type: ignore[misc]
 
     async def delete_all(self) -> None:
         if self.channel.permissions_for(self.me).manage_messages:
-            await self.channel.delete_messages(self.sent_messages.values())
+            with contextlib.suppress(discord.NotFound):
+                await self.channel.delete_messages(self.sent_messages.values())
         else:
             for message in self.sent_messages.values():
                 await message.delete(delay=0)
@@ -294,9 +295,9 @@ class StellaContext(commands.Context):  # type: ignore[misc]
         message = self.message if not message_id else self.channel.get_partial_message(message_id)
         return message.add_reaction("<:checkmark:753619798021373974>")
 
-    async def confirmation(self, content: str, delete_after: Optional[bool] = False, **kwargs: Any) -> Optional[bool]:
+    async def confirmation(self, content: str, delete_after: Optional[bool] = False, *, to_respond: Optional[discord.Member] = None, **kwargs: Any) -> Optional[bool]:
         from utils.buttons import ConfirmView
-        return await ConfirmView(self, delete_after=delete_after).send(content, **kwargs)
+        return await ConfirmView(self, to_respond=to_respond, delete_after=delete_after).send(content, **kwargs)
 
     def breaktyping(self, /, *, limit: Optional[int] = None) -> BreakableTyping:
         return BreakableTyping(self, limit=limit)
