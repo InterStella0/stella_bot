@@ -7,8 +7,8 @@ if TYPE_CHECKING:
     from main import StellaBot
 
 
-class GamesCog(LewdleCommandCog, name="games"):
-    pass
+class GamesCog(LewdleCommandCog, name="Games"):
+    """Contains games that stella made."""
 
 
 def setup(bot: StellaBot):

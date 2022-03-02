@@ -428,13 +428,13 @@ class LewdleCommandCog(commands.Cog):
         records = await self.bot.pool_pg.fetch(query)
         self.list_guess = [record[0] for record in records]
 
-    @commands.group(invoke_without_command=True)
+    @commands.group(invoke_without_command=True, help="A wordle game except it's lewd.")
     @lewdle_check()
     async def lewdle(self, ctx: StellaContext, tries: tries_convert = 6):
         game = LewdleGame(ctx, tries=tries)
         await game.start()
 
-    @lewdle.command()
+    @lewdle.command(help="Duel lewdle game with your friends! Who ever guess the word first wins!")
     @lewdle_check()
     async def duel(self, ctx: StellaContext, member: discord.Member):
         value = await ctx.confirmation(

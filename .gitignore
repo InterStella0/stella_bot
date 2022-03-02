@@ -3,7 +3,6 @@
 *.env
 *.so
 *.service
-venv
 .venv
 .idea
 nppBackup
