@@ -169,9 +169,10 @@ def realign(iterable: Iterable[str], key: str, discrim: str = '|') -> List[str]:
 # TODO(Eugene): remove this ramble once https://github.com/python/mypy/issues/12257 is resolved
 #
 # mypy does not pick up star imports in discord.ext.commands. possible solution is using `namespace_packages` option,
-# but it makes mypy crash. ignore disallow_subclassing_any for now, also explicitly define message type
+# but it makes mypy crash. ignore disallow_subclassing_any for now, also explicitly define message and channel types
 class StellaContext(commands.Context):  # type: ignore[misc]
     message: discord.Message
+    channel: discord.abc.MessageableChannel
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -296,7 +297,8 @@ class StellaContext(commands.Context):  # type: ignore[misc]
 
     def confirmed(self, message_id: Optional[int] = None) -> Awaitable[None]:
         message = self.message if not message_id else self.channel.get_partial_message(message_id)
-        return message.add_reaction("<:checkmark:753619798021373974>")
+        # discord.py adds method aliases to PartialMessage which accept Message as self, wrong typing
+        return message.add_reaction("<:checkmark:753619798021373974>")  # type: ignore[misc]
 
     async def confirmation(self, content: str, delete_after: Optional[bool] = False, *,
                            to_respond: Optional[Union[discord.User, discord.Member]] = None,
