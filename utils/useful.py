@@ -117,7 +117,7 @@ def decode_result(return_result: int, /) -> List[Any]:
     return to_return
 
 
-def actually_calls(param: Tuple[Any, Any], callback: Callable[[Any, Any, Any], int], /) -> List[Any]:
+def actually_calls(param: Tuple[Any, Any], callback: Callable[[Any, Any, Any], int], /) -> Optional[List[Any]]:
     """Handles C functions and return value."""
     array_stuff, content_buffer = param
     if array_stuff:
@@ -125,8 +125,6 @@ def actually_calls(param: Tuple[Any, Any], callback: Callable[[Any, Any, Any], i
         callback.argtypes = [ctypes.c_char_p * size, ctypes.c_char_p, ctypes.c_int]
         return_result = callback(array_string, content_buffer, size)
         return decode_result(return_result)
-
-    return []
 
 
 @in_executor()
@@ -425,10 +423,11 @@ def text_chunker(text: str, *, width: int = 1880, max_newline: int = 20, wrap: b
     # idk i just write this long ass doc so i remember how to use it later lmao
 
     # these recursive lists are too cursed to type, i gave up
+
+    # dont question this weirdness. stella doesnt like else block ok
+    wrapped_text = [text]
     if wrap:
         wrapped_text = textwrap.wrap(text, width=width, replace_whitespace=False)
-    else:
-        wrapped_text = [text]
 
     for i, each in enumerate(text):
         elems = each.splitlines()

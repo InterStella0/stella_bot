@@ -193,7 +193,7 @@ class MenuViewBase(ViewIterationAuthor):
 class ConfirmView(CallbackView):
     """ConfirmView literally handles confirmation where it asks the user at start() and returns a Tribool"""
     def __init__(self, ctx: StellaContext, *, to_respond: Optional[Union[discord.User, discord.Member]] = None,
-                 delete_after: Optional[bool] = False, message_error=None):
+                 delete_after: Optional[bool] = False, message_error: Optional[str] = None):
         super().__init__()
         self.result = None
         self.message = None
