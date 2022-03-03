@@ -166,9 +166,13 @@ def realign(iterable: Iterable[str], key: str, discrim: str = '|') -> List[str]:
     return [x.replace(key, f'{" " * off} {discrim}') for x, off in zip(iterable, reform)]
 
 
-# mypy does not pick up star imports in discord.ext.commands for some reason
-# it thinks commands.Context is Any here, so disallow_subclassing_any fails
+# TODO(Eugene): remove this ramble once https://github.com/python/mypy/issues/12257 is resolved
+#
+# mypy does not pick up star imports in discord.ext.commands. possible solution is using `namespace_packages` option,
+# but it makes mypy crash. ignore disallow_subclassing_any for now, also explicitly define message type
 class StellaContext(commands.Context):  # type: ignore[misc]
+    message: discord.Message
+
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
         from utils.greedy_parser import WithCommaStringView
@@ -257,7 +261,8 @@ class StellaContext(commands.Context):  # type: ignore[misc]
         await asyncio.sleep(0.05)
         with contextlib.suppress(discord.HTTPException):
             if ref := self.message.reference:
-                author = ref.cached_message.author
+                # it is very unlikely for this to not be cached
+                author = ref.cached_message.author  # type: ignore
                 if mention_author is None:
                     mention_author = author in self.message.mentions and author.id not in self.message.raw_mentions
                 return await self.send(content, mention_author=mention_author, reference=ref, **kwargs)
