@@ -327,7 +327,7 @@ def empty_page_format(_: Any, __: Any, entry: T) -> T:
 class ListCall(List[Any]):
     """Quick data structure for calling every element in the array regardless of awaitable or not"""
     def append(self, rhs: Awaitable[Any]) -> None:
-        super().append(rhs)
+        return super().append(rhs)
 
     def call(self, *args: Any, **kwargs: Any) -> asyncio.Future[List[Any]]:
         return asyncio.gather(
