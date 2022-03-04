@@ -428,10 +428,6 @@ def text_chunker(text: str, *, width: int = 1880, max_newline: int = 20, wrap: b
         return: List[str]
     """
     # idk i just write this long ass doc so i remember how to use it later lmao
-
-    # these recursive lists are too cursed to type, i gave up
-
-    # dont question this weirdness. stella doesnt like else block ok
     wrapped_text = [text]
     if wrap:
         wrapped_text = textwrap.wrap(text, width=width, replace_whitespace=False)
