@@ -6,11 +6,12 @@ import bisect
 import contextlib
 import dataclasses
 import io
+import itertools
 import json
 import random
 import traceback
 from enum import Enum
-from typing import Generator, Optional, List, Dict, TYPE_CHECKING, Union
+from typing import Generator, Optional, List, Dict, TYPE_CHECKING, Union, Any
 
 import discord
 from PIL import ImageDraw, ImageFont
@@ -21,8 +22,9 @@ from discord.ext.commands import Greedy
 from addons.modal import Modal, TextInput
 from addons.modal.raw import ResponseModal
 from utils import flags as flg
-from utils.buttons import BaseView
+from utils.buttons import BaseView, QueueView
 from utils.decorators import in_executor
+from utils.greedy_parser import GreedyParser, Separator
 from utils.useful import StellaContext, StellaEmbed, plural, unpack
 
 if TYPE_CHECKING:
@@ -434,8 +436,10 @@ class DuelView(discord.ui.View):
 
 
 class MultiWordle:
-    def __init__(self, ctx: StellaContext, *players: discord.Member, dictionaries):
+    def __init__(self, ctx: StellaContext, *players: discord.Member, dictionaries, tries, word_count):
         self.ctx = ctx
+        self.tries = tries
+        self.word_count = word_count
         self.dictionaries = dictionaries
         self.players = players
         self.games: Dict[int, WordleGame] = {}
@@ -451,7 +455,9 @@ class MultiWordle:
 
     async def every_player(self, player: discord.Member):
         game = WordleGame(self.ctx, dictionaries=self.dictionaries, player=player, answer=self.answer,
-                          display_answer=False)
+                          display_answer=False,
+                          word_length=self.word_count,
+                          tries=self.tries)
         self.games[player.id] = game
         await game.start()
         if game.win and not self._result.done():
@@ -479,6 +485,61 @@ class MultiWordle:
             self.loop.create_task(game.lost_display(f"{winner} won! The word was {self.answer}"))
 
 
+class LimitWordleMember(commands.MemberConverter):
+    async def convert(self, ctx: StellaContext, argument: str) -> discord.Member:
+        member = await super().convert(ctx, argument)
+        if member == ctx.author:
+            raise commands.CommandError("You cannot mention yourself!")
+
+        if member.bot:
+            raise commands.CommandError(f"{member} is a bot. You can't play with a bot.")
+
+        return member
+
+    @classmethod
+    async def after_greedy(cls, ctx: StellaContext, converted: List[discord.Member]):
+        checked = []
+        for member in converted:
+            if member in checked:
+                raise commands.CommandError(f"Duplicated member {member}.")
+            checked.append(member)
+
+        if not 1 <= len(checked) <= 3:
+            raise commands.CommandError("Member selected must be between 1 - 3.")
+
+        return checked
+
+
+class QueueWordle(QueueView):
+    def __init__(self, ctx: StellaContext, title: str, *respondents: Union[discord.Member, discord.User],
+                 delete_after: bool = False):
+        super().__init__(ctx, *respondents, delete_after=delete_after)
+        self.embed = StellaEmbed.default(
+            ctx,
+            title=title
+        )
+
+    async def send(self, content: str, **kwargs: Any) -> List[Optional[Union[discord.Member, discord.User]]]:
+        self.form_embed()
+        return await super().send(content, embed=self.embed, **kwargs)
+
+    def every_respondent(self, i: int, member: Union[discord.Member, discord.User]) -> str:
+        value = "<:question:848263403604934729>"
+        if member in self.accepted_respondents:
+            value = "<:checkmark:753619798021373974>"
+        elif member in self.denied_respondents:
+            value = "<:crossmark:753620331851284480>"
+        return f"{i + 1}. {member} {value}"
+
+    def form_embed(self):
+        self.embed.description = "\n".join(itertools.starmap(self.every_respondent, enumerate(self.respondents)))
+
+    async def on_member_respond(self, member: Union[discord.Member, discord.User],
+                                interaction: discord.Interaction, response: QueueView.State):
+        self.form_embed()
+        await self.message.edit(embed=self.embed)
+
+
 class LewdleCommandCog(commands.Cog):
     def __init__(self, bot: StellaBot):
         self.bot = bot
@@ -503,10 +564,13 @@ class LewdleCommandCog(commands.Cog):
             raise commands.CommandError(f"Looks like `{member}` declined. Sorry {ctx.author.mention}.")
 
         records = [r[0] for r in await self.bot.pool_pg.fetch(self.lewdle_query, 5)]
-        games = MultiWordle(ctx, ctx.author, member, dictionaries=records)
+        games = MultiWordle(ctx, ctx.author, member, dictionaries=records, word_count=5, tries=6)
         await games.start()
 
-    @commands.group(invoke_without_command=True)
+    @commands.group(invoke_without_command=True,
+                    brief="A customizable wordle game!",
+                    help="Play wordle with tag to specificy which dictionary to use, by default it uses the wordle "
+                         "dictionary.")
     async def wordle(self, ctx: StellaContext, tag: Optional[WordleTags] = "wordle", *, flags: WordleFlag):
         query = "SELECT word FROM wordle_word WHERE tag=$1 AND LENGTH(word)=$2"
         results = [r[0] for r in await self.bot.pool_pg.fetch(query, tag, flags.word_count)]
@@ -517,13 +581,19 @@ class LewdleCommandCog(commands.Cog):
         games = WordleGame(ctx, name=tag, dictionaries=results, tries=flags.tries, word_length=flags.word_count)
         await games.start()
 
-    @wordle.command(name="create")
+    @wordle.command(name="create",
+                    brief="Create your own tag for a custom wordle game.",
+                    help="Create a wordle tag which will contain your dictionary that you can used in `wordle <tag>`"
+                         "command.")
     async def wordle_create(self, ctx: StellaContext, tag: WordleTags(existing=False)):
         query = "INSERT INTO wordle_tag VALUES($1, $2, 0, now() at time zone 'utc')"
         await self.bot.pool_pg.execute(query, tag, ctx.author.id)
         await ctx.confirmed()
 
-    @wordle.command(name="insert")
+    @wordle.command(name="insert",
+                    brief="Add a new word into your tag dictionary.",
+                    help="Add a new word into your tag dictionary. This can take a json file which should contain an "
+                         "array of strings to automatically inserted into the database. You can submit up to 1k words.")
     async def wordle_insert(self, ctx: StellaContext, tag: WordleTags(author=True), words: Greedy[str.upper]):
         if ctx.message.attachments:
             attachment: discord.Attachment = ctx.message.attachments[0]
@@ -540,3 +610,33 @@ class LewdleCommandCog(commands.Cog):
         else:
             value = "No value was inserted."
         await ctx.maybe_reply(value)
+
+    @wordle.command(name="duel",
+                    brief="Duel a wordle game with your friends!",
+                    help="Duel a wordle game with your friends! Who ever guess the word first wins!"
+                         "Note: Members argument must be separated by ','",
+                    cls=GreedyParser
+                    )
+    async def wordle_duel(self, ctx: StellaContext, members: Separator[LimitWordleMember],
+                          tag: Optional[WordleTags] = "wordle", *, flags: WordleFlag):
+
+        query = "SELECT word FROM wordle_word WHERE tag=$1 AND LENGTH(word)=$2"
+        records = [r[0] for r in await self.bot.pool_pg.fetch(query, tag, flags.word_count)]
+        if not records:
+            raise commands.CommandError(f"Looks like `{tag}` does not have a dictionary for {flags.word_count} word count.")
+
+        name = "" if tag is None or tag == "wordle" else f"[{tag}]"
+        mentions = ", ".join(map(discord.Member.mention.fget, members[:-1]))
+        user_mention = members[-1].mention
+        if mentions:
+            user_mention = f"{mentions} and {user_mention}"
+
+        queue = QueueWordle(ctx, f"Wordle{name} Invitation", *members)
+        content = f"{user_mention}, `{ctx.author}` has invited you to a wordle duel! "\
+                  f"Please respond with Confirm to participate."
+        players = await queue.send(content)
+        if not players:
+            raise commands.CommandError(f"Looks like everyone declined. Sorry `{ctx.author}`.")
+
+        games = MultiWordle(ctx, ctx.author, *players, dictionaries=records, tries=flags.tries, word_count=flags.word_count)
+        await games.start()
