@@ -4,10 +4,13 @@ import asyncio
 import contextlib
 import copy
 import textwrap
+
 from typing import TYPE_CHECKING, Any
 
 import discord
+
 from discord.ext import commands
+
 from utils.buttons import BaseButton, ViewIterationAuthor
 from utils.errors import BypassError, NotInDpy
 from utils.flags import ArgumentParsingError
@@ -121,23 +124,23 @@ class ErrorHandler(commands.Cog):
         elif isinstance(error, default_error):
             await send_del(embed=StellaEmbed.to_error(description=f"{error}"))
         else:
-            if template := await self.generate_signature_error(ctx, error):
-                if isinstance(error, commands.MissingRequiredArgument):
-                    return await handle_missing_param(template)
-                await send_del(embed=template)
-            else:
-                await send_del(embed=StellaEmbed.to_error(description=f"{error}"))
-                traceback_error = print_exception(f'Ignoring exception in command {ctx.command}:', error)
-                if not self.bot.tester:
-                    error_message = f"**Command:** {ctx.message.content}\n" \
-                                    f"**Message ID:** `{ctx.message.id}`\n" \
-                                    f"**Author:** `{ctx.author}`\n" \
-                                    f"**Guild:** `{ctx.guild}`\n" \
-                                    f"**Channel:** `{ctx.channel}`\n" \
-                                    f"**Jump:** [`jump`]({ctx.message.jump_url})```py\n" \
-                                    f"{traceback_error}\n" \
-                                    f"```"
-                    await self.bot.error_channel.send(embed=StellaEmbed.default(ctx, description=error_message))
+            if isinstance(error, commands.CommandError):
+                if template := await self.generate_signature_error(ctx, error):
+                    if isinstance(error, commands.MissingRequiredArgument):
+                        return await handle_missing_param(template)
+                    return await send_del(embed=template)
+
+            await send_del(embed=StellaEmbed.to_error(description=str(error)))
+            traceback_error = print_exception(f'Ignoring exception in command {ctx.command}:', error, _print=True)
+            if not self.bot.tester:
+                error_message = f"**Command:** `{ctx.message.content}`\n" \
+                                f"**Message ID:** `{ctx.message.id}`\n" \
+                                f"**Author:** `{ctx.author}`\n" \
+                                f"**Guild:** `{ctx.guild}`\n" \
+                                f"**Channel:** `{ctx.channel}`\n" \
+                                f"**Jump:** [`jump`]({ctx.message.jump_url})```py\n" \
+                                f"{traceback_error}```"
+                await self.bot.error_channel.send(embed=StellaEmbed.default(ctx, description=error_message))
 
     async def generate_signature_error(self, ctx: StellaContext, error: commands.CommandError):
         command = ctx.command
@@ -147,11 +150,11 @@ class ErrorHandler(commands.Cog):
         if ctx.current_parameter is None:
             if not isinstance(error, commands.MissingRequiredArgument):
                 return
-            
+
             ctx.current_parameter = error.param
-        
+
         parameter = [*ctx.command.params.values()][ctx.command.cog is not None:]
-        pos = parameter.index(ctx.current_parameter) 
+        pos = parameter.index(ctx.current_parameter)
         list_sig = real_signature.split()
         try:
             pos += list_sig.index(ctx.invoked_with)
