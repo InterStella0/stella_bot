@@ -78,15 +78,28 @@ CREATE TABLE IF NOT EXISTS bot_tasks(
      next_execution TIMESTAMP WITH TIME ZONE
 );
 
-CREATE TABLE IF NOT EXISTS lewdle_word(
-    word VARCHAR(20) PRIMARY KEY
+CREATE TABLE IF NOT EXISTS wordle_tag(
+    tag VARCHAR(100) PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    used INT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE TABLE IF NOT EXISTS lewdle_rank(
+
+CREATE TABLE IF NOT EXISTS wordle_word(
+    tag VARCHAR(100) NOT NULL,
+    word VARCHAR(20) NOT NULL,
+    FOREIGN KEY (tag) REFERENCES wordle_tag(tag),
+    UNIQUE(tag, word)
+);
+
+
+CREATE TABLE IF NOT EXISTS wordle_rank(
     user_id BIGINT NOT NULL,
+    tag VARCHAR(100) NOT NULL,
     word VARCHAR(20) NOT NULL,
     attempt INT NOT NULL,
     amount INT NOT NULL,
-    FOREIGN KEY (word) REFERENCES lewdle_word(word),
-    UNIQUE (user_id, word, attempt)
+    FOREIGN KEY (tag) REFERENCES wordle_tag(tag),
+    UNIQUE (user_id, tag, word, attempt)
 );

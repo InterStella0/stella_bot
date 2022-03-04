@@ -8,19 +8,21 @@ import dataclasses
 import io
 import json
 import random
+import traceback
 from enum import Enum
-from typing import Generator, Optional, List, Dict, TYPE_CHECKING
+from typing import Generator, Optional, List, Dict, TYPE_CHECKING, Union
 
 import discord
 from PIL import ImageDraw, ImageFont
 from PIL import Image
 from discord.ext import commands
+from discord.ext.commands import Greedy
 
 from addons.modal import Modal, TextInput
 from addons.modal.raw import ResponseModal
+from utils import flags as flg
 from utils.buttons import BaseView
 from utils.decorators import in_executor
-from utils.greedy_parser import GreedyAllowStr
 from utils.useful import StellaContext, StellaEmbed, plural, unpack
 
 if TYPE_CHECKING:
@@ -56,38 +58,41 @@ class Letter:
         draw.text((x, y), self.char, (255, 255, 255), font=font)
 
 
-class LewdleUnavailable(commands.CommandError):
+class WordleUnavailable(commands.CommandError):
     def __init__(self):
         super().__init__("Lewdle is unavailable.")
 
 
-class LewdleNotEnough(commands.CommandError):
+class WordleNotEnough(commands.CommandError):
     def __init__(self, word, length):
         super().__init__(f"'{word}' is not {length} of length.")
 
 
-class LewdleNotDictionary(commands.CommandError):
+class WordleNotDictionary(commands.CommandError):
     def __init__(self, word):
-        super().__init__(f"Word '{word}' is not in my dicktionary")
+        super().__init__(f"Word '{word}' is not in this dictionary")
 
 
-class LewdleGame:
-    def __init__(self, ctx: StellaContext, *,
+class WordleGame:
+    def __init__(self, ctx: StellaContext, *, dictionaries,
+                 name: str = "wordle",
                  player: Optional[discord.Member] = None,
                  answer: Optional[str] = None,
                  word_length: int = 5, tries: int = 6,
                  display_answer: bool = True):
-        self.cog: LewdleCommandCog = ctx.cog
+
+        self.name = name
+        self.dictionaries = dictionaries
         self.ctx: StellaContext = ctx
         self.player = player or ctx.author
         self.word_length: int = word_length
         self.display: List[Optional[Letter]] = [[None] * word_length for _ in range(tries)]
         self.max_tries: int = tries
-        self.answer: str = answer or random.choice(self.cog.list_guess)
+        self.answer: str = answer or random.choice(dictionaries)
         self.user_tries: Optional[int] = None
         self.message: Optional[discord.Message] = None
         self._word_guessed: Optional[asyncio.Future] = None
-        self.view: LewdleView = None
+        self.view: WordleView = None
         self.win: bool = False
         self.finish: bool = False
         self.task: Optional[asyncio.Task] = None
@@ -96,30 +101,49 @@ class LewdleGame:
         self.display_answer: bool = display_answer
         self._previous_url: Optional[str] = None
 
-    def map_letter(self, guess: str) -> Generator[Letter, None, None]:
-        letters = list(self.answer)
+    def map_letter(self, guess: str) -> Generator[Union[Letter, str], None, None]:
         for char, correct_char in zip(guess, self.answer):
-            if char not in letters:
-                yield Letter(char, LetterKind.incorrect)
-                continue
-
             if char == correct_char:
                 yield Letter(char, LetterKind.correct)
-            elif char in letters:
-                yield Letter(char, LetterKind.half_correct)
+            elif char not in self.answer:
+                yield Letter(char, LetterKind.incorrect)
+            else:
+                yield char
 
-            letters.remove(char)
+    def convert_guess(self, guess: str) -> List[Letter]:
+        formed = []
+        unformed = list(self.answer)
+        for i, char in enumerate(self.map_letter(guess)):
+            formed.append(char)
+            if isinstance(char, Letter) and char.kind is LetterKind.correct:
+                unformed[i] = None
+
+        if not any(unformed):
+            return formed
+
+        for i, char in enumerate(formed):
+            if not isinstance(char, str):
+                continue
+
+            kind = LetterKind.incorrect
+            if char in unformed:
+                kind = LetterKind.half_correct
+                index = unformed.index(char)
+                unformed[index] = None
+
+            formed[i] = Letter(char, kind)
+
+        return formed
 
     def guess_word(self, word: str) -> bool:
         guess = word.strip().upper()
         if len(guess) != self.word_length:  # kinda useless ngl, but hey in case people steal it lol
-            raise LewdleNotEnough(guess.casefold(), self.word_length)
+            raise WordleNotEnough(guess.casefold(), self.word_length)
 
-        if guess not in self.cog.list_guess:
-            raise LewdleNotDictionary(guess.casefold())
+        if guess not in self.dictionaries:
+            raise WordleNotDictionary(guess.casefold())
 
-        guess_words = [*self.map_letter(guess)]
-        self.display[self.user_tries] = guess_words
+        self.display[self.user_tries] = self.convert_guess(guess)
         return guess == self.answer
 
     def receive(self) -> asyncio.Future:
@@ -141,7 +165,8 @@ class LewdleGame:
             self._word_guessed.set_result((interaction, guess))
 
     def create_embed(self, *, content: Optional[str] = None, url: Optional[str] = None):
-        embed = StellaEmbed(title="Lewdle Game")
+        name = f"[{self.name}]" if self.name != "wordle" else ""
+        embed = StellaEmbed(title=f"Wordle Game{name}")
         amount = self.max_tries - self.user_tries
         embed.description = content or f"You have {amount} {plural('attempt(s)', amount)} left. Press 'Guess' button to guess!"
         url = url or self._previous_url
@@ -158,16 +183,21 @@ class LewdleGame:
             self.task.cancel()
 
     async def current_game(self):
-        for i in range(self.max_tries):
-            self.user_tries = i
-            if await self.game_progress():
-                await self.won_display()
-                await self.insert_win_db()
-                self.win = True
-                break
+        try:
+            for i in range(self.max_tries):
+                self.user_tries = i
+                if await self.game_progress():
+                    await self.won_display()
+                    await self.insert_win_db()
+                    self.win = True
+                    break
 
-        if not self.win:
-            await self.lost_display()
+            if not self.win:
+                await self.lost_display()
+        except Exception:
+            traceback.print_exc()
+
+
 
     async def start(self):
         self.task = self.ctx.bot.loop.create_task(self.current_game())
@@ -204,7 +234,7 @@ class LewdleGame:
 
     async def render_display(self):
         base = await self._render_display()
-        return await self.cog.bot.ipc_client.request('upload_file', base64=base, filename="lewdle_board.png")
+        return await self.ctx.bot.ipc_client.request('upload_file', base64=base, filename="lewdle_board.png")
 
     @in_executor()
     def _render_display(self):
@@ -238,11 +268,12 @@ class LewdleGame:
         self.stop()
 
     async def insert_win_db(self):
-        query = "INSERT INTO lewdle_rank " \
-                "VALUES($1, $2, $3, 1) " \
-                "ON CONFLICT(user_id, word, attempt) " \
-                "DO UPDATE SET amount = lewdle_rank.amount + 1"
-        await self.ctx.bot.pool_pg.execute(query, self.player.id, self.answer.upper(), self.user_tries)
+        query = "INSERT INTO wordle_rank " \
+                "VALUES($1, $2, $3, $4, 1) " \
+                "ON CONFLICT(user_id, tag, word, attempt) " \
+                "DO UPDATE SET amount = wordle_rank.amount + 1"
+
+        await self.ctx.bot.pool_pg.execute(query, self.player.id, self.name, self.answer.upper(), self.user_tries)
 
     async def won_display(self):
         self.user_tries += 1
@@ -254,9 +285,9 @@ class LewdleGame:
             10: "Close call lol."
         }
         tries = [*comments]
-        i = bisect.bisect(tries, self.user_tries)
+        i = bisect.bisect_left(tries, self.user_tries)
         tried = "first try!" if self.user_tries == 1 else f"`{self.user_tries}` attempts!"
-        content = f"{self.player.mention}, {comments[i]} You guess the word in {tried}"
+        content = f"{self.player.mention}, {comments[tries[i]]} You guess the word in {tried}"
         render = await self.render_display()
         await self.message.edit(embed=self.create_embed(content=content, url=render))
 
@@ -274,7 +305,7 @@ class LewdleGame:
     async def show_display(self):
         render = await self.render_display()
         if self.message is None:
-            self.view = LewdleView(self)
+            self.view = WordleView(self)
             self.message = await self.ctx.reply(
                 embed=self.create_embed(url=render),
                 view=self.view,
@@ -285,15 +316,15 @@ class LewdleGame:
         await self.message.edit(embed=self.create_embed(url=render))
 
 
-class LewdleView(BaseView):
-    def __init__(self, game: LewdleGame):
+class WordleView(BaseView):
+    def __init__(self, game: WordleGame):
         super().__init__(timeout=600)
         self.game = game
         self._prompter = None
 
     def _get_prompter(self):
         if self._prompter is None:
-            self._prompter = LewdlePrompt(self)
+            self._prompter = WordlePrompt(self)
 
         return self._prompter
 
@@ -329,9 +360,10 @@ class LewdleView(BaseView):
         self.game.ctx.bot.loop.create_task(self.disable_items())
 
 
-class LewdlePrompt(Modal):
-    def __init__(self, view: LewdleView):
-        super().__init__(title="Lewdle Game", timeout=None)
+class WordlePrompt(Modal):
+    def __init__(self, view: WordleView):
+        name = f"[{view.game.name}]" if view.game.name != "wordle" else ""
+        super().__init__(title=f"Wordle Game{name}", timeout=None)
         self.view = view
         self.game = view.game
         word_length = self.game.word_length
@@ -343,16 +375,7 @@ class LewdlePrompt(Modal):
         await self.game.user_answer(interaction, guess)
 
 
-def lewdle_check():
-    def check_command(ctx):
-        if getattr(ctx.cog, "list_guess", None) is None:
-            raise LewdleUnavailable()
-
-        return True
-    return commands.check(check_command)
-
-
-def tries_convert(arg):
+def tries_convert(arg: str) -> int:
     try:
         value = int(arg)
     except ValueError:
@@ -363,22 +386,60 @@ def tries_convert(arg):
         raise commands.CommandError(f"argument must be between 1 - 10. Not {value}")
 
 
+def word_count_convert(arg: str) -> int:
+    try:
+        value = int(arg)
+    except ValueError:
+        raise commands.CommandError(f"'{arg}' is not a number.")
+    else:
+        if 3 <= value <= 10:
+            return value
+        raise commands.CommandError(f"argument must be between 3 - 10. Not {value}")
+
+
+class WordleFlag(commands.FlagConverter):
+    tries: tries_convert = flg.flag(help="The amount of time user can try, defaults to 6.", default=6)
+    word_count: word_count_convert = flg.flag(help="The word count that the user will be guessing, defaults to 5.", default=5)
+
+
+class WordleTags(commands.Converter[str]):
+    def __init__(self, *, existing: bool = True, author=False):
+        self.existing = existing
+        self.author = author
+
+    async def convert(self, ctx: StellaContext, argument: str) -> str:
+        argument = argument.casefold()
+        if not 3 < len(argument) < 100:
+            raise commands.CommandError("Tag length must be between 3 to 100 characters")
+
+        result = await ctx.bot.pool_pg.fetchrow("SELECT * FROM wordle_tag WHERE tag=$1", argument)
+        if not result and self.existing:
+            raise commands.CommandError(f"Tag {argument} does not exist.")
+
+        if result:
+            if not self.existing:
+                raise commands.CommandError(f"Tag {argument} already exist with this name.")
+
+            if self.author and result["user_id"] != ctx.author.id:
+                raise commands.CommandError("You do not own this wordle tag.")
+
+        return argument
+
+
+
 class DuelView(discord.ui.View):
     def __init__(self, url: str):
         super().__init__()
         self.add_item(discord.ui.Button(label="Winner Message", style=discord.ButtonStyle.green, url=url))
 
 
-class MultiLewdle:
-    def __init__(self, ctx: StellaContext, *players: discord.Member):
+class MultiWordle:
+    def __init__(self, ctx: StellaContext, *players: discord.Member, dictionaries):
         self.ctx = ctx
-        self.cog: LewdleCommandCog = ctx.cog
-        if not isinstance(ctx.cog, LewdleCommandCog):
-            raise Exception(f"Invalid Cog class. Expecting '{LewdleCommandCog}' not '{type(ctx.cog)}'")
-
+        self.dictionaries = dictionaries
         self.players = players
-        self.games: Dict[int, LewdleGame] = {}
-        self.answer = random.choice(self.cog.list_guess)
+        self.games: Dict[int, WordleGame] = {}
+        self.answer = random.choice(self.dictionaries)
         self.loop = ctx.bot.loop
         self._result = ctx.bot.loop.create_future()
         self.amount_finished = 0
@@ -389,7 +450,8 @@ class MultiLewdle:
             self._result.set_result(None)
 
     async def every_player(self, player: discord.Member):
-        game = LewdleGame(self.ctx, player=player, answer=self.answer, display_answer=False)
+        game = WordleGame(self.ctx, dictionaries=self.dictionaries, player=player, answer=self.answer,
+                          display_answer=False)
         self.games[player.id] = game
         await game.start()
         if game.win and not self._result.done():
@@ -420,47 +482,60 @@ class MultiLewdle:
 class LewdleCommandCog(commands.Cog):
     def __init__(self, bot: StellaBot):
         self.bot = bot
-        self.list_guess = None
-        bot.loop.create_task(self.fill_list_guess())
-
-    async def fill_list_guess(self):
-        query = "SELECT * FROM lewdle_word"
-        records = await self.bot.pool_pg.fetch(query)
-        self.list_guess = [record[0] for record in records]
+        self.lewdle_query = "SELECT word FROM wordle_word WHERE tag='lewdle' AND LENGTH(word) = $1"
 
     @commands.group(invoke_without_command=True, help="A wordle game except it's lewd.")
-    @lewdle_check()
-    async def lewdle(self, ctx: StellaContext, tries: tries_convert = 6):
-        game = LewdleGame(ctx, tries=tries)
+    async def lewdle(self, ctx: StellaContext, *, flags: WordleFlag):
+        records = [r[0] for r in await self.bot.pool_pg.fetch(self.lewdle_query, flags.word_count)]
+        if not records:
+            raise commands.CommandError(f"Looks like we dont have words for lewdle in {flags.word_count} word count. Try 5.")
+
+        game = WordleGame(ctx, name="Lewdle", dictionaries=records, tries=flags.tries)
         await game.start()
 
     @lewdle.command(help="Duel lewdle game with your friends! Who ever guess the word first wins!")
-    @lewdle_check()
     async def duel(self, ctx: StellaContext, member: discord.Member):
         value = await ctx.confirmation(
             f"{member.mention}, `{ctx.author}` has invited you to a lewdle duel. Do you accept?",
             to_respond=member
         )
         if not value:
-            await ctx.maybe_reply(f"Looks like `{member}` declined. Sorry {ctx.author.mention}.")
-            return
+            raise commands.CommandError(f"Looks like `{member}` declined. Sorry {ctx.author.mention}.")
 
-        games = MultiLewdle(ctx, ctx.author, member)
+        records = [r[0] for r in await self.bot.pool_pg.fetch(self.lewdle_query, 5)]
+        games = MultiWordle(ctx, ctx.author, member, dictionaries=records)
         await games.start()
 
-    @commands.command()
-    @commands.is_owner()
-    async def lewdle_insert(self, ctx: StellaContext, words: GreedyAllowStr[str.upper]):
+    @commands.group(invoke_without_command=True)
+    async def wordle(self, ctx: StellaContext, tag: Optional[WordleTags] = "wordle", *, flags: WordleFlag):
+        query = "SELECT word FROM wordle_word WHERE tag=$1 AND LENGTH(word)=$2"
+        results = [r[0] for r in await self.bot.pool_pg.fetch(query, tag, flags.word_count)]
+
+        if not results:
+            raise commands.CommandError(f"Looks like `{tag}` does not have a dictionary for {flags.word_count} word count.")
+
+        games = WordleGame(ctx, name=tag, dictionaries=results, tries=flags.tries, word_length=flags.word_count)
+        await games.start()
+
+    @wordle.command(name="create")
+    async def wordle_create(self, ctx: StellaContext, tag: WordleTags(existing=False)):
+        query = "INSERT INTO wordle_tag VALUES($1, $2, 0, now() at time zone 'utc')"
+        await self.bot.pool_pg.execute(query, tag, ctx.author.id)
+        await ctx.confirmed()
+
+    @wordle.command(name="insert")
+    async def wordle_insert(self, ctx: StellaContext, tag: WordleTags(author=True), words: Greedy[str.upper]):
         if ctx.message.attachments:
             attachment: discord.Attachment = ctx.message.attachments[0]
             words_attachment = json.load(io.BytesIO(await attachment.read()))
             words.extend([word.upper() for word in words_attachment])
 
-        sql = "INSERT INTO lewdle_word VALUES($1) ON CONFLICT DO NOTHING"
-        to_insert = [[word] for word in words if word not in self.list_guess]
+        conflict_sql = "SELECT word FROM wordle_word WHERE tag=$1"
+        list_guess = [r[0] for r in await self.bot.pool_pg.fetch(conflict_sql, tag)]
+        sql = "INSERT INTO wordle_word VALUES($1, $2) ON CONFLICT DO NOTHING"
+        to_insert = [[tag, word] for word in words if word not in list_guess]
         if to_insert:
             await self.bot.pool_pg.executemany(sql, to_insert)
-            self.list_guess.extend([*unpack(to_insert)])
             value = f"{len(to_insert)} was inserted"
         else:
             value = "No value was inserted."
