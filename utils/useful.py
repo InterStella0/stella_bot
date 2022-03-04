@@ -256,7 +256,7 @@ class StellaContext(commands.Context):  # type: ignore[misc]
     def remove_message(self, message_id: int) -> Optional[discord.Message]:
         return self.sent_messages.pop(message_id, None)
 
-    async def maybe_reply(self, content: Optional[str] = None, mention_author: Optional[bool] = False,
+    async def maybe_reply(self, content: Optional[str] = None, mention_author: Optional[bool] = None,
                           **kwargs: Any) -> discord.Message:
         """Replies if there is a message in between the command invoker and the bot's message."""
         await asyncio.sleep(0.05)
