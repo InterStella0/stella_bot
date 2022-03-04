@@ -256,7 +256,7 @@ class StellaContext(commands.Context):  # type: ignore[misc]
     def remove_message(self, message_id: int) -> Optional[discord.Message]:
         return self.sent_messages.pop(message_id, None)
 
-    async def maybe_reply(self, content: Optional[str] = None, mention_author: Optional[bool] = None,
+    async def maybe_reply(self, content: Optional[str] = None, mention_author: bool = False,
                           **kwargs: Any) -> discord.Message:
         """Replies if there is a message in between the command invoker and the bot's message."""
         await asyncio.sleep(0.05)
@@ -264,12 +264,12 @@ class StellaContext(commands.Context):  # type: ignore[misc]
             if ref := self.message.reference:
                 # it is very unlikely for this to not be cached
                 author = ref.cached_message.author  # type: ignore
-                if mention_author is None:
+                if not mention_author:
                     mention_author = author in self.message.mentions and author.id not in self.message.raw_mentions
                 return await self.send(content, mention_author=mention_author, reference=ref, **kwargs)
 
             if getattr(self.channel, "last_message", None) != self.message:
-                return await self.reply(content, mention_author=bool(mention_author), **kwargs)
+                return await self.reply(content, mention_author=mention_author, **kwargs)
         return await self.send(content, **kwargs)
 
     async def embed(self, content: Optional[str] = None, *, reply: bool = True, mention_author: bool = False,
