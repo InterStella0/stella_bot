@@ -62,12 +62,12 @@ class WithCommaStringView(commands.view.StringView):
         """Gets a word that ends with ','"""
         self.previous = self.index
         offset = 0
-        PARSERSIZE = 1
+        PARSER_SIZE = 1
         # Undo if there is a space, to not capture it
         while self.buffer[self.index + end - (1 + offset)].isspace():
             offset += 1
         result = self.buffer[self.index:self.index + (end - offset)]
-        self.index += end + PARSERSIZE
+        self.index += end + PARSER_SIZE
         return result
 
 
