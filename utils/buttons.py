@@ -5,21 +5,22 @@ import contextlib
 import inspect
 import os
 import time
+
 from copy import copy
 from enum import Enum
 from functools import partial
-from typing import (TYPE_CHECKING, Any, AsyncGenerator, Callable, Coroutine,
-                    Dict, Iterable, Optional, Tuple, Type, Union, List)
+from typing import (TYPE_CHECKING, Any, AsyncGenerator, Callable, Coroutine, Dict, Iterable, List, Optional, Tuple, Type,
+                    Union)
 
 import discord
+
 from discord import ui
 from discord.ext import commands
 
 from addons.modal import Modal, TextInput
 from addons.modal.raw import ResponseModal
 from utils.context_managers import UserLock
-from utils.menus import (ListPageInteractionBase, MenuBase,
-                         MenuViewInteractionBase)
+from utils.menus import ListPageInteractionBase, MenuBase, MenuViewInteractionBase
 from utils.useful import StellaEmbed
 
 if TYPE_CHECKING:
@@ -182,7 +183,7 @@ class MenuViewBase(ViewIterationAuthor):
             if view is self:
                 if m := bot.get_message(m_id):
                     message = m
-        
+
         if message is None:
             return
 
@@ -268,7 +269,8 @@ class QueueView(CallbackView):
 
 class ConfirmView(CallbackView):
     """ConfirmView literally handles confirmation where it asks the user at start() and returns a Tribool"""
-    def __init__(self, ctx: StellaContext, *, to_respond: Optional[discord.User] = None, delete_after: bool = False, message_error=None):
+    def __init__(self, ctx: StellaContext, *, to_respond: Optional[Union[discord.User, discord.Member]] = None,
+                 delete_after: bool = False, message_error: Optional[str] = None):
         super().__init__()
         self.result = None
         self.message = None

@@ -1,8 +1,10 @@
 import asyncio
 import itertools
-from typing import Union
+
+from typing import Optional, Union
 
 import discord
+
 from discord.context_managers import Typing
 from discord.ext import commands
 
@@ -10,7 +12,7 @@ from utils.errors import UserLocked
 
 
 class BreakableTyping(Typing):
-    def __init__(self, messageable, /, *, limit=None):
+    def __init__(self, messageable: discord.abc.Messageable, /, *, limit: Optional[int] = None) -> None:
         self.loop = messageable._state.loop
         self.messageable = messageable
         self.limit = limit

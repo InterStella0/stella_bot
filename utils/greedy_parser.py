@@ -4,18 +4,21 @@ if you copy this but make your repository private, ur weird
 pls be nice to me if you do copy it that's all i want :pleading:
 """
 from __future__ import annotations
+
 import contextlib
-import itertools
 import inspect
+import itertools
 import typing
-from typing import Union, Any, Type, List, Optional, Callable, Set, Tuple, TypeVar, TYPE_CHECKING
-from utils.useful import StellaContext
+
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Set, Tuple, Type, TypeVar, Union
+
+from discord.ext import commands
+from discord.ext.commands import ArgumentParsingError, CommandError
 from discord.ext.commands.errors import BadUnionArgument
+
 from utils.errors import ConsumerUnableToConvert
 from utils.flags import SFlagCommand, find_flag
-from utils.useful import isiterable
-from discord.ext import commands
-from discord.ext.commands import CommandError, ArgumentParsingError
+from utils.useful import StellaContext, isiterable
 
 T = TypeVar('T')
 if TYPE_CHECKING:
@@ -24,15 +27,15 @@ if TYPE_CHECKING:
 
 class WithCommaStringView(commands.view.StringView):
     """Custom StringView for Separator and Consumer class to use."""
-    def __init__(self, view):
+    def __init__(self, view: Optional[commands.view.StringView]):
         super().__init__(view.buffer)
         self.old_view = view
 
     def update_values(self):
-        """Update the current StringView value into this object""" 
+        """Update the current StringView value into this object"""
         self.__dict__.update({key: getattr(self.old_view, key) for key in ["previous", "index", "end"]})
 
-    def get_parser(self, converter: "BaseGreedy") -> Optional[int]:
+    def get_parser(self, converter: BaseGreedy) -> Optional[int]:
         """Tries to get a separator within an argument, return None if it can't find any."""
         if not hasattr(converter, "separators"):
             return
@@ -46,10 +49,10 @@ class WithCommaStringView(commands.view.StringView):
                         break
                     else:
                         escaped.append(pos - 1)
-                    
+
                 pos += 1
                 previous = current
-        
+
         for offset, escape in enumerate(escaped):
             maximum = self.index + escape - offset
             self.buffer = self.buffer[0: maximum] + self.buffer[maximum + 1: self.end]
