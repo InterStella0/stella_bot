@@ -19,13 +19,13 @@ from PIL import Image
 from discord.ext import commands
 from discord.ext.commands import Greedy
 
-from addons.modal import Modal, TextInput
+from addons.modal import Modal, TextInput, InputStyle
 from addons.modal.raw import ResponseModal
 from utils import flags as flg
 from utils.buttons import BaseView, QueueView
 from utils.decorators import in_executor
 from utils.greedy_parser import GreedyParser, Separator
-from utils.useful import StellaContext, StellaEmbed, plural, unpack
+from utils.useful import StellaContext, StellaEmbed, plural, unpack, multiget
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -185,21 +185,16 @@ class WordleGame:
             self.task.cancel()
 
     async def current_game(self):
-        try:
-            for i in range(self.max_tries):
-                self.user_tries = i
-                if await self.game_progress():
-                    await self.won_display()
-                    await self.insert_win_db()
-                    self.win = True
-                    break
+        for i in range(self.max_tries):
+            self.user_tries = i
+            if await self.game_progress():
+                await self.won_display()
+                await self.insert_win_db()
+                self.win = True
+                break
 
-            if not self.win:
-                await self.lost_display()
-        except Exception:
-            traceback.print_exc()
-
-
+        if not self.win:
+            await self.lost_display()
 
     async def start(self):
         self.task = self.ctx.bot.loop.create_task(self.current_game())
@@ -369,7 +364,49 @@ class WordlePrompt(Modal):
         self.view = view
         self.game = view.game
         word_length = self.game.word_length
-        self.add_item(TextInput(label="Guess a word", required=True, min_length=word_length, max_length=word_length))
+        self.text_input = TextInput(label="Guess a word", required=True, min_length=word_length, max_length=word_length, value="")
+        self.text_display = TextInput(
+            label="Display", required=False, value="", placeholder="No need to fill these. This is your display",
+            style=InputStyle.paragraph
+        )
+        self.add_item(self.text_input)
+        self.add_item(self.text_display)
+        self.first = True
+
+    def format_word(self, word):
+        formed = []
+        indicator = {
+            LetterKind.correct: "[{}]",
+            LetterKind.half_correct: "[{}]?",
+            LetterKind.incorrect: "[{}]X"
+        }
+
+        for letter in word:
+            if letter is None:
+                return None
+
+            char = letter.char.upper()
+            value = indicator[letter.kind].format(char)
+            formed.append(value)
+
+        return " ".join(formed)
+
+    def update_text(self):
+        self.text_input.value = ""
+        iterator = map(self.format_word, self.game.display[:self.game.user_tries])
+        guesses = "\n".join(f"{i + 1}. {word}" for i, word in enumerate(iterator))
+        instruction = "Instruction:\n" \
+                      "[Char] = correct\n" \
+                      "[Char]? = half correct\n" \
+                      "[Char]X = incorrect "
+        self.text_display.value = f"{guesses}\n\n{instruction}"
+
+    async def prompt(self, interaction: discord.Interaction, /, *, wait=False) -> Optional[Union[bool, ResponseModal]]:
+        if not self.first:
+            self.update_text()
+        else:
+            self.first = False
+        return await super().prompt(interaction, wait=wait)
 
     async def callback(self, modal: ResponseModal, interaction: discord.Interaction) -> None:
         self.view.reset_timeout()
