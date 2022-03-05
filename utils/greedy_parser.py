@@ -65,12 +65,12 @@ class WithCommaStringView(commands.view.StringView):
         """Gets a word that ends with ','"""
         self.previous = self.index
         offset = 0
-        PARSERSIZE = 1
+        PARSER_SIZE = 1
         # Undo if there is a space, to not capture it
         while self.buffer[self.index + end - (1 + offset)].isspace():
             offset += 1
         result = self.buffer[self.index:self.index + (end - offset)]
-        self.index += end + PARSERSIZE
+        self.index += end + PARSER_SIZE
         return result
 
 
@@ -137,25 +137,31 @@ class Separator(BaseGreedy):
     """Allow Greedy to be parse in a way that it will try to find ',' or any
        other passed separator in an argument, and will allow spaced argument to be
        passed given that there are a separator at the end of each argument.
-       
+
+       If a value failed to be converted, it will raise an error.
+
        Returns an empty list when none of the argument was valid."""
 
-    async def actual_greedy_parsing(self, command: commands.Command, ctx: commands.Context, param: inspect.Parameter,
+    async def actual_greedy_parsing(self, command: commands.Command, ctx: StellaContext, param: inspect.Parameter,
                                     required: bool, converter: T, optional: Optional[bool] = False) -> List[T]:
         view = ctx.view
         result = []
+        _exit = False
         while not view.eof:
-            previous = view.index
             view.skip_ws()
             try:
                 if pos := view.get_parser(param.annotation):
                     argument = view.get_arg_parser(pos)
                 else:
                     argument = view.get_quoted_word()
+                    _exit = True
+
                 value = await commands.run_converters(ctx, converter, argument, param)
+                if _exit:
+                    result.append(value)
+                    break
             except (CommandError, ArgumentParsingError):
-                view.index = previous
-                break
+                raise  # allow raising for Seperator
             else:
                 result.append(value)
 

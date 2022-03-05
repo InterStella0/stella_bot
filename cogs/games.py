@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-from cogs.games_part.lewdle import LewdleCommandCog
+from cogs.games_part.wordle import LewdleCommandCog
 
 if TYPE_CHECKING:
     from main import StellaBot
