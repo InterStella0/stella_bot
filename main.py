@@ -8,7 +8,6 @@ import os
 import re
 import time
 
-from os import environ
 from os.path import dirname, join
 from typing import List, Optional, Union
 
@@ -49,6 +48,8 @@ class StellaBot(commands.Bot):
         self.ipc_port = kwargs.pop("ipc_port")
         self.ipc_client = StellaClient(host=self.websocket_IP, secret_key=self.ipc_key, port=self.ipc_port)
         self.git_token = kwargs.pop("git_token")
+        self.error_channel_id = kwargs.pop("error_channel")
+        self.bot_guild_id = kwargs.pop("bot_guild")
         self.git = GitHub(self.git_token)
         self.pool_pg = None
         self.uptime = None
@@ -196,9 +197,7 @@ class StellaBot(commands.Bot):
     @property
     def error_channel(self) -> discord.TextChannel:
         """Gets the error channel for the bot to log."""
-        guild_id = int(environ.get("BOT_GUILD"))
-        channel_id = int(environ.get("ERROR_CHANNEL"))
-        return self.get_guild(guild_id).get_channel(channel_id)
+        return self.get_guild(self.bot_guild_id).get_channel(self.error_channel_id)
 
     async def after_ready(self):
         await self.wait_until_ready()
@@ -332,6 +331,8 @@ bot_data = {
     "token": states.get("TOKEN"),
     "default_prefix": states.get("DEFAULT_PREFIX", "uwu "),
     "tester_prefix": states.get("TESTER_PREFIX", "?uwu "),
+    "bot_guild": states.get("BOT_GUILD"),
+    "error_channel": states.get("ERROR_CHANNEL"),
     "color": 0xffcccb,
     "db": states.get("DATABASE"),
     "user_db": states.get("USER"),
