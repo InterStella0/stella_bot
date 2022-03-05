@@ -123,23 +123,24 @@ class ErrorHandler(commands.Cog):
             )
         elif isinstance(error, default_error):
             await send_del(embed=StellaEmbed.to_error(description=f"{error}"))
-        elif isinstance(error, commands.CommandError):
-            if template := await self.generate_signature_error(ctx, error):
-                if isinstance(error, commands.MissingRequiredArgument):
-                    return await handle_missing_param(template)
-                return await send_del(embed=template)
+        else:
+            if isinstance(error, commands.CommandError):
+                if template := await self.generate_signature_error(ctx, error):
+                    if isinstance(error, commands.MissingRequiredArgument):
+                        return await handle_missing_param(template)
+                    return await send_del(embed=template)
 
-        await send_del(embed=StellaEmbed.to_error(description=str(error)))
-        traceback_error = print_exception(f'Ignoring exception in command {ctx.command}:', error, _print=True)
-        if not self.bot.tester:
-            error_message = f"**Command:** `{ctx.message.content}`\n" \
-                            f"**Message ID:** `{ctx.message.id}`\n" \
-                            f"**Author:** `{ctx.author}`\n" \
-                            f"**Guild:** `{ctx.guild}`\n" \
-                            f"**Channel:** `{ctx.channel}`\n" \
-                            f"**Jump:** [`jump`]({ctx.message.jump_url})```py\n" \
-                            f"{traceback_error}```"
-            await self.bot.error_channel.send(embed=StellaEmbed.default(ctx, description=error_message))
+            await send_del(embed=StellaEmbed.to_error(description=error))
+            traceback_error = print_exception(f'Ignoring exception in command {ctx.command}:', error, _print=True)
+            if not self.bot.tester:
+                error_message = f"**Command:** `{ctx.message.content}`\n" \
+                                f"**Message ID:** `{ctx.message.id}`\n" \
+                                f"**Author:** `{ctx.author}`\n" \
+                                f"**Guild:** `{ctx.guild}`\n" \
+                                f"**Channel:** `{ctx.channel}`\n" \
+                                f"**Jump:** [`jump`]({ctx.message.jump_url})```py\n" \
+                                f"{traceback_error}```"
+                await self.bot.error_channel.send(embed=StellaEmbed.default(ctx, description=error_message))
 
     async def generate_signature_error(self, ctx: StellaContext, error: commands.CommandError):
         command = ctx.command
