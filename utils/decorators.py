@@ -1,64 +1,79 @@
 from __future__ import annotations
-import discord
-import functools
+
 import asyncio
-from typing import Callable, Optional, Any, Union, Coroutine, Type, Iterable, TYPE_CHECKING, Awaitable
-from utils.menus import MenuBase
+import functools
+
+from typing import Any, Awaitable, Callable, Coroutine, Optional, Sequence, Type, TypeVar, Union
+
+import discord
+
 from discord.ext import commands, menus
+from typing_extensions import ParamSpec
+
+from utils.constants import DISCORD_PY
 from utils.errors import NotInDpy
+from utils.menus import MenuBase
 
-if TYPE_CHECKING:
-    from main import StellaBot
+T = TypeVar("T")
+P = ParamSpec("P")
+
+Coro = Coroutine[Any, Any, T]
+MaybeCoro = Union[T, Coroutine[Any, Any, T]]
 
 
-def is_discordpy(silent: Optional[bool] = False) -> Callable:
+def is_discordpy(silent: bool = False) -> Callable[[T], T]:
     """A check that only allows certain command to be only be invoked in discord.py server. Otherwise it is ignored."""
     async def predicate(ctx: commands.Context) -> bool:
-        if ctx.guild and ctx.guild.id == 336642139381301249:
+        if ctx.guild and ctx.guild.id == DISCORD_PY:
             return True
-        else:
-            if not silent:
-                raise NotInDpy()
+        if silent:
+            return False
+        raise NotInDpy()  # type: ignore[no-untyped-call]
+
     return commands.check(predicate)
 
 
-def event_check(func: Callable[[Any], Union[Coroutine[Any, Any, bool], bool]]) -> Callable[[Callable], Callable]:
+def event_check(func: Callable[P, MaybeCoro[bool]]) -> Callable[[Callable[..., Coro[None]]], Callable[..., Coro[None]]]:
     """Event decorator check."""
-    def check(method: Callable[..., Coroutine[Any, Any, None]]) -> Callable[..., Coroutine[Any, Any, None]]:
-        method.callback = method
+    def check(method: Callable[..., Coro[None]]) -> Callable[..., Coro[None]]:
+        setattr(method, "callback", method)
 
         @functools.wraps(method)
-        async def wrapper(*args: Any, **kwargs: Any) -> None:
-            if await discord.utils.maybe_coroutine(func, *args, **kwargs):
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
+            if await discord.utils.maybe_coroutine(func, *args, **kwargs):  # type: ignore[no-untyped-call]
                 await method(*args, **kwargs)
         return wrapper
 
-    check.predicate = func
+    setattr(check, "predicate", func)
+
     return check
 
 
-def wait_ready(bot: Optional[Union[StellaBot, commands.Bot]] = None) -> Callable:
+def wait_ready(bot: Optional[commands.Bot] = None) -> Callable[[Callable[..., Coro[None]]], Callable[..., Coro[None]]]:
     async def predicate(*args: Any, **_: Any) -> bool:
         nonlocal bot
         self = args[0] if args else None
         if hasattr(self, "bot") and isinstance(self, commands.Cog):
             bot = bot or self.bot
         if not isinstance(bot, commands.Bot):
-            name = bot.__class__.__name__ if bot is not None else "None"
-            raise Exception(f"bot must derived from commands.Bot not {name}")
+            raise Exception(f"bot must derived from commands.Bot not {bot.__class__.__name__}")
         await bot.wait_until_ready()
         return True
     return event_check(predicate)
 
 
-def pages(per_page: Optional[int] = 1, show_page: Optional[bool] = True) -> Callable[[...], Type[menus.ListPageSource]]:
+_FormatPageSignature = Callable[[menus.ListPageSource, MenuBase, Any], Coro[discord.Embed]]
+
+
+def pages(per_page: int = 1, show_page: bool = True) -> Callable[[_FormatPageSignature], Type[menus.ListPageSource]]:
     """Compact ListPageSource that was originally made teru but was modified"""
-    def page_source(coro: Callable[[MenuBase, Any], Coroutine[Any, Any, discord.Embed]]) -> Type[menus.ListPageSource]:
-        async def create_page_header(self, menu: MenuBase, entry: Any) -> Union[discord.Embed, str]:
-            result = await discord.utils.maybe_coroutine(coro, self, menu, entry)
+    def page_source(coro: _FormatPageSignature) -> Type[menus.ListPageSource]:
+        async def create_page_header(self: menus.ListPageSource, menu: MenuBase,
+                                     entry: Any) -> Union[discord.Embed, str]:
+            result = await discord.utils.maybe_coroutine(coro, self, menu, entry)  # type: ignore[no-untyped-call]
             return menu.generate_page(result, self._max_pages)
 
-        def __init__(self: menus.ListPageSource, list_pages: Iterable):
+        def __init__(self: menus.ListPageSource, list_pages: Sequence[Any]) -> None:
             super(self.__class__, self).__init__(list_pages, per_page=per_page)
         kwargs = {
             '__init__': __init__,
@@ -68,22 +83,22 @@ def pages(per_page: Optional[int] = 1, show_page: Optional[bool] = True) -> Call
     return page_source
 
 
-def listen_for_guilds() -> Callable:
-    def predicate(*args: Any):
+def listen_for_guilds() -> Callable[[Callable[..., Coro[None]]], Callable[..., Coro[None]]]:
+    def predicate(self_or_message: Any, *args: Any) -> bool:
         """Only allow message event to be called in guilds"""
-        message = args[len(args) != 1]
+        message = args[0] if args else self_or_message
         return message.guild is not None
     return event_check(predicate)
 
 
-def in_executor(loop: Optional[asyncio.AbstractEventLoop] = None) -> Callable[[Callable], Callable[..., Awaitable]]:
+def in_executor(loop: Optional[asyncio.AbstractEventLoop] = None) -> Callable[[Callable[P, T]], Callable[P, Awaitable[T]]]:
     """Makes a sync blocking function unblocking"""
-    loop = loop or asyncio.get_event_loop()
+    loop_ = loop or asyncio.get_event_loop()
 
-    def inner_function(func: Callable) -> Callable[[...], Awaitable]:
+    def inner_function(func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
         @functools.wraps(func)
-        def function(*args: Any, **kwargs: Any) -> Awaitable:
+        def function(*args: P.args, **kwargs: P.kwargs) -> Awaitable[T]:
             partial = functools.partial(func, *args, **kwargs)
-            return loop.run_in_executor(None, partial)
+            return loop_.run_in_executor(None, partial)
         return function
     return inner_function
