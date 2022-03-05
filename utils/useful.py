@@ -166,10 +166,9 @@ def realign(iterable: Iterable[str], key: str, discrim: str = '|') -> List[str]:
     return [x.replace(key, f'{" " * off} {discrim}') for x, off in zip(iterable, reform)]
 
 
-# TODO(Eugene): remove this ramble once https://github.com/python/mypy/issues/12257 is resolved
-#
 # mypy does not pick up star imports in discord.ext.commands. possible solution is using `namespace_packages` option,
 # but it makes mypy crash. ignore disallow_subclassing_any for now, also explicitly define message and channel types
+# see https://github.com/python/mypy/issues/12257 for details
 class StellaContext(commands.Context):  # type: ignore[misc]
     message: discord.Message
     channel: discord.abc.MessageableChannel
