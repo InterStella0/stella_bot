@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS wordle_tag(
     tag VARCHAR(100) PRIMARY KEY,
     user_id BIGINT NOT NULL,
     used INT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE
+    created_at TIMESTAMP WITH TIME ZONE,
+    description VARCHAR(2000)
 );
 
 

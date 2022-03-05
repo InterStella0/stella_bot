@@ -5,6 +5,7 @@ import base64
 import bisect
 import contextlib
 import dataclasses
+import datetime
 import io
 import itertools
 import json
@@ -25,7 +26,7 @@ from utils import flags as flg
 from utils.buttons import BaseView, QueueView
 from utils.decorators import in_executor
 from utils.greedy_parser import GreedyParser, Separator
-from utils.useful import StellaContext, StellaEmbed, plural, unpack, multiget
+from utils.useful import StellaContext, StellaEmbed, plural, unpack, multiget, aware_utc
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -465,6 +466,46 @@ class WordleTags(commands.Converter[str]):
         return argument
 
 
+@dataclasses.dataclass
+class WordleTag:
+    owner: Union[discord.Member, discord.User, discord.Object]
+    name: str
+    description: Optional[str]
+    amount_words: int
+    created_at: datetime.datetime
+
+    @staticmethod
+    def resolving_user(ctx: StellaContext, uid: int) -> Union[discord.Member, discord.User, discord.Object]:
+        resolve_user = discord.Object(uid)
+        if ctx.guild:
+            if member := ctx.guild.get_member(resolve_user.id):
+                return member
+
+        if user := ctx.bot.get_user(resolve_user.id):
+            return user
+
+        return resolve_user
+
+    @classmethod
+    async def convert(cls, ctx: StellaContext, argument: str) -> WordleTag:
+        argument = argument.casefold()
+        query = """
+        SELECT t.*, (
+            SELECT COUNT(word)
+            FROM wordle_word w
+            WHERE t.tag = w.tag
+        ) "tag_count" FROM wordle_tag t
+        WHERE t.tag=$1
+        """
+        result = await ctx.bot.pool_pg.fetchrow(query, argument)
+        if not result:
+            raise commands.CommandError(f"Tag {argument} does not exist.")
+
+        owner = cls.resolving_user(ctx, result["user_id"])
+        description = result["description"] or "Undocumented"
+
+        return cls(owner, argument, description, result["tag_count"], result["created_at"])
+
 
 class DuelView(discord.ui.View):
     def __init__(self, url: str):
@@ -622,10 +663,24 @@ class LewdleCommandCog(commands.Cog):
                     brief="Create your own tag for a custom wordle game.",
                     help="Create a wordle tag which will contain your dictionary that you can used in `wordle <tag>`"
                          "command.")
-    async def wordle_create(self, ctx: StellaContext, tag: WordleTags(existing=False)):
-        query = "INSERT INTO wordle_tag VALUES($1, $2, 0, now() at time zone 'utc')"
-        await self.bot.pool_pg.execute(query, tag, ctx.author.id)
+    async def wordle_create(self, ctx: StellaContext, tag: WordleTags(existing=False), *, description: str):
+        query = "INSERT INTO wordle_tag VALUES($1, $2, 0, now() at time zone 'utc', $3)"
+        await self.bot.pool_pg.execute(query, tag, ctx.author.id, description)
         await ctx.confirmed()
+
+    @wordle.command(name="info",
+                    brief="Shows information about the wordle tag.",
+                    help="Shows information about the wordle tag in detail.")
+    async def wordle_info(self, ctx: StellaContext, tag: WordleTag):
+        desc = (
+            "**Owner:** `{0.owner}`\n"
+            "**Name:** `{0.name}`\n"
+            "**Description:** {0.description}\n"
+            "**Dictionary Size:** `{0.amount_words:,}` words\n"
+            f"**Created At:** {aware_utc(tag.created_at, mode='f')}"
+        )
+        embed = discord.Embed().set_thumbnail(url=tag.owner.display_avatar)
+        await ctx.embed(title="Wordle Tag Info", description=desc.format(tag), embed=embed)
 
     @wordle.command(name="insert",
                     brief="Add a new word into your tag dictionary.",
