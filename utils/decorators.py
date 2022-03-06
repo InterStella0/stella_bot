@@ -74,7 +74,7 @@ def listen_for_guilds() -> _WrappedEvent:
     return event_check(predicate)
 
 
-_FormatPageSignature = Callable[[menus.ListPageSource, MenuBase, Any], Coro[discord.Embed]]
+_FormatPageSignature = Callable[[menus.ListPageSource, MenuBase, Any], MaybeCoro[discord.Embed]]
 
 
 def pages(per_page: int = 1, show_page: bool = True) -> Callable[[_FormatPageSignature], Type[menus.ListPageSource]]:
