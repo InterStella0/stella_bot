@@ -359,14 +359,14 @@ class WordleView(BaseView):
 
 
 class WordlePrompt(Modal):
-    text_input = TextInput(label="Guess a word", default="")
+    text_input = TextInput(label="Guess a word", default="", placeholder="Guess your word!")
     text_display = TextInput(label="Display", required=False, default="", style=TextStyle.paragraph,
                              placeholder="No need to fill these. This is your display")
     text_instruction = TextInput(
         label="Instruction", required=False,
-        default="[🟢 Char] = correct\n"
-                "[🟡 Char] = half correct\n"
-                "[⚫ Char] = incorrect",
+        default="🟢 Char = correct\n"
+                "🟡 Char = half correct\n"
+                "⚫ Char = incorrect",
         placeholder="No need to fill these. This is your instruction.",
         style=TextStyle.paragraph
     )
@@ -385,9 +385,9 @@ class WordlePrompt(Modal):
     def format_word(word):
         formed = []
         indicator = {
-            LetterKind.correct: "[🟢{}]",
-            LetterKind.half_correct: "[🟡{}]",
-            LetterKind.incorrect: "[⚫{}]"
+            LetterKind.correct: "🟢{}",
+            LetterKind.half_correct: "🟡{}",
+            LetterKind.incorrect: "⚫{}"
         }
 
         for letter in word:
@@ -398,7 +398,7 @@ class WordlePrompt(Modal):
             value = indicator[letter.kind].format(char)
             formed.append(value)
 
-        return " ".join(formed)
+        return " | ".join(formed)
 
     def update_text(self):
         self.text_input.default = ""
