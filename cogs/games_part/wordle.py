@@ -362,6 +362,14 @@ class WordlePrompt(Modal):
     text_input = TextInput(label="Guess a word", default="")
     text_display = TextInput(label="Display", required=False, default="", style=TextStyle.paragraph,
                              placeholder="No need to fill these. This is your display")
+    text_instruction = TextInput(
+        label="Instruction", required=False,
+        default="[🟢 Char] = correct\n"
+                "[🟡 Char] = half correct\n"
+                "[⚫ Char] = incorrect",
+        placeholder="No need to fill these. This is your instruction.",
+        style=TextStyle.paragraph
+    )
 
     def __init__(self, view: WordleView):
         name = f"[{view.game.name}]" if view.game.name != "wordle" else ""
@@ -377,9 +385,9 @@ class WordlePrompt(Modal):
     def format_word(word):
         formed = []
         indicator = {
-            LetterKind.correct: "[{}]",
-            LetterKind.half_correct: "[{}]?",
-            LetterKind.incorrect: "[{}]X"
+            LetterKind.correct: "[🟢{}]",
+            LetterKind.half_correct: "[🟡{}]",
+            LetterKind.incorrect: "[⚫{}]"
         }
 
         for letter in word:
@@ -396,11 +404,8 @@ class WordlePrompt(Modal):
         self.text_input.default = ""
         iterator = map(self.format_word, self.game.display[:self.game.user_tries])
         guesses = "\n".join(f"{i + 1}. {word}" for i, word in enumerate(iterator))
-        instruction = "Instruction:\n" \
-                      "[Char] = correct\n" \
-                      "[Char]? = half correct\n" \
-                      "[Char]X = incorrect "
-        self.text_display.default = f"{guesses}\n\n{instruction}"
+        if guesses.strip() != "":
+            self.text_display.default = f"{guesses}"
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         self.view.reset_timeout()
