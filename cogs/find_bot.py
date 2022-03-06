@@ -214,8 +214,7 @@ class BotPending(BotAdded):
 class BotPendingFlag(commands.FlagConverter):
     reverse: Optional[bool] = flg.flag(aliases=["reverses"],
                                        help="Reverse the list order, this is False by default.", default=False)
-    bot: Optional[BotPending] = flg.flag(aliases=['user'],
-                                         help="Allow execution of repl, defaults to True, unless a non owner.")
+    bot: Optional[BotPending] = flg.flag(help="Shows the bot's information on a specific page.")
 
 
 def pprefix(bot_guild: Union[StellaBot, discord.Guild], prefix: str) -> str:
