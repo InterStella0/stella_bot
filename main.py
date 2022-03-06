@@ -9,7 +9,7 @@ import re
 import time
 
 from os.path import dirname, join
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 import asyncpg
 import discord
@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 from utils.buttons import PersistentRespondView
 from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
-from utils.ipc import StellaClient
+from utils.ipc import IPCData, StellaClient
 from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
 from utils.useful import ListCall, StellaContext, call, count_source_lines, print_exception
 
@@ -356,24 +356,24 @@ bot = StellaBot(**bot_data)
 
 
 @bot.event
-async def on_ready():
+async def on_ready() -> None:
     print("bot is ready")
 
 
 @bot.event
-async def on_disconnect():
+async def on_disconnect() -> None:
     print("bot disconnected")
 
 
 @bot.event
-async def on_connect():
+async def on_connect() -> None:
     print("bot connected")
 
 
 @bot.event
 @wait_ready(bot=bot)
 @event_check(lambda m: not bot.tester or bot.sync_is_owner(m.author))
-async def on_message(message):
+async def on_message(message: discord.Message) -> None:
     if re.fullmatch(rf"<@!?{bot.user.id}>", message.content):
         await message.channel.send(f"My prefix is `{await bot.get_prefix(message)}`")
         return
@@ -405,7 +405,7 @@ async def on_message(message):
 
 
 @bot.ipc_client.listen()
-async def on_restarting_server(data):
+async def on_restarting_server(_: IPCData) -> None:
     print("Server restarting...")
     server = bot.ipc_client
     await server.session.close()
@@ -417,7 +417,7 @@ async def on_restarting_server(data):
 
 
 @bot.ipc_client.listen()
-async def on_kill(data):
+async def on_kill(data: IPCData) -> None:
     print("Kill has been ordered", data)
     await bot.close()
 
