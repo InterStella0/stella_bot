@@ -10,9 +10,10 @@ import discord
 from discord.ext import commands, menus
 from typing_extensions import ParamSpec
 
-from utils.constants import DISCORD_PY
 from utils.errors import NotInDpy
 from utils.menus import MenuBase
+
+DISCORD_PY = 336642139381301249
 
 T = TypeVar("T")
 P = ParamSpec("P")
