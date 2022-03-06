@@ -248,8 +248,8 @@ class UntilFlag(RequiredGreedy):
         return await commands.converter.run_converters(ctx, converter, argument, param)
 
 
-# Subclass Flag so i can use flag lol
-class GreedyParser(SFlagCommand):
+# TODO: Drop support for old flag
+class GreedyParser(commands.Command):
     async def _transform_greedy_pos(self, ctx: StellaContext, param: inspect.Parameter, required: bool,
                                     greedy: commands.converter.Greedy, converter: T,
                                     normal_greedy: Optional[bool] = False) -> List[T]:
