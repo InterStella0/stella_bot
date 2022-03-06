@@ -33,23 +33,27 @@ def is_discordpy(silent: bool = False) -> Callable[[T], T]:
     return commands.check(predicate)
 
 
-def event_check(func: Callable[P, MaybeCoro[bool]]) -> Callable[[Callable[..., Coro[None]]], Callable[..., Coro[None]]]:
+_Event = Callable[..., Coro[None]]
+_WrappedEvent = Callable[[_Event], _Event]
+
+
+def event_check(event_predicate: Callable[P, MaybeCoro[bool]]) -> _WrappedEvent:
     """Event decorator check."""
-    def check(method: Callable[..., Coro[None]]) -> Callable[..., Coro[None]]:
-        setattr(method, "callback", method)
+    def event_wrapper(event: _Event) -> _Event:
+        setattr(event, "callback", event)
 
-        @functools.wraps(method)
-        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
-            if await discord.utils.maybe_coroutine(func, *args, **kwargs):  # type: ignore[no-untyped-call]
-                await method(*args, **kwargs)
-        return wrapper
+        @functools.wraps(event)
+        async def inner(*args: P.args, **kwargs: P.kwargs) -> None:
+            if await discord.utils.maybe_coroutine(event_predicate, *args, **kwargs):  # type: ignore[no-untyped-call]
+                await event(*args, **kwargs)
+        return inner
 
-    setattr(check, "predicate", func)
+    setattr(event_wrapper, "predicate", event_predicate)
 
-    return check
+    return event_wrapper
 
 
-def wait_ready(bot: Optional[commands.Bot] = None) -> Callable[[Callable[..., Coro[None]]], Callable[..., Coro[None]]]:
+def wait_ready(bot: Optional[commands.Bot] = None) -> _WrappedEvent:
     async def predicate(*args: Any, **_: Any) -> bool:
         nonlocal bot
         self = args[0] if args else None
@@ -59,6 +63,14 @@ def wait_ready(bot: Optional[commands.Bot] = None) -> Callable[[Callable[..., Co
             raise Exception(f"bot must derived from commands.Bot not {bot.__class__.__name__}")
         await bot.wait_until_ready()
         return True
+    return event_check(predicate)
+
+
+def listen_for_guilds() -> _WrappedEvent:
+    def predicate(self_or_message: Any, *args: Any) -> bool:
+        """Only allow message event to be called in guilds"""
+        message = args[0] if args else self_or_message
+        return message.guild is not None
     return event_check(predicate)
 
 
@@ -83,15 +95,10 @@ def pages(per_page: int = 1, show_page: bool = True) -> Callable[[_FormatPageSig
     return page_source
 
 
-def listen_for_guilds() -> Callable[[Callable[..., Coro[None]]], Callable[..., Coro[None]]]:
-    def predicate(self_or_message: Any, *args: Any) -> bool:
-        """Only allow message event to be called in guilds"""
-        message = args[0] if args else self_or_message
-        return message.guild is not None
-    return event_check(predicate)
+_MaybeEventLoop = Optional[asyncio.AbstractEventLoop]
 
 
-def in_executor(loop: Optional[asyncio.AbstractEventLoop] = None) -> Callable[[Callable[P, T]], Callable[P, Awaitable[T]]]:
+def in_executor(loop: _MaybeEventLoop = None) -> Callable[[Callable[P, T]], Callable[P, Awaitable[T]]]:
     """Makes a sync blocking function unblocking"""
     loop_ = loop or asyncio.get_event_loop()
 
