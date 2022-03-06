@@ -229,7 +229,6 @@ class StellaBot(commands.Bot):
                 print_exception('Ignoring exception while loading up {}:'.format(cog), error)
             else:
                 print(f"cog {cog} is loaded")
-        self.load_extension("addons.modal")
 
     @to_call.append
     async def fill_bots(self) -> None:
@@ -323,7 +322,7 @@ class StellaBot(commands.Bot):
             self.run(self.token)
 
 
-intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions')}
+intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions', 'message_content')}
 intents = discord.Intents(**intent_data)
 with open("d_json/bot_var.json") as states_bytes:
     states = json.load(states_bytes)

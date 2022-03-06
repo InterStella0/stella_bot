@@ -10,23 +10,22 @@ import io
 import itertools
 import json
 import random
-import traceback
 from enum import Enum
 from typing import Generator, Optional, List, Dict, TYPE_CHECKING, Union, Any
 
 import discord
 from PIL import ImageDraw, ImageFont
 from PIL import Image
+from discord import TextStyle
 from discord.ext import commands
 from discord.ext.commands import Greedy
+from discord.ui import Modal, TextInput
 
-from addons.modal import Modal, TextInput, InputStyle
-from addons.modal.raw import ResponseModal
 from utils import flags as flg
 from utils.buttons import BaseView, QueueView
 from utils.decorators import in_executor
 from utils.greedy_parser import GreedyParser, Separator
-from utils.useful import StellaContext, StellaEmbed, plural, unpack, multiget, aware_utc
+from utils.useful import StellaContext, StellaEmbed, plural, aware_utc
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -336,7 +335,8 @@ class WordleView(BaseView):
     @discord.ui.button(label="Guess", style=discord.ButtonStyle.green)
     async def guess_button(self, _: discord.ui.Button, interaction: discord.Interaction):
         prompter = self._get_prompter()
-        await prompter.prompt(interaction)
+        prompter.update_text()
+        await interaction.response.send_modal(prompter)
 
     @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger)
     async def stop_button(self, _: discord.ui.Button, __: discord.Interaction):
@@ -359,22 +359,22 @@ class WordleView(BaseView):
 
 
 class WordlePrompt(Modal):
+    text_input = TextInput(label="Guess a word", default="")
+    text_display = TextInput(label="Display", required=False, default="", style=TextStyle.paragraph,
+                             placeholder="No need to fill these. This is your display")
+
     def __init__(self, view: WordleView):
         name = f"[{view.game.name}]" if view.game.name != "wordle" else ""
-        super().__init__(title=f"Wordle Game{name}", timeout=None)
+        super().__init__(title=f"Wordle Game{name}")
         self.view = view
         self.game = view.game
         word_length = self.game.word_length
-        self.text_input = TextInput(label="Guess a word", required=True, min_length=word_length, max_length=word_length, value="")
-        self.text_display = TextInput(
-            label="Display", required=False, value="", placeholder="No need to fill these. This is your display",
-            style=InputStyle.paragraph
-        )
-        self.add_item(self.text_input)
-        self.add_item(self.text_display)
+        self.text_input.min_length = word_length
+        self.text_input.max_length = word_length
         self.first = True
 
-    def format_word(self, word):
+    @staticmethod
+    def format_word(word):
         formed = []
         indicator = {
             LetterKind.correct: "[{}]",
@@ -393,25 +393,18 @@ class WordlePrompt(Modal):
         return " ".join(formed)
 
     def update_text(self):
-        self.text_input.value = ""
+        self.text_input.default = ""
         iterator = map(self.format_word, self.game.display[:self.game.user_tries])
         guesses = "\n".join(f"{i + 1}. {word}" for i, word in enumerate(iterator))
         instruction = "Instruction:\n" \
                       "[Char] = correct\n" \
                       "[Char]? = half correct\n" \
                       "[Char]X = incorrect "
-        self.text_display.value = f"{guesses}\n\n{instruction}"
+        self.text_display.default = f"{guesses}\n\n{instruction}"
 
-    async def prompt(self, interaction: discord.Interaction, /, *, wait=False) -> Optional[Union[bool, ResponseModal]]:
-        if not self.first:
-            self.update_text()
-        else:
-            self.first = False
-        return await super().prompt(interaction, wait=wait)
-
-    async def callback(self, modal: ResponseModal, interaction: discord.Interaction) -> None:
+    async def on_submit(self, interaction: discord.Interaction) -> None:
         self.view.reset_timeout()
-        guess = modal["Guess a word"].value
+        guess = self.text_input.value
         await self.game.user_answer(interaction, guess)
 
 
@@ -438,8 +431,12 @@ def word_count_convert(arg: str) -> int:
 
 
 class WordleFlag(commands.FlagConverter):
-    tries: tries_convert = flg.flag(help="The amount of time user can try, defaults to 6.", default=6)
-    word_count: word_count_convert = flg.flag(help="The word count that the user will be guessing, defaults to 5.", default=5)
+    tries: Optional[tries_convert] = flg.flag(
+        help="The amount of time user can try, it defaults to 6.", default=6
+    )
+    word_count: Optional[word_count_convert] = flg.flag(
+        help="The word count that the user will be guessing, it defaults to 5.", default=5
+    )
 
 
 class WordleTags(commands.Converter[str]):

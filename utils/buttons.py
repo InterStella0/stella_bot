@@ -16,9 +16,8 @@ import discord
 
 from discord import ui
 from discord.ext import commands
+from discord.ui import TextInput
 
-from addons.modal import Modal, TextInput
-from addons.modal.raw import ResponseModal
 from utils.context_managers import UserLock
 from utils.menus import ListPageInteractionBase, MenuBase, MenuViewInteractionBase
 from utils.useful import StellaEmbed
@@ -443,11 +442,13 @@ class InteractionPages(BaseView, MenuBase):
         self.cooldown = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
         self.prompter = None
 
-    class PagePrompt(Modal):
+    class PagePrompt(ui.Modal):
+        page_number = TextInput(label="Page Number", min_length=1, required=True)
+
         def __init__(self, view: InteractionPages):
             max_pages = view._source.get_max_pages()
-            super().__init__(f"Pick a page from 1 to {max_pages}", custom_id=os.urandom(16).hex(), timeout=None)
-            self.add_item(TextInput(label="Page Number", min_length=1, max_length=len(str(max_pages)), required=True))
+            super().__init__(title=f"Pick a page from 1 to {max_pages}")
+            self.page_number.max_length = len(str(max_pages))
             self.view = view
             self.max_pages = max_pages
             self.valid = False
@@ -460,9 +461,8 @@ class InteractionPages(BaseView, MenuBase):
 
             await interaction.response.send_message("You can't fill up this modal.", ephemeral=True)
 
-        async def callback(self, modal: ResponseModal, interaction: discord.Interaction):
-            text = modal['Page Number']
-            value = text.value.strip()
+        async def on_submit(self, interaction: discord.Interaction):
+            value = self.page_number.value.strip()
             if value.isdigit() and 0 < (page := int(value)) <= self.max_pages:
                 await self.view.show_checked_page(page - 1)
                 self.view.reset_timeout()
@@ -489,7 +489,7 @@ class InteractionPages(BaseView, MenuBase):
         if self.prompter is None:
             self.prompter = self.PagePrompt(self)
 
-        return self.prompter.prompt(interaction)
+        return interaction.response.send_modal(self.prompter)
 
     async def start(self, ctx: StellaContext, /) -> None:
         self.ctx = ctx

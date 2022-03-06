@@ -13,14 +13,12 @@ import datetime
 import textwrap
 import itertools
 
-from discord import InteractionResponse
+from discord import ui
 from discord.ui import View
 from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
 from fuzzywuzzy import process
 from discord.ext import commands
 
-from addons.modal import Modal, TextInput
-from addons.modal.raw import ResponseModal
 from utils.useful import StellaEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker, \
     in_executor
 from utils.decorators import pages, event_check
@@ -128,7 +126,7 @@ class SearchHelp(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         prompter = self.view.get_prompt_search()
-        await prompter.prompt(interaction)
+        await interaction.response.send_modal(prompter)
 
 
 class HelpDropDown(discord.ui.Select):
@@ -166,20 +164,21 @@ class HelpMenuView(MenuViewBase):
                          **kwargs)
         self.original_embed = embed
         self.help_command = help_object
-        self._search_prompt: Optional[Modal] = None
+        self._search_prompt: Optional[ui.Modal] = None
         self.add_item(SearchHelp())
         self.old_items = []
 
-    class PromptSearch(Modal):
+    class PromptSearch(ui.Modal, title="Help Command Search"):
+        text_command = ui.TextInput(label="command", max_length=20)
+
         def __init__(self, view: HelpMenuView):
-            super().__init__("Help Command Search", timeout=None, custom_id=os.urandom(16).hex())
-            self.add_item(TextInput(label="command", max_length=20))
+            super().__init__()
             self.help_command = view.help_command
             self.original = view.message
             self.view = view
 
-        async def callback(self, modal: ResponseModal, interaction: discord.Interaction) -> None:
-            cmd = modal["command"].value.strip()
+        async def on_submit(self, interaction: discord.Interaction) -> None:
+            cmd = self.text_command.value.strip()
             if not cmd.strip():
                 await interaction.response.send_message(content="I can't search an empty command", ephemeral=True)
                 return
@@ -190,9 +189,6 @@ class HelpMenuView(MenuViewBase):
                 await self.original.edit(content=message, embed=None, view=view)
             else:
                 await interaction.response.send_message(f"No command with the name {cmd} found.", ephemeral=True)
-
-        async def on_error(self, error: Exception) -> None:
-            print(traceback.format_exc())
 
     def get_prompt_search(self):
         if self._search_prompt is None:
