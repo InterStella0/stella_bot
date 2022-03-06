@@ -1042,6 +1042,10 @@ class FindBot(commands.Cog, name="Bots"):
         sql = "SELECT * FROM pending_bots ORDER BY requested_at "
         sql += "DESC" if not flag.reverse else ""
         bots = await self.bot.pool_pg.fetch(sql)
+        if not bots:
+            await ctx.embed(description="There are no pending bots at the moment")
+            return
+
         menu = InteractionPages(bot_pending_list(bots))
         if data := flag.bot:
             bot_target = data.bot.id

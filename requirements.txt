@@ -12,7 +12,7 @@ matplotlib
 # discord
 discord-ext-ipc @ git+https://github.com/ext-creators/discord-ext-ipc@865947e9ac8bb019b456007faed423b00b658365
 discord-ext-menus @ git+https://github.com/Rapptz/discord-ext-menus@fbb8803779373357e274e1540b368365fd9d8074
-discord.py @ git+https://github.com/Rapptz/discord.py@45d498c1b76deaf3b394d17ccf56112fa691d160
+discord.py @ git+https://github.com/Rapptz/discord.py@a909c1ff069b1bdb332b7f3b01ef1c4b8a3a3a15
 jishaku
 # apis
 aiogithub @ git+https://github.com/reupen/aiogithub.git@7dab796756b36f6c2535e3fec2e5318853357d10
