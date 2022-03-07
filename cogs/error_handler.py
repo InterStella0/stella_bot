@@ -155,8 +155,8 @@ class ErrorHandler(commands.Cog):
 
             ctx.current_parameter = error.param
 
-        parameter = [*ctx.command.params.values()][ctx.command.cog is not None:]
-        pos = parameter.index(ctx.current_parameter)
+        parameter = [*ctx.command.params.values()]
+        pos = parameter.index(ctx.current_parameter) + 1
         list_sig = real_signature.split()
         try:
             pos += list_sig.index(ctx.invoked_with)
