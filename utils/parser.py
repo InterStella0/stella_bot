@@ -515,7 +515,7 @@ class ReplReader:
             yield
 
 
-IMPORTANT_PARTS = r"""
+DEPENDENCY = r"""
 import asyncio
 import contextlib
 import re
@@ -902,7 +902,27 @@ IMPORT_REGEX = re.compile(r"(?P<import>\w+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*
 
 def get_import(d: re.Match) -> str:
     return d['import'][:-1]
-""" + inspect.getsource(get) + inspect.getsource(snowflake_time)
+    
+def get(iterable, **attrs):
+    _all = all
+    attrget = attrgetter
+
+    # Special case the single element call
+    if len(attrs) == 1:
+        k, v = attrs.popitem()
+        pred = attrget(k.replace('__', '.'))
+        return next((elem for elem in iterable if pred(elem) == v), None)
+
+    converted = [(attrget(attr.replace('__', '.')), value) for attr, value in attrs.items()]
+    for elem in iterable:
+        if _all(pred(elem) == value for pred, value in converted):
+            return elem
+    return None
+
+def snowflake_time(id):
+    timestamp = ((id >> 22) + DISCORD_EPOCH) / 1000
+    return datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc)
+"""
 
 RUNNER = r"""
 async def runner():
@@ -926,5 +946,5 @@ asyncio.run(runner())
 def repl_wrap(code: str, context: Dict[str, Any], **flags) -> str:
     parser = inspect.getsource(ReplParser)
     reader = inspect.getsource(ReplReader)
-    complete = IMPORTANT_PARTS + parser + reader
+    complete = DEPENDENCY + parser + reader
     return complete + RUNNER.format(code, flags, context)
