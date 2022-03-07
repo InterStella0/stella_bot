@@ -211,6 +211,11 @@ class BotPending(BotAdded):
         return botdata
 
 
+class BotListReverse(commands.FlagConverter):
+    reverse: Optional[bool] = flg.flag(aliases=["reverses"],
+                                       help="Reverse the list order, this is False by default.", default=False)
+
+
 class BotPendingFlag(commands.FlagConverter):
     reverse: Optional[bool] = flg.flag(aliases=["reverses"],
                                        help="Reverse the list order, this is False by default.", default=False)
@@ -981,16 +986,14 @@ class FindBot(commands.Cog, name="Bots"):
 
         return embed.add_field(name="Created at", value=f"{aware_utc(bot.created_at, mode='f')}")
 
-    @commands.command(aliases=["rba", "recentbot", "recentadd"],
-                      brief="Shows a list of bots that has been added in a day.",
-                      help="Shows a list of bots that has been added in a day along with the owner that requested it, "
-                           "and how long ago it was added.",
-                      cls=flg.SFlagCommand)
+    @greedy_parser.command(
+        aliases=["rba", "recentbot", "recentadd"],
+        brief="Shows a list of bots that has been added in a day.",
+        help="Shows a list of bots that has been added in a day along with the owner that requested it, "
+             "and how long ago it was added.")
     @is_discordpy()
-    @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
-                  help="Reverses the list. This flag accepts True or False, default to False if not stated.")
-    async def recentbotadd(self, ctx: StellaContext, **flags: bool):
-        reverse = flags.pop("reverse", False)
+    async def recentbotadd(self, ctx: StellaContext, *, flags: BotListReverse):
+        reverse = flags.reverse
 
         def predicate(m):
             return m.bot and \
@@ -1014,10 +1017,8 @@ class FindBot(commands.Cog, name="Bots"):
 
     @greedy_parser.command(aliases=["br", "brrrr", "botranks", "botpos", "botposition", "botpositions"],
                            help="Shows all bot's command usage in the server on a sorted list.")
-    @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
-                  help="Reverses the list. This flag accepts True or False, default to False if not stated.")
-    async def botrank(self, ctx: StellaContext, bot: greedy_parser.UntilFlag[BotCommands] = None, **flags: bool):
-        reverse = flags.pop("reverse", False)
+    async def botrank(self, ctx: StellaContext, bot: greedy_parser.UntilFlag[BotCommands] = None, *, flags: BotListReverse):
+        reverse = flags.reverse
         bots = {x.id: x for x in ctx.guild.members if x.bot}
         query = "SELECT bot_id, COUNT(command) AS total_usage FROM commands_list " \
                 "WHERE guild_id=$1 AND bot_id=ANY($2::BIGINT[]) " \
@@ -1170,16 +1171,15 @@ class FindBot(commands.Cog, name="Bots"):
         await self.bot.pool_pg.execute(sql, *values)
         await ctx.confirmed()
 
-    @commands.command(cls=flg.SFlagCommand,
-                      brief="Get all unique command for all bot in a server.",
-                      help="Get all unique command for all bot in a server that are shown in an "
-                           "descending order for the unique.",
-                      aliases=["ac", "acc", "allcommand", "acktually", "act"])
+    @greedy_parser.command(
+        brief="Get all unique command for all bot in a server.",
+        help="Get all unique command for all bot in a server that are shown in an "
+             "descending order for the unique.",
+        aliases=["ac", "acc", "allcommand", "acktually", "act"]
+    )
     @commands.guild_only()
-    @flg.add_flag("--reverse", default=False, action="store_true",
-                  help="Creates a list in an ascending order from the lowest usage to the highest.")
-    async def allcommands(self, ctx: StellaContext, **flags: bool):
-        reverse = flags.get("reverse", False)
+    async def allcommands(self, ctx: StellaContext, *, flags: BotListReverse):
+        reverse = flags.reverse
         query = "SELECT * FROM " \
                 "   (SELECT command, COUNT(command) AS command_count FROM " \
                 "       (SELECT DISTINCT bot_id, command FROM commands_list " \
