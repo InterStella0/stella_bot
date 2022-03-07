@@ -13,7 +13,6 @@ from discord.ext import commands
 
 from utils.buttons import BaseButton, ViewIterationAuthor
 from utils.errors import BypassError, NotInDpy
-from utils.flags import ArgumentParsingError
 from utils.useful import StellaEmbed, multiget, print_exception
 
 if TYPE_CHECKING:
@@ -79,7 +78,7 @@ class ErrorHandler(commands.Cog):
                 return
 
         ignored = (commands.CommandNotFound,)
-        default_error = (commands.NotOwner, commands.TooManyArguments, ArgumentParsingError, NotInDpy)
+        default_error = (commands.NotOwner, commands.TooManyArguments, NotInDpy)
 
         error = getattr(error, 'original', error)
 
@@ -145,6 +144,9 @@ class ErrorHandler(commands.Cog):
     async def generate_signature_error(self, ctx: StellaContext, error: commands.CommandError):
         command = ctx.command
         help_com = self.bot.help_command
+        if help_com is None:
+            return
+
         help_com.context = ctx
         real_signature = self.bot.get_command_signature(ctx, command)
         if ctx.current_parameter is None:

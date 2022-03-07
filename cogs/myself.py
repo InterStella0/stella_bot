@@ -35,6 +35,25 @@ async def show_result(self, menu: menus.MenuBase, entry: str) -> str:
     return f"```py\n{entry}```"
 
 
+class AddBotFlag(commands.FlagConverter):
+    joined_at: Optional[DatetimeConverter]
+    jump_url: Optional[JumpValidator]
+    requested_at: Optional[DatetimeConverter]
+    reason: Optional[str]
+    message: Optional[discord.Message]
+    author: Optional[discord.Member]
+
+
+class ClearFlag(commands.FlagConverter):
+    must: Optional[bool] = flg.flag(default=False)
+    messages: Optional[Tuple[discord.Message, ...]] = flg.flag(default=None)
+
+
+class SQLFlag(commands.FlagConverter):
+    not_number: Optional[bool] = flg.flag(aliases=["NN"], default=False)
+    max_row: Optional[int] = flg.flag(aliases=["MR"], default=12)
+
+
 class Myself(commands.Cog):
     """Commands for stella"""
     def __init__(self, bot: StellaBot):
@@ -44,14 +63,8 @@ class Myself(commands.Cog):
         return await commands.is_owner().predicate(ctx)  # type: ignore
 
     @greedy_parser.command()
-    @flg.add_flag("--joined_at", type=DatetimeConverter)
-    @flg.add_flag("--jump_url", type=JumpValidator)
-    @flg.add_flag("--requested_at", type=DatetimeConverter)
-    @flg.add_flag("--reason", nargs="+")
-    @flg.add_flag("--message", type=discord.Message)
-    @flg.add_flag("--author", type=discord.Member)
-    async def addbot(self, ctx: StellaContext, bot: IsBot,
-                     **flags: Union[datetime.datetime, discord.Member, discord.Message, str]):
+    async def addbot(self, ctx: StellaContext, bot: IsBot, *, flags: AddBotFlag):
+        flags = dict(flags)
         new_data = {'bot_id': bot.id}
         if message := flags.pop('message'):
             new_data['author_id'] = message.author.id
@@ -91,34 +104,6 @@ class Myself(commands.Cog):
         message.content = ctx.prefix + content
         self.bot.dispatch("message", message)
         await ctx.confirmed()
-
-    @greedy_parser.command()
-    @flg.add_flag("--uses", type=int, default=1)
-    @flg.add_flag("--code", type=codeblock_converter)
-    async def command(self, ctx: StellaContext, **flags: Union[int, Codeblock]):
-        coding: Dict[str, Any] = {
-            "_bot": self.bot,
-            "commands": commands
-        }
-        content = flags["code"].content
-        values = content.split("\n")
-        values.pop()
-        command = values.pop()
-        values.append(f'_bot.add_command({command})')
-        values.insert(1, f'@commands.is_owner()')
-        exec("\n".join(values), coding)
-
-        uses = flags["uses"]
-
-        def check(ctx: StellaContext) -> bool:
-            return ctx.command.qualified_name == coding[command].qualified_name and self.bot.sync_is_owner(ctx.author)
-
-        await ctx.message.add_reaction("<:next_check:754948796361736213>")
-        while c := await self.bot.wait_for("command_completion", check=check):
-            uses -= 1
-            if uses <= 0:
-                await ctx.confirmed()
-                return self.bot.remove_command(c.command.qualified_name)
 
     @commands.command(name="eval", help="Eval for input/print feature", aliases=["e", "ev", "eva"])
     async def _eval(self, ctx: StellaContext, *, code: codeblock_converter):
@@ -265,16 +250,15 @@ class Myself(commands.Cog):
                 await self.bot.process_commands(after)
 
     @greedy_parser.command()
-    @flg.add_flag("--must", type=bool, action="store_true", default=False)
-    @flg.add_flag("--messages", nargs='+', type=discord.Message)
     @commands.bot_has_permissions(read_message_history=True)
-    async def clear(self, ctx: StellaContext, amount: Optional[int] = 50, **flag: Union[bool, str]):
+    async def clear(self, ctx: StellaContext, amount: Optional[int] = 50, *, flags: ClearFlag):
         def check(m: discord.Message) -> bool:
             return m.author == ctx.me
 
         def less_two_weeks(message: discord.Message) -> bool:
             return message.created_at > datetime.datetime.utcnow() - datetime.timedelta(days=14)
 
+        flag = dict(flags)
         must = flag["must"]
         purge_enable = ctx.channel.permissions_for(ctx.me).manage_messages
         if messages := flag.get("messages"):
@@ -321,9 +305,8 @@ class Myself(commands.Cog):
         await ctx.embed(description="\n".join(str(x) for x in outputs))
 
     @greedy_parser.command()
-    @flg.add_flag("--not_number", "-NN", action="store_true", default=False)
-    @flg.add_flag("--max_row", "-MR", type=int, default=12)
-    async def sql(self, ctx: StellaContext, query: UntilFlag[CodeblockConverter], **flags: Union[int, bool]):
+    async def sql(self, ctx: StellaContext, query: UntilFlag[CodeblockConverter], *, flags: SQLFlag):
+        flags = dict(flags)
         MR = flags.get("max_row")
         to_run = query.content
         fetch = self.bot.pool_pg.fetch
