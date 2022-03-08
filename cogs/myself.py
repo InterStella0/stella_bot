@@ -24,7 +24,7 @@ from utils.greedy_parser import GreedyParser, Separator, UntilFlag
 from utils.new_converters import (CodeblockConverter, DatetimeConverter, IsBot,
                                   JumpValidator, ValidCog)
 from utils.useful import (StellaContext, StellaEmbed, aware_utc, call,
-                          empty_page_format, print_exception)
+                          empty_page_format, print_exception, text_chunker)
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -309,21 +309,20 @@ class Myself(commands.Cog):
         flags = dict(flags)
         MR = flags.get("max_row")
         to_run = query.content
-        fetch = self.bot.pool_pg.fetch
-        method = fetch
+        method = fetch = self.bot.pool_pg.fetch
         if to_run.lower().startswith(("insert", "update", "delete", "create", "drop")):
             if "returning" not in to_run.lower():
                 method = self.bot.pool_pg.execute
 
         rows = await method(to_run)
-        NN = flags.pop("not_number")
+        nn = flags.pop("not_number")
 
         @pages(per_page=MR)
         async def tabulation(self, menu, entries):
             if not isinstance(entries, list):
                 entries = [entries]
             offset = menu.current_page * self.per_page + 1
-            to_pass = {"no": [*range(offset, offset + len(entries))]} if not NN else {}
+            to_pass = {"no": [*range(offset, offset + len(entries))]} if not nn else {}
             for d in entries:
                 for k, v in d.items():
                     value = to_pass.setdefault(k, [])
@@ -351,27 +350,7 @@ class Myself(commands.Cog):
             await ctx.confirmed()
         except commands.CommandError as e:
             error = print_exception(f'Exception raised while reinvoking {context.command}:', e, _print=False)
-            lines = error.splitlines()
-            lines.reverse()
-            chunked = []
-            build = ""
-
-            def add() -> None:
-                nonlocal build
-                nonlocal chunked
-                chunked.append(build)
-                build = ""
-
-            while True:
-                build += "\n" + lines.pop()
-                if len(build) > 1800:
-                    add()
-                    continue
-                if not lines:
-                    if build:
-                        add()
-                    break
-            
+            chunked = text_chunker(error, max_newline=10)
             await InteractionPages(show_result(chunked)).start(ctx)
 
     @commands.group(invoke_without_command=True)
