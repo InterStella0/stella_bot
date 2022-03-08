@@ -154,7 +154,6 @@ class WordleGame:
 
     async def game_progress(self) -> Optional[bool]:
         await self.show_display()
-        print("Answer:", self.answer)
         while True:
             interaction, answer = await self.receive()
             try:
@@ -316,8 +315,8 @@ class WordleGame:
 class WordleView(BaseView):
     def __init__(self, game: WordleGame):
         super().__init__(timeout=600)
-        self.game = game
-        self._prompter = None
+        self.game: WordleGame = game
+        self._prompter: Optional[WordlePrompt] = None
 
     def _get_prompter(self):
         if self._prompter is None:

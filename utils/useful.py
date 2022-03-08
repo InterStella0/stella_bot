@@ -177,7 +177,7 @@ class StellaContext(commands.Context):  # type: ignore[misc]
         super().__init__(**kwargs)
         from utils.greedy_parser import WithCommaStringView
         self.view = WithCommaStringView(kwargs.get("view"))
-        self.__dict__.update(dict.fromkeys(["waiting", "result", "channel_used", "running", "failed"]))
+        self.__dict__.update(dict.fromkeys(["waiting", "result", "channel_used", "running", "failed", "done"]))
         self.sent_messages: Dict[int, discord.Message] = {}
         self.reinvoked = False
 

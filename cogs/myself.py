@@ -493,6 +493,16 @@ class Myself(commands.Cog):
             return await ctx.confirmed()
         await ctx.maybe_reply("Unable to find a running command from this message.")
 
+    @commands.Cog.listener()
+    async def on_command(self, ctx: StellaContext):
+        ctx.done = False
+
+    @commands.Cog.listener()
+    async def on_command_completion(self, ctx: StellaContext):
+        if not ctx.done:
+            ctx.done = True
+
+
 
 def setup(bot: StellaBot) -> None:
     cog = Myself(bot)
