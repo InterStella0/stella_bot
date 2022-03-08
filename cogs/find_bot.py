@@ -1051,7 +1051,7 @@ class FindBot(commands.Cog, name="Bots"):
         sql += "DESC" if not flag.reverse else ""
         bots = await self.bot.pool_pg.fetch(sql)
         if not bots:
-            raise NoPendingBots
+            raise NoPendingBots()
 
         menu = InteractionPages(bot_pending_list(bots))
         if data := flag.bot:
