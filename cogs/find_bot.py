@@ -1,38 +1,40 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import collections
+import contextlib
+import ctypes
+import datetime
+import functools
 import io
+import itertools
+import operator
+import re
+import textwrap
+import time
+
+from dataclasses import dataclass
+from typing import (TYPE_CHECKING, Any, AsyncGenerator, Callable, Coroutine, Dict, List, Optional, Tuple, Type, TypeVar,
+                    Union)
 
 import discord
-import datetime
-import re
-import asyncio
-import itertools
-import ctypes
-import contextlib
-import functools
-import collections
-import textwrap
-import operator
-import time
-from dataclasses import dataclass
-from discord import ui
-from discord.ext import commands
-from discord.ext.commands import UserNotFound
-from discord.ext import menus
-from discord.ext.menus import ListPageSource
+
 from aiogithub.objects import Repo
+from discord import ui
+from discord.ext import commands, menus
+from discord.ext.commands import UserNotFound
+from discord.ext.menus import ListPageSource
 from fuzzywuzzy import fuzz
-from utils import flags as flg
-from utils.image_manipulation import get_majority_color, islight, create_bar, process_image
-from utils.new_converters import BotPrefixes, IsBot, BotCommands
+
+from utils import flags as flg, greedy_parser
 from utils.buttons import InteractionPages, PromptView
-from utils.useful import try_call, StellaEmbed, compile_array, search_prefixes, default_date, plural, realign, \
-    search_commands, StellaContext, aware_utc, print_exception
-from utils.errors import NotInDatabase, BotNotFound
-from utils.decorators import is_discordpy, event_check, wait_ready, pages, listen_for_guilds
-from utils import greedy_parser
-from typing import Any, Optional, Union, List, Tuple, Callable, Dict, Coroutine, TYPE_CHECKING, AsyncGenerator, Type, TypeVar
+from utils.decorators import event_check, is_discordpy, listen_for_guilds, pages, wait_ready
+from utils.errors import BotNotFound, ErrorNoSignature, NotInDatabase
+from utils.image_manipulation import create_bar, get_majority_color, islight, process_image
+from utils.new_converters import BotCommands, BotPrefixes, IsBot
+from utils.useful import (StellaContext, StellaEmbed, aware_utc, compile_array, default_date, plural, print_exception,
+                          realign, search_commands, search_prefixes, try_call)
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -40,6 +42,11 @@ if TYPE_CHECKING:
 ReactRespond = collections.namedtuple("ReactRespond", "created_at author reference")
 DISCORD_PY = 336642139381301249
 T = TypeVar("T")
+
+
+class NoPendingBots(ErrorNoSignature):
+    def __init__(self) -> None:
+        super().__init__("There are no pending bots at the moment")
 
 
 @dataclass
@@ -1044,8 +1051,7 @@ class FindBot(commands.Cog, name="Bots"):
         sql += "DESC" if not flag.reverse else ""
         bots = await self.bot.pool_pg.fetch(sql)
         if not bots:
-            await ctx.embed(description="There are no pending bots at the moment")
-            return
+            raise NoPendingBots
 
         menu = InteractionPages(bot_pending_list(bots))
         if data := flag.bot:
