@@ -1,5 +1,7 @@
-import discord
 from typing import Any, Union
+
+import discord
+
 from discord.ext import commands
 
 
@@ -36,11 +38,6 @@ class NotBot(ArgumentBaseError):
 class MustMember(ArgumentBaseError):
     def __init__(self, _id: Union[discord.User, int], **kwargs: Any):
         super().__init__(message=f"{_id} must be in the server.", **kwargs)
-
-
-class NotInDpy(commands.UserInputError):
-    def __init__(self):
-        super().__init__(message=f"This command is only allowed in `discord.py` server.")
 
 
 class ThisEmpty(ArgumentBaseError):
@@ -85,3 +82,12 @@ class BypassError(ArgumentBaseError):
     def __init__(self, error):
         super().__init__()
         self.original = error
+
+
+class ErrorNoSignature(commands.CommandError):
+    """Displays error in embed without generating signature hint"""
+
+
+class NotInDpy(ErrorNoSignature):
+    def __init__(self) -> None:
+        super().__init__(message="This command is only allowed in `discord.py` server.")

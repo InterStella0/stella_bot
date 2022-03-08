@@ -12,7 +12,7 @@ import discord
 from discord.ext import commands
 
 from utils.buttons import BaseButton, ViewIterationAuthor
-from utils.errors import BypassError, NotInDpy
+from utils.errors import BypassError, ErrorNoSignature
 from utils.useful import StellaEmbed, multiget, print_exception
 
 if TYPE_CHECKING:
@@ -78,7 +78,7 @@ class ErrorHandler(commands.Cog):
                 return
 
         ignored = (commands.CommandNotFound,)
-        default_error = (commands.NotOwner, commands.TooManyArguments, NotInDpy)
+        default_error = (commands.NotOwner, commands.TooManyArguments, ErrorNoSignature)
 
         error = getattr(error, 'original', error)
 
