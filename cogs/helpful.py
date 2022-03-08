@@ -62,6 +62,13 @@ def is_message_older_context(bot: StellaBot, message_id: int) -> bool:
     return message_id < cached_context[0].message.id
 
 
+class SourceFlag(commands.FlagConverter):
+    code: Optional[bool] = flg.flag(
+        help="Shows the code block instead of the link. Accepts True or False, defaults to False if not stated.",
+        default=False
+    )
+
+
 def is_command_message():
     def inner(self, payload):
         bot = self.bot
@@ -520,11 +527,8 @@ class Helpful(commands.Cog):
                       help="Shows the source code in github given the cog/command name. "
                            "Defaults to the stella_bot source code link if not given any argument. "
                            "It accepts 2 types of content, the command name, or the Cog method name. "
-                           "Cog method must specify it's Cog name separate by a period and it's method.",
-                      cls=flg.SFlagCommand)
-    @flg.add_flag("--code", type=bool, action="store_true", default=False,
-                  help="Shows the code block instead of the link. Accepts True or False, defaults to False if not stated.")
-    async def source(self, ctx: StellaContext, content: str = None, **flags: bool):
+                           "Cog method must specify it's Cog name separate by a period and it's method.")
+    async def source(self, ctx: StellaContext, content: str = None, *, flags: SourceFlag):
         source_url = 'https://github.com/InterStella0/stella_bot'
         if not content:
             return await ctx.embed(title="here's the entire repo", description=source_url)
@@ -557,7 +561,7 @@ class Helpful(commands.Cog):
                 func(content)
         if module is None:
             return await ctx.maybe_reply(f"Method {content} not found.")
-        show_code = flags.pop("code", False)
+        show_code = flags.code
         if show_code:
             param = {"text": inspect.getsource(src), "width": 1900, "replace_whitespace": False}
             list_codeblock = [f"```py\n{cb}\n```" for cb in textwrap.wrap(**param)]
@@ -565,7 +569,7 @@ class Helpful(commands.Cog):
             await menu.start(ctx)
         else:
             lines, firstlineno = inspect.getsourcelines(src)
-            location = module.replace('.', '/') + '.py'
+            location = module.replace('.', '/') + '.py' # type: ignore
             url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
             await ctx.embed(title=f"Here's uh, {content}", description=f"[Click Here]({url})")
 

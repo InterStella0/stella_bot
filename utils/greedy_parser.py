@@ -17,7 +17,7 @@ from discord.ext.commands import ArgumentParsingError, CommandError
 from discord.ext.commands.errors import BadUnionArgument
 
 from utils.errors import ConsumerUnableToConvert
-from utils.flags import SFlagCommand, find_flag
+from utils.flags import find_flag
 from utils.useful import StellaContext, isiterable
 
 T = TypeVar('T')

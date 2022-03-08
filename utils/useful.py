@@ -299,7 +299,7 @@ class StellaContext(commands.Context):  # type: ignore[misc]
         # discord.py adds method aliases to PartialMessage which accept Message as self, wrong typing
         return message.add_reaction("<:checkmark:753619798021373974>")  # type: ignore[misc]
 
-    async def confirmation(self, content: str, delete_after: Optional[bool] = False, *,
+    async def confirmation(self, content: str, delete_after: bool = False, *,
                            to_respond: Optional[Union[discord.User, discord.Member]] = None,
                            **kwargs: Any) -> Optional[bool]:
         from utils.buttons import ConfirmView

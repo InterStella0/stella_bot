@@ -49,7 +49,7 @@ class ValidCog(CleanListGreedy):
         raise NotValidCog(argument)
 
 
-class IsBot(commands.Converter, metaclass=RenameClass, name="Bot"):
+class IsBot(commands.Converter[discord.Member], metaclass=RenameClass, name="Bot"):
     """Raises an error if the member is not a bot"""
     def __init__(self, is_bot: Optional[bool] = True, user_check: Optional[bool] = True,
                  dont_fetch: Optional[bool] = False):

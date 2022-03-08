@@ -3,7 +3,7 @@ import datetime
 import discord
 import matplotlib
 import io
-from typing import Union, Literal, TYPE_CHECKING
+from typing import Union, Literal, TYPE_CHECKING, Optional
 from utils import flags as flg
 from utils.greedy_parser import UntilFlag, command
 from utils.image_manipulation import get_majority_color, islight, create_graph, process_image, create_bar
@@ -36,6 +36,29 @@ class ElseConverter(commands.Converter):
         raise commands.CommandError("No valid else conversion.")
 
 
+class ColorFlag(commands.FlagConverter):
+    color: Optional[discord.Color] = flg.flag(
+        aliases=["colour", "C"],
+        help="Changes the graph's color depending on the hex given. "
+             "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.",
+        default=None
+    )
+
+
+class BotActivityFlag(ColorFlag):
+    time: Optional[TimeConvert] = flg.flag(
+        aliases=["T"],
+        help="Time given for the bot, this flag must be more than 2 days and less than 2 months. "
+             "Defaults to 2 days when not given.",
+        default=None
+    )
+    smooth: Optional[bool] = flg.flag(
+        aliases=["S"],
+        help="Makes the graph curvy, rather than a straight cut. Defaults to False.",
+        default=False
+    )
+
+
 class Stat(commands.Cog, name="Statistic"):
     """Statistic related commands"""
     def __init__(self, bot: StellaBot):
@@ -45,22 +68,15 @@ class Stat(commands.Cog, name="Statistic"):
              help="Creates a graph that represents the bot's usage in a server, which shows the command "
                   "invoke happening for a bot.")
     @commands.guild_only()
-    @flg.add_flag("--time", "-T", type=TimeConvert, 
-                  help="Time given for the bot, this flag must be more than 2 days and less than 2 months. "
-                       "Defaults to 2 days when not given.")
-    @flg.add_flag("--smooth", "-S", action="store_true", default=False,
-                  help="Makes the graph curvy, rather than a straight cut. Defaults to False.")
-    @flg.add_flag("--color", "--colour", "-C", type=discord.Color, default=None, 
-                  help="Changes the graph's color depending on the hex given. "
-                       "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
     @commands.cooldown(1, 30, commands.BucketType.user)
     async def botactivity(self, ctx: StellaContext, member: UntilFlag[Union[Literal["guild", "me"], IsBot]],
-                          **flags: Union[datetime.datetime, bool, discord.Color]):
+                          *, flags: BotActivityFlag):
         target = member
         if isinstance(target, str):
             target = await ElseConverter().convert(ctx, target)
 
         time_rn = datetime.datetime.utcnow()
+        flags = dict(flags)
         time_given = flags.get("time") or time_rn - datetime.timedelta(days=2)
         if isinstance(target, discord.Member):
             query = "SELECT * FROM commands_list WHERE guild_id=$1 AND bot_id=$2 AND time_used > $3"
@@ -119,11 +135,8 @@ class Stat(commands.Cog, name="Statistic"):
              help="Generate a bar graph for 10 most used command for a bot.")
     @commands.guild_only()
     @commands.cooldown(1, 30, commands.BucketType.user)
-    @flg.add_flag("--color", "--colour", "-C", type=discord.Color, default=None, 
-                  help="Changes the graph's color depending on the hex given. "
-                       "This defaults to the bot's avatar color, or if it's too dark, pink color, cause i like pink.")
     async def topcommands(self, ctx: StellaContext, member: UntilFlag[Union[Literal["guild", "me"], IsBot]],
-                          **flags: discord.Color):
+                          *, flags: ColorFlag):
         target = member
         if isinstance(target, discord.Member):
             query = "SELECT command, COUNT(command) AS usage FROM commands_list " \
@@ -157,7 +170,7 @@ class Stat(commands.Cog, name="Statistic"):
         asset = getattr(target, method)
         async with ctx.typing():
             avatar_bytes = io.BytesIO(await asset.read())
-            if not (color := flags.get("color")):
+            if not (color := flags.color):
                 color = major = await get_majority_color(avatar_bytes)
                 if not islight(*major.to_rgb()) or member == ctx.me:
                     color = discord.Color(ctx.bot.color)
