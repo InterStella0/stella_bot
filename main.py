@@ -222,13 +222,17 @@ class StellaBot(commands.Bot):
     @to_call.append
     def loading_cog(self) -> None:
         """Loads the cog"""
-        cogs = *(file[:-3] for file in os.listdir("cogs") if file.endswith(".py")), "jishaku"
+        exclude = "_", "."
+
+        cogs = [file for file in os.listdir("cogs") if not file.startswith(exclude)]
         for cog in cogs:
-            ext = "cogs." if cog != "jishaku" else ""
-            if error := call(self.load_extension, f"{ext}{cog}", ret=True):
-                print_exception('Ignoring exception while loading up {}:'.format(cog), error)
+            name = cog[:-3] if cog.endswith(".py") else cog
+            if error := call(self.load_extension, f"cogs.{name}", ret=True):
+                print_exception('Ignoring exception while loading up {}:'.format(name), error)
             else:
-                print(f"cog {cog} is loaded")
+                print(f"cog {name} is loaded")
+
+        bot.load_extension("jishaku")
 
     @to_call.append
     async def fill_bots(self) -> None:

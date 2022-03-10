@@ -619,7 +619,7 @@ class QueueWordle(QueueView):
         await self.message.edit(embed=self.embed)
 
 
-class LewdleCommandCog(commands.Cog):
+class WordleCommandCog(commands.Cog):
     def __init__(self, bot: StellaBot):
         self.bot = bot
         self.lewdle_query = "SELECT word FROM wordle_word WHERE tag='lewdle' AND LENGTH(word) = $1"
