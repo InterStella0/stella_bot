@@ -53,7 +53,7 @@ class ErrorHandler(commands.Cog):
             if embed := kwargs.get("embed"):
                 command = self.bot.get_command('report')
                 command_sig = f"{ctx.clean_prefix}{command.qualified_name} {command.signature}"
-                text = f"If you think this is an error. Report via {command_sig}"
+                text = f"If you think this is an error. Report via `{command_sig}`"
                 embed.set_footer(icon_url=self.bot.user.display_avatar, text=text)
             await ctx.reply(*args, delete_after=60, **kwargs)
             if ctx.channel.permissions_for(ctx.me).manage_messages:

@@ -482,7 +482,6 @@ class Myself(commands.Cog):
             ctx.done = True
 
 
-
 def setup(bot: StellaBot) -> None:
     cog = Myself(bot)
     for name in ("load", "unload", "reload"):
