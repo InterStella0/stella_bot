@@ -860,43 +860,6 @@ class FindBot(commands.Cog, name="Bots"):
         desk = f"Bot(s) with `{prefix}` as prefix\n{list_bot}"
         await ctx.embed(description=plural(desk, len(list_bot)))
 
-    # @commands.command(aliases=["ap", "aprefix", "allprefixes"],
-    #                   brief="Shows every bot's prefix in the server.",
-    #                   help="Shows a list of every single bot's prefix in a server.",
-    #                   cls=flg.SFlagCommand) Disabled for now until i have time
-    # Disabled until i optimize this, which is never
-    # @commands.guild_only()
-    # @flg.add_flag("--count", type=bool, default=False, action="store_true",
-    #               help="Create a rank of the highest prefix that is being use by bots. This flag accepts True or False, "
-    #                    "defaults to False if not stated.")
-    # @flg.add_flag("--reverse", type=bool, default=False, action="store_true",
-    #               help="Reverses the list. This flag accepts True or False, default to False if not stated.")
-    async def allprefix(self, ctx: StellaContext, **flags: bool):
-        if not (bots := await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE guild_id=$1", ctx.guild.id)):
-            return await ctx.embed(description="Looks like I don't have any data in this server on bot prefixes.")
-
-        attr = "count" if (count_mode := flags.pop("count", False)) else "prefix"
-        reverse = flags.pop("reverse", False)
-        bot_getter = operator.itemgetter("bot_id")
-
-        def mem(x):
-            return ctx.guild.get_member(x)
-
-        data = []
-        for bot in filter(lambda b: mem(bot_getter(b)), bots):
-            bot_id = bot_getter(bot)
-            data.append(await BotPrefixes.convert(ctx, str(bot_id)))
-
-        if count_mode:
-            PrefixCount = collections.namedtuple("PrefixCount", "prefix count")
-            prefixes = itertools.chain.from_iterable(map(lambda x: x.all_raw_prefixes, data))
-            count_prefixes = collections.Counter(prefixes)
-            data = [PrefixCount(*a) for a in count_prefixes.items()]
-
-        data.sort(key=lambda x: getattr(x, attr), reverse=count_mode is not reverse)
-        menu = InteractionPages(source=AllPrefixes(data, count_mode))
-        await menu.start(ctx)
-
     @commands.command(aliases=["bot_use", "bu", "botusage", "botuses"],
                       brief="Show's how many command calls for a bot.",
                       help="Show's how many command calls for a given bot. This works by counting how many times "
