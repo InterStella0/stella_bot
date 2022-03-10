@@ -15,6 +15,9 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, Set, Tuple, Typ
 from discord.ext import commands
 from discord.ext.commands import ArgumentParsingError, CommandError
 from discord.ext.commands.errors import BadUnionArgument
+from discord.ext.commands.view import StringView
+from discord.utils import MISSING
+from typing_extensions import Self
 
 from utils.errors import ConsumerUnableToConvert
 from utils.flags import find_flag
@@ -362,3 +365,83 @@ def command(name: Optional[str] = None, *, bot: StellaBot = None, **attrs: Any) 
             bot.add_command(command)
         return command
     return decorator
+
+
+class Argument:
+    def __init__(self, *, name: str, type: Type[type]) -> None:
+        self.name = name
+        self.type = type
+
+
+class AlreadySet(commands.CommandError):
+    pass
+
+
+class UnfilledArguments(commands.CommandError):
+    def __init__(self, arguments) -> None:
+        *every, last = map(lambda v: v.name, arguments)
+        if every:
+            message = f"{', '.join(every)} and {last}"
+        else:
+            message = last
+        super().__init__(f"Unfilled argument for {message}")
+
+
+class _UnorderedArg(type):
+    __commands_args__ = typing.ClassVar[typing.Dict[str, Argument]]
+
+    def __new__(mcs, name, bases, attrs) -> Self:
+        arguments = attrs.get("__annotations__", {})
+        for key, anno in arguments.items():
+            arguments[key] = Argument(name=key, type=anno)
+
+        mcs.__commands_args__ = arguments
+        return super().__new__(mcs, name, bases, attrs)
+
+
+class UnorderedArgument(metaclass=_UnorderedArg):
+    @staticmethod
+    async def try_convert(cls: UnorderedArgument, ctx: StellaContext, argument: Argument, value: str) -> None:
+        converted = await commands.run_converters(ctx, argument.type, value, ctx.current_parameter)
+        name = argument.name
+        if getattr(cls, name, MISSING) is not MISSING:
+            raise AlreadySet(f'Conflicting values at "{name}".')
+
+        setattr(cls, name, converted)
+
+    @classmethod
+    async def convert(cls, ctx: StellaContext, argument: str) -> Self:
+        view = StringView(argument)
+        unordered = cls.__new__(cls)
+        converters = cls.__commands_args__.copy()
+        values = list(converters.values())
+
+        while not view.eof:
+            view.skip_ws()
+            argument = view.get_quoted_word()
+            to_remove = MISSING
+            for converter in values:
+                try:
+                    await cls.try_convert(unordered, ctx, converter, argument)
+                except AlreadySet as e:
+                    raise e from None
+                except commands.CommandError:
+                    pass  # ignored
+                else:
+                    to_remove = converter
+                    break
+
+            if to_remove is MISSING:
+                raise UnfilledArguments(values)
+
+            values.remove(to_remove)
+
+            if values and view.eof:
+                raise UnfilledArguments(values)
+
+            if not values and not view.eof:
+                break
+
+        return unordered
+
+
