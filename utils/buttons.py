@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 
 
 T = TypeVar("T")
-R = TypeVar("R")
 
 InteractionCallback = Callable[[discord.Interaction], Awaitable[None]]
 
