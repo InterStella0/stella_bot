@@ -178,7 +178,7 @@ class MenuViewBase(ViewIterationAuthor):
             await self.menu.show_page(0)
             self.__prepare = True
 
-    async def update(self, button: discord.Button, interaction: discord.Interaction, data: Iterable[Any]) -> None:
+    async def update(self, button: ui.Button, interaction: discord.Interaction, data: Iterable[Any]) -> None:
         """Updates the view and menu, this method replace dataset that is bound to the menu,
             and changes it to a new page_source with a new dataset."""
         if self.message is None:
@@ -194,7 +194,6 @@ class MenuViewBase(ViewIterationAuthor):
         """This method is responsible for adding reactions to the button for the menu to
             operate. This should only trigger once."""
         menu = self.menu
-        assert menu is not None
 
         if not menu._Menu__tasks:
             loop = menu.ctx.bot.loop
@@ -277,15 +276,13 @@ class QueueView(CallbackView):
                 await self.on_member_respond(member, interaction, self.State.denied)
                 break
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+    async def interaction_check(self, interaction: discord.Interaction) -> Optional[bool]:
         uid = getattr(interaction.user, "id", None)
         if uid in [u.id for u in self.respondents]:
             return True
 
         users = ", ".join(map(str, self.respondents))
         await interaction.response.send_message(f"Sorry, only {users} can respond to this prompt.", ephemeral=True)
-
-        return False
 
     async def on_stop(self) -> None:
         if self.message is None:
@@ -460,17 +457,17 @@ class PromptView(ViewAuthor):
                 message = await self.context.bot.wait_for("message", check=self.predicate, timeout=self.timeout)
             except asyncio.TimeoutError:
                 self.stop()
-
-            value = yield message
-            self.reset_timeout()
-            if value:
-                self.result = message
-                self.stop()
-                break
-            if value is False:
-                error = self.invalid_response()
-                await message.reply(error, delete_after=60)
-            yield
+            else:
+                value = yield message
+                self.reset_timeout()
+                if value:
+                    self.result = message
+                    self.stop()
+                    break
+                if value is False:
+                    error = self.invalid_response()
+                    await message.reply(error, delete_after=60)
+                yield
 
     @button(emoji="<:crossmark:753620331851284480>", label="Cancel", style=discord.ButtonStyle.danger)
     async def denied_action(self, button: ui.Button, interaction: discord.Interaction) -> None:
@@ -511,8 +508,6 @@ class InteractionPages(BaseView, MenuBase):
 
             await interaction.response.send_message("You can't fill up this modal.", ephemeral=True)
 
-            return False
-
         async def on_submit(self, interaction: discord.Interaction) -> None:
             value = self.page_number.value.strip()
             if value.isdigit() and 0 < (page := int(value)) <= self.max_pages:
@@ -520,7 +515,7 @@ class InteractionPages(BaseView, MenuBase):
                 self.view.reset_timeout()
                 return
 
-            async def send(content: str) -> Awaitable[None]:
+            def send(content: str) -> Awaitable[None]:
                 return interaction.response.send_message(content, ephemeral=True)
 
             if not value.isdigit():
@@ -559,28 +554,28 @@ class InteractionPages(BaseView, MenuBase):
         await coro(button, interaction)
 
     @button(emoji='<:before_fast_check:754948796139569224>', style=discord.ButtonStyle.blurple)
-    async def first_page(self, _: discord.Button, __: discord.Interaction) -> None:
+    async def first_page(self, _: ui.Button, __: discord.Interaction) -> None:
         await self.show_page(0)
 
     @button(emoji='<:before_check:754948796487565332>', style=discord.ButtonStyle.blurple)
-    async def before_page(self, _: discord.Button, __: discord.Interaction) -> None:
+    async def before_page(self, _: ui.Button, __: discord.Interaction) -> None:
         await self.show_checked_page(self.current_page - 1)
 
     @button(emoji='<:stop_check:754948796365930517>', style=discord.ButtonStyle.blurple)
-    async def stop_page(self, _: discord.Button, __: discord.Interaction) -> None:
+    async def stop_page(self, _: ui.Button, __: discord.Interaction) -> None:
         self.stop()
         await self.message.delete(delay=0)
 
     @button(emoji='<:next_check:754948796361736213>', style=discord.ButtonStyle.blurple)
-    async def next_page(self, _: discord.Button, __: discord.Interaction) -> None:
+    async def next_page(self, _: ui.Button, __: discord.Interaction) -> None:
         await self.show_checked_page(self.current_page + 1)
 
     @button(emoji='<:next_fast_check:754948796391227442>', style=discord.ButtonStyle.blurple)
-    async def last_page(self, _: discord.Button, __: discord.Interaction) -> None:
+    async def last_page(self, _: ui.Button, __: discord.Interaction) -> None:
         await self.show_page(self._source.get_max_pages() - 1)
 
     @button(label="Select Page", style=discord.ButtonStyle.gray, stay_active=True)
-    async def select_page(self, _: discord.Button, interaction: discord.Interaction) -> None:
+    async def select_page(self, _: ui.Button, interaction: discord.Interaction) -> None:
         await self.selecting_page(interaction)
 
     async def _get_kwargs_from_page(self, page: Any) -> Dict[str, Any]:
@@ -596,14 +591,14 @@ class InteractionPages(BaseView, MenuBase):
             b.disabled = any(
                 [
                     self.current_page == 0 and i < 2,
-                    self.current_page == self._source.get_max_pages() - 1 and i > 2 and not b.stay_active
+                    self.current_page == self._source.get_max_pages() - 1
+                        and i > 2 and not getattr(b, "stay_active", False)
                 ]
             )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Only allowing the context author to interact with the view"""
         ctx = self.ctx
-        assert ctx is not None
         author = ctx.author
         if await ctx.bot.is_owner(interaction.user):
             return True
@@ -630,10 +625,10 @@ class PersistentRespondView(ui.View):
         def __init__(self, ctx: StellaContext):
             super().__init__(ctx, delete_after=True)
 
-        async def confirmed(self, button: ui.Button, interaction: discord.Interaction) -> None:
+        async def confirmed(self, _: ui.Button, interaction: discord.Interaction) -> None:
             await interaction.response.send_message("Message has been sent.", ephemeral=True)
 
-        async def denied(self, button: ui.Button, interaction: discord.Interaction) -> None:
+        async def denied(self, _: ui.Button, interaction: discord.Interaction) -> None:
             msg = "Message was not sent, please click on Respond button again to respond."
             await interaction.response.send_message(msg, ephemeral=True)
 
@@ -706,7 +701,7 @@ class PersistentRespondView(ui.View):
         await msg.reply(embed=embed)
         await self.clean_up(message)
 
-    async def get_destination(self, interaction: discord.Integration, report_id: int) -> discord.User:
+    async def get_destination(self, interaction: discord.Interaction, report_id: int) -> discord.User:
         bot = self.bot
         stella = bot.stella
         if interaction.user == stella:
