@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 
-from typing import Any, AsyncIterator, Callable, Coroutine, Dict, Optional, Set, TypedDict
+from typing import Any, AsyncIterator, Callable, Coroutine, Dict, List, Optional, TypedDict
 
 import aiohttp
 
@@ -42,7 +42,7 @@ class StellaClient(ipc.Client):
         # callbacks are subscribed to event name and message id
         self._callbacks: Dict[str, Dict[str, asyncio.Future[IPCData]]] = {}
         # event handlers are subscribed to event name
-        self._event_handlers: Dict[str, Set[_HandlerType]] = {}
+        self._event_handlers: Dict[str, List[_HandlerType]] = []
         self._stream_reader_task: Optional[asyncio.Task[None]] = None
 
     def __call__(self, bot_id: int) -> None:
@@ -73,8 +73,8 @@ class StellaClient(ipc.Client):
 
     def listen(self) -> Callable[[_HandlerType], _HandlerType]:
         def inner(handler: _HandlerType) -> _HandlerType:
-            event_handlers = self._event_handlers.setdefault(handler.__name__, set())
-            event_handlers.add(handler)
+            event_handlers = self._event_handlers.setdefault(handler.__name__, [])
+            event_handlers.append(handler)
 
             return handler
         return inner
@@ -124,6 +124,7 @@ class StellaClient(ipc.Client):
             recv = await self.websocket.receive()
             if recv.type == aiohttp.WSMsgType.PING:
                 await self.websocket.ping()
+                continue
             elif recv.type == aiohttp.WSMsgType.PONG:
                 continue
             elif recv.type == aiohttp.WSMsgType.CLOSED:
@@ -131,6 +132,7 @@ class StellaClient(ipc.Client):
                 await self.session.close()
                 await asyncio.sleep(5)
                 await self.init_sock()
+                continue
             else:
                 yield recv
 
@@ -139,7 +141,7 @@ class StellaClient(ipc.Client):
             try:
                 await self._process_message(ws_message.json())
             except Exception as e:
-                print_exception("Ignoring error in gateway:", e, _print=True)
+                print_exception("Ignoring error in gateway:", e)
 
     async def _process_message(self, message: _RecvMessagePayload) -> None:
         event = f"on_{message['endpoint']}"
