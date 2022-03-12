@@ -10,6 +10,7 @@ import functools
 import io
 import itertools
 import operator
+import random
 import re
 import textwrap
 import time
@@ -42,6 +43,28 @@ if TYPE_CHECKING:
 ReactRespond = collections.namedtuple("ReactRespond", "created_at author reference")
 DISCORD_PY = 336642139381301249
 T = TypeVar("T")
+
+
+class DeletedUser:
+    """A placeholder for cases when fetch_user fails"""
+
+    __slots__ = (
+        "id",
+        "created_at",
+        "display_avatar",
+    )
+
+    def __init__(self, user_id: int):
+        self.id = user_id
+        self.created_at = discord.utils.snowflake_time(user_id)
+        self.display_avatar = f"{discord.Asset.BASE}/embed/avatars/" \
+                              f"{random.randrange(len(discord.enums.DefaultAvatar))}.png"
+
+    def __str__(self) -> str:
+        return "Deleted User#0000"
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__} id={self.id}>"
 
 
 class NoPendingBots(ErrorNoSignature):
@@ -278,8 +301,16 @@ async def bot_pending_list(_, menu: Any, entry: Dict[str, Union[datetime.datetim
     stellabot = menu.ctx.bot
     bot_id = entry["bot_id"]
     if not (bot := menu.cached_bots.get(bot_id)):
-        bot = stellabot.get_user(bot_id) or await stellabot.fetch_user(bot_id)
-        menu.cached_bots.update({bot_id: bot})
+        if not (bot := stellabot.get_user(bot_id)):
+            try:
+                bot = await stellabot.fetch_user(bot_id)
+            except discord.NotFound:
+                bot = DeletedUser(bot_id)  # type: ignore[arg-type]
+            finally:
+                # since this cache is only ever used here, it's safe to put DeletedUser objects there
+                # if it ever gets used anywhere else, care should be taken
+                menu.cached_bots[bot_id] = bot
+
     fields = (("Requested by", stellabot.get_user(entry["author_id"]) or "idk really"),
               ("Reason", textwrap.shorten(entry["reason"], width=1000, placeholder="...")),
               ("Created at", aware_utc(bot.created_at)),
