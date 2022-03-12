@@ -63,6 +63,9 @@ class DeletedUser:
     def __str__(self) -> str:
         return "Deleted User#0000"
 
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__} id={self.id}>"
+
 
 class NoPendingBots(ErrorNoSignature):
     def __init__(self) -> None:
@@ -303,10 +306,10 @@ async def bot_pending_list(_, menu: Any, entry: Dict[str, Union[datetime.datetim
                 bot = await stellabot.fetch_user(bot_id)
             except discord.NotFound:
                 bot = DeletedUser(bot_id)  # type: ignore[arg-type]
-
-            # since this cache is only ever used here, it's safe to put DeletedUser objects there
-            # if it ever gets used anywhere else, care should be taken
-            menu.cached_bots[bot_id] = bot
+            finally:
+                # since this cache is only ever used here, it's safe to put DeletedUser objects there
+                # if it ever gets used anywhere else, care should be taken
+                menu.cached_bots[bot_id] = bot
 
     fields = (("Requested by", stellabot.get_user(entry["author_id"]) or "idk really"),
               ("Reason", textwrap.shorten(entry["reason"], width=1000, placeholder="...")),
