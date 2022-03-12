@@ -23,13 +23,19 @@ MaybeCoro = Union[T, Coroutine[Any, Any, T]]
 
 
 def is_discordpy(silent: bool = False) -> Callable[[T], T]:
-    """A check that only allows certain command to be only be invoked in discord.py server. Otherwise it is ignored."""
+    """
+    A check that only allows certain command to be only be invoked in discord.py server. Otherwise it is ignored.
+    Bypassed by owner.
+    """
     async def predicate(ctx: commands.Context) -> bool:
         if ctx.guild and ctx.guild.id == DISCORD_PY:
             return True
+        # for easier debugging
+        if await ctx.bot.is_owner(ctx.author):
+            return True
         if silent:
             return False
-        raise NotInDpy()  # type: ignore[no-untyped-call]
+        raise NotInDpy()
 
     return commands.check(predicate)
 
