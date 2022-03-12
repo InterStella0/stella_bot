@@ -42,7 +42,7 @@ class StellaClient(ipc.Client):
         # callbacks are subscribed to event name and message id
         self._callbacks: Dict[str, Dict[str, asyncio.Future[IPCData]]] = {}
         # event handlers are subscribed to event name
-        self._event_handlers: Dict[str, List[_HandlerType]] = []
+        self._event_handlers: Dict[str, List[_HandlerType]] = {}
         self._stream_reader_task: Optional[asyncio.Task[None]] = None
 
     def __call__(self, bot_id: int) -> None:
