@@ -249,7 +249,7 @@ class QueueView(CallbackView):
         return self.accepted_respondents
 
     async def on_member_respond(self, member: Union[discord.Member, discord.User],
-                                interaction: discord.Interaction, response: State):
+                                interaction: discord.Interaction, response: State) -> None:
         pass
 
     async def handle_callback(self, callback: InteractionCallback, _: ui.Button,
@@ -300,7 +300,6 @@ class QueueView(CallbackView):
         super().stop()
 
 
-
 class ConfirmView(CallbackView):
     """ConfirmView literally handles confirmation where it asks the user at start() and returns a Tribool"""
     def __init__(self, ctx: StellaContext, *, to_respond: Optional[Union[discord.User, discord.Member]] = None,
@@ -313,7 +312,7 @@ class ConfirmView(CallbackView):
         self.delete_after = delete_after
         self.message_error = message_error or "I'm waiting for your confirm response. You can't run another command."
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+    async def interaction_check(self, interaction: discord.Interaction) -> Optional[bool]:
         if self.to_respond.id == getattr(interaction.user, "id", None):
             return True
 
@@ -322,9 +321,8 @@ class ConfirmView(CallbackView):
             ephemeral=True,
         )
 
-        return False
-
-    async def handle_callback(self, callback: InteractionCallback, _, interaction: discord.Interaction) -> None:
+    async def handle_callback(self, callback: InteractionCallback, _: ui.Button,
+                              interaction: discord.Interaction) -> None:
         self.result = await callback(interaction)
         if not interaction.response.is_done():
             await interaction.response.defer()
@@ -450,7 +448,7 @@ class PromptView(ViewAuthor):
         context = self.context
         return message.author == context.author and message.channel == context.channel
 
-    async def wait_for_message(self) -> AsyncGenerator[bool, discord.Message]:
+    async def wait_for_message(self) -> AsyncGenerator[Optional[discord.Message], Optional[bool]]:
         while True:
             try:
                 message = await self.context.bot.wait_for("message", check=self.predicate, timeout=self.timeout)
@@ -466,7 +464,7 @@ class PromptView(ViewAuthor):
                 if value is False:
                     error = self.invalid_response()
                     await message.reply(error, delete_after=60)
-                yield
+                yield None
 
     @button(emoji="<:crossmark:753620331851284480>", label="Cancel", style=discord.ButtonStyle.danger)
     async def denied_action(self, button: ui.Button, interaction: discord.Interaction) -> None:
