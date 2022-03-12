@@ -32,8 +32,8 @@ InteractionCallback = Callable[[discord.Interaction], Awaitable[None]]
 
 
 class BaseButton(ui.Button):
-    def __init__(self, *, style: discord.ButtonStyle, selected: Union[int, str] = "", row: Optional[int] = None,
-                 label: Optional[str] = None, stay_active: bool = False, **kwargs: Any):
+    def __init__(self, *, style: Optional[discord.ButtonStyle], selected: Union[int, str] = "",
+                 row: Optional[int] = None, label: Optional[str] = None, stay_active: bool = False, **kwargs: Any):
         super().__init__(style=style, label=label or selected, row=row, **kwargs)
         self.selected = selected
         self.stay_active = stay_active
@@ -99,7 +99,7 @@ class ViewButtonIteration(BaseView):
     """A BaseView class that creates arrays of buttons, depending on the data type given on 'args',
         it will accept `mapper` as a dataset"""
     def __init__(self, *args: Any, mapper: Optional[Dict[str, Any]] = None,
-                 button: Type[BaseButton] = BaseButton, style: discord.ButtonStyle):
+                 button: Type[BaseButton] = BaseButton, style: Optional[discord.ButtonStyle] = None):
         super().__init__()
         self.mapper = mapper
         for c, button_row in enumerate(args):
@@ -464,7 +464,7 @@ class PromptView(ViewAuthor):
                 if value is False:
                     error = self.invalid_response()
                     await message.reply(error, delete_after=60)
-                yield None
+                yield
 
     @button(emoji="<:crossmark:753620331851284480>", label="Cancel", style=discord.ButtonStyle.danger)
     async def denied_action(self, button: ui.Button, interaction: discord.Interaction) -> None:
