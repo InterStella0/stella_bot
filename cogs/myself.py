@@ -9,7 +9,7 @@ import textwrap
 import time
 import traceback
 from typing import (TYPE_CHECKING, Any, Coroutine, Dict, Generator, List,
-                    Optional, Tuple, Union)
+                    Optional, Tuple, Union, Literal)
 
 import discord
 import tabulate
@@ -24,7 +24,7 @@ from utils.greedy_parser import GreedyParser, Separator, UntilFlag
 from utils.new_converters import (CodeblockConverter, DatetimeConverter, IsBot,
                                   JumpValidator, ValidCog)
 from utils.useful import (StellaContext, StellaEmbed, aware_utc, call,
-                          empty_page_format, print_exception, text_chunker)
+                          empty_page_format, print_exception, text_chunker, try_call)
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -293,16 +293,17 @@ class Myself(commands.Cog):
         self.bot.dispatch('message', message)
         await ctx.confirmed()
 
-    async def cogs_handler(self, ctx: StellaContext, extensions: ValidCog) -> None:
-        method = ctx.command.name
-
-        def do_cog(exts: str) -> Any:
+    async def cogs_handler(self, ctx: StellaContext, extensions: ValidCog,
+                           method: Literal["load", "unload", "reload"]) -> None:
+        async def do_cog(exts: str) -> Any:
             func = getattr(self.bot, f"{method}_extension")
-            return func(f"cogs.{exts}")
+            return await func(f"cogs.{exts}")
 
-        outputs = [call(do_cog, ext, ret=True) or f"cogs.{ext} is {method}ed"
-                   for ext in extensions]
-        await ctx.embed(description="\n".join(str(x) for x in outputs))
+        outputs = await asyncio.gather(*[
+            try_call(do_cog, ext, ret=True) or f"cogs.{ext} is {method}ed"
+            for ext in extensions
+        ])
+        await ctx.embed(description="\n".join(map(str, outputs)))
 
     @greedy_parser.command()
     async def sql(self, ctx: StellaContext, query: UntilFlag[CodeblockConverter], *, flags: SQLFlag):
@@ -481,13 +482,18 @@ class Myself(commands.Cog):
         if not ctx.done:
             ctx.done = True
 
+    @commands.command(name="load", aliases=["cload", "loads"], cls=GreedyParser)
+    async def _cog_load(self, ctx, extension: Separator[ValidCog]):
+        await self.cogs_handler(ctx, extension, "load")
+
+    @commands.command(name="unload", aliases=["cunload", "unloads"], cls=GreedyParser)
+    async def _cog_unload(self, ctx, extension: Separator[ValidCog]):
+        await self.cogs_handler(ctx, extension, "unload")
+
+    @commands.command(name="reload", aliases=["creload", "reloads"], cls=GreedyParser)
+    async def _cog_reload(self, ctx, extension: Separator[ValidCog]):
+        await self.cogs_handler(ctx, extension, "reload")
+
 
 async def setup(bot: StellaBot) -> None:
-    cog = Myself(bot)
-    for name in ("load", "unload", "reload"):
-        @commands.command(name=name, aliases=["c" + name, name + "s"], cls=GreedyParser)
-        async def _cog_load(self, ctx, extension: Separator[ValidCog]):
-            await self.cogs_handler(ctx, extension)
-
-        cog.__cog_commands__ += (_cog_load,)
-    await bot.add_cog(cog)
+    await bot.add_cog(Myself(bot))

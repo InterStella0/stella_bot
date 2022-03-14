@@ -335,6 +335,7 @@ class StellaBot(commands.Bot):
     def starter(self):
         asyncio.run(self.main())
 
+
 intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions', 'message_content')}
 intents = discord.Intents(**intent_data)
 with open("d_json/bot_var.json") as states_bytes:
