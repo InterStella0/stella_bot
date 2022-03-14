@@ -21,7 +21,7 @@ def flag(*, name: str = MISSING, aliases: List[str] = MISSING, default=MISSING,
 
 def find_flag(command: commands.Command) -> Optional[commands.FlagConverter]:
     """Helper function to find the flag that is in a command"""
-    last = [*command.params.values()][-1]
+    *_, last = [*command.params.values()]
     if last.kind is last.KEYWORD_ONLY:
         ann = last.annotation
         if inspect.isclass(ann):
