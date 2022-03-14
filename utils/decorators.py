@@ -107,11 +107,10 @@ _MaybeEventLoop = Optional[asyncio.AbstractEventLoop]
 
 def in_executor(loop: _MaybeEventLoop = None) -> Callable[[Callable[P, T]], Callable[P, Awaitable[T]]]:
     """Makes a sync blocking function unblocking"""
-    loop_ = loop or asyncio.get_event_loop()
-
     def inner_function(func: Callable[P, T]) -> Callable[P, Awaitable[T]]:
         @functools.wraps(func)
         def function(*args: P.args, **kwargs: P.kwargs) -> Awaitable[T]:
+            loop_ = loop or asyncio.get_event_loop()
             partial = functools.partial(func, *args, **kwargs)
             return loop_.run_in_executor(None, partial)
         return function

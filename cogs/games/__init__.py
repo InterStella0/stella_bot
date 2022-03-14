@@ -11,5 +11,5 @@ class GamesCog(WordleCommandCog, name="Games"):
     """Contains games that stella made."""
 
 
-def setup(bot: StellaBot):
-    bot.add_cog(GamesCog(bot))
+async def setup(bot: StellaBot):
+    await bot.add_cog(GamesCog(bot))

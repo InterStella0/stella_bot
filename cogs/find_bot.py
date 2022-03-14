@@ -1504,5 +1504,5 @@ class FindBot(commands.Cog, name="Bots"):
         await self.bot.pool_pg.execute("DELETE FROM pending_bots WHERE requested_at <= $1", far_time)
 
 
-def setup(bot: StellaBot) -> None:
-    bot.add_cog(FindBot(bot))
+async def setup(bot: StellaBot) -> None:
+    await bot.add_cog(FindBot(bot))

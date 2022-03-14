@@ -772,5 +772,5 @@ class Helpful(commands.Cog):
         self.bot.help_command = self._default_help_command
 
 
-def setup(bot: StellaBot) -> None:
-    bot.add_cog(Helpful(bot))
+async def setup(bot: StellaBot) -> None:
+    await bot.add_cog(Helpful(bot))

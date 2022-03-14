@@ -178,5 +178,5 @@ class Useful(commands.Cog):
         await ctx.maybe_reply(f"```py\n{content}\n```")
 
 
-def setup(bot: StellaBot) -> None:
-    bot.add_cog(Useful(bot))
+async def setup(bot: StellaBot) -> None:
+    await bot.add_cog(Useful(bot))

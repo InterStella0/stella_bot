@@ -193,5 +193,5 @@ class ErrorHandler(commands.Cog):
         return embed
 
 
-def setup(bot: StellaBot) -> None:
-    bot.add_cog(ErrorHandler(bot))
+async def setup(bot: StellaBot) -> None:
+    await bot.add_cog(ErrorHandler(bot))

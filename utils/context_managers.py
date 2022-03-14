@@ -13,8 +13,8 @@ from utils.errors import UserLocked
 
 class BreakableTyping(Typing):
     def __init__(self, messageable: discord.abc.Messageable, /, *, limit: Optional[int] = None) -> None:
+        super().__init__(messageable)
         self.loop = messageable._state.loop
-        self.messageable = messageable
         self.limit = limit
 
     async def cancel_typing(self):
@@ -26,8 +26,8 @@ class BreakableTyping(Typing):
         for t in itertools.chain.from_iterable(values):
             t.cancel()
 
-    def __enter__(self):
-        super().__enter__()
+    async def __aenter__(self):
+        await super().__aenter__()
         if self.limit is not None:
             self.loop.create_task(self.cancel_typing())
         return self

@@ -482,7 +482,7 @@ class Myself(commands.Cog):
             ctx.done = True
 
 
-def setup(bot: StellaBot) -> None:
+async def setup(bot: StellaBot) -> None:
     cog = Myself(bot)
     for name in ("load", "unload", "reload"):
         @commands.command(name=name, aliases=["c" + name, name + "s"], cls=GreedyParser)
@@ -490,4 +490,4 @@ def setup(bot: StellaBot) -> None:
             await self.cogs_handler(ctx, extension)
 
         cog.__cog_commands__ += (_cog_load,)
-    bot.add_cog(cog)
+    await bot.add_cog(cog)

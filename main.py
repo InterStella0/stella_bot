@@ -199,6 +199,9 @@ class StellaBot(commands.Bot):
         """Gets the error channel for the bot to log."""
         return self.get_guild(self.bot_guild_id).get_channel(self.error_channel_id)
 
+    async def setup_hook(self) -> None:
+        self.loop.create_task(self.after_ready())
+
     async def after_ready(self):
         await self.wait_until_ready()
         self.add_view(PersistentRespondView(self))
@@ -220,19 +223,21 @@ class StellaBot(commands.Bot):
             print("Server connected.")
 
     @to_call.append
-    def loading_cog(self) -> None:
+    async def loading_cog(self) -> None:
         """Loads the cog"""
         exclude = "_", "."
 
         cogs = [file for file in os.listdir("cogs") if not file.startswith(exclude)]
         for cog in cogs:
             name = cog[:-3] if cog.endswith(".py") else cog
-            if error := call(self.load_extension, f"cogs.{name}", ret=True):
-                print_exception('Ignoring exception while loading up {}:'.format(name), error)
+            try:
+                await self.load_extension(f"cogs.{name}")
+            except Exception as e:
+                print_exception('Ignoring exception while loading up {}:'.format(name), e)
             else:
                 print(f"cog {name} is loaded")
 
-        bot.load_extension("jishaku")
+        await bot.load_extension("jishaku")
 
     @to_call.append
     async def fill_bots(self) -> None:
@@ -305,26 +310,30 @@ class StellaBot(commands.Bot):
             await ctx.trigger_typing()
         await self.invoke(ctx)
 
-    def starter(self) -> None:
+    async def main(self) -> None:
         """Starts the bot properly"""
-        try:
+        async with self:
             print("Connecting to database...")
             start = time.time()
-            pool_pg = self.loop.run_until_complete(asyncpg.create_pool(
-                database=self.db,
-                user=self.user_db,
-                password=self.pass_db)
-            )
-        except Exception as e:
-            print_exception("Could not connect to database:", e)
-        else:
-            self.uptime = datetime.datetime.utcnow()
-            self.pool_pg = pool_pg
-            print(f"Connected to the database ({time.time() - start})s")
-            self.loop.run_until_complete(self.after_db())
-            self.loop.create_task(self.after_ready())
-            self.run(self.token)
+            try:
+                pool_pg = await asyncpg.create_pool(
+                    database=self.db,
+                    user=self.user_db,
+                    password=self.pass_db
+                )
+            except Exception as e:
+                print_exception("Could not connect to database:", e)
+            else:
+                self.uptime = datetime.datetime.utcnow()
+                self.pool_pg = pool_pg
+                print(f"Connected to the database ({time.time() - start})s")
+                await self.after_db()
+                with contextlib.suppress(KeyboardInterrupt):
+                    await self.start(self.token)
+        await self.pool_pg.close()
 
+    def starter(self):
+        asyncio.run(self.main())
 
 intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions', 'message_content')}
 intents = discord.Intents(**intent_data)

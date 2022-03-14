@@ -187,5 +187,5 @@ class Stat(commands.Cog, name="Statistic"):
         to_send.close()
 
 
-def setup(bot: StellaBot) -> None:
-    bot.add_cog(Stat(bot))
+async def setup(bot: StellaBot) -> None:
+    await bot.add_cog(Stat(bot))
