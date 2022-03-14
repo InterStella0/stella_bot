@@ -25,6 +25,7 @@ from utils import flags as flg
 from utils.buttons import BaseView, QueueView
 from utils.decorators import in_executor
 from utils.greedy_parser import GreedyParser, Separator
+from utils.new_converters import StateConverter, State
 from utils.useful import StellaContext, StellaEmbed, plural, aware_utc
 
 if TYPE_CHECKING:
@@ -443,12 +444,15 @@ class WordleFlag(commands.FlagConverter):
     )
 
 
-class WordleTags(commands.Converter[str]):
-    def __init__(self, *, existing: bool = True, author=False):
-        self.existing = existing
-        self.author = author
+class WordleTags(StateConverter):
+    @classmethod
+    def _default_state(cls) -> None:
+        cls.existing = True
+        cls.author = False
 
     async def convert(self, ctx: StellaContext, argument: str) -> str:
+        print("exist", self.existing)
+        print("author", self.author)
         argument = argument.casefold()
         if not 3 < len(argument) < 100:
             raise commands.CommandError("Tag length must be between 3 to 100 characters")
@@ -576,7 +580,7 @@ class LimitWordleMember(commands.MemberConverter):
         return member
 
     @classmethod
-    async def after_greedy(cls, ctx: StellaContext, converted: List[discord.Member]):
+    async def after_greedy(cls, _: StellaContext, converted: List[discord.Member]):
         checked = []
         for member in converted:
             if member in checked:
@@ -652,7 +656,7 @@ class WordleCommandCog(commands.Cog):
                          "dictionary.")
     async def wordle(self, ctx: StellaContext, tag: Optional[WordleTags] = "wordle", *, flags: WordleFlag):
         query = "SELECT word FROM wordle_word WHERE tag=$1 AND LENGTH(word)=$2"
-        results = [r[0] for r in await self.bot.pool_pg.fetch(query, tag, flags.word_count)]
+        results = [r['word'] for r in await self.bot.pool_pg.fetch(query, tag, flags.word_count)]
 
         if not results:
             raise commands.CommandError(f"Looks like `{tag}` does not have a dictionary for {flags.word_count} word count.")
@@ -664,7 +668,7 @@ class WordleCommandCog(commands.Cog):
                     brief="Create your own tag for a custom wordle game.",
                     help="Create a wordle tag which will contain your dictionary that you can used in `wordle <tag>`"
                          "command.")
-    async def wordle_create(self, ctx: StellaContext, tag: WordleTags(existing=False), *, description: str):
+    async def wordle_create(self, ctx: StellaContext, tag: WordleTags[State(existing=False)], *, description: str):
         query = "INSERT INTO wordle_tag VALUES($1, $2, 0, now() at time zone 'utc', $3)"
         await self.bot.pool_pg.execute(query, tag, ctx.author.id, description)
         await ctx.confirmed()
@@ -687,7 +691,7 @@ class WordleCommandCog(commands.Cog):
                     brief="Add a new word into your tag dictionary.",
                     help="Add a new word into your tag dictionary. This can take a json file which should contain an "
                          "array of strings to automatically inserted into the database. You can submit up to 1k words.")
-    async def wordle_insert(self, ctx: StellaContext, tag: WordleTags(author=True), words: Greedy[str.upper]):
+    async def wordle_insert(self, ctx: StellaContext, tag: WordleTags[State(author=True)], words: Greedy[str.upper]):
         if ctx.message.attachments:
             attachment: discord.Attachment = ctx.message.attachments[0]
             words_attachment = json.load(io.BytesIO(await attachment.read()))

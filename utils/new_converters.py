@@ -376,13 +376,30 @@ class State:
         self.kwargs: Dict[Any] = kwargs
 
 
-class BaseConverter(commands.Converter):
+class StateConverter(commands.Converter):
     """This class should be subclassed by classes that requires State to be used."""
-    def __class_getitem__(cls, item: State) -> BaseConverter:
+    __default_set__ = False
+
+    def __init__(self):
+        self._set_default(type(self))
+
+    @staticmethod
+    def _set_default(cls):
+        if not cls.__default_set__:
+            cls.__default_set__ = True
+            cls._default_state()
+
+    @classmethod
+    def _default_state(cls) -> None:
+        pass
+
+    def __class_getitem__(cls, item: State) -> StateConverter:
         if not isinstance(item, State):
             return None
 
         ncs = type(cls.__name__, tuple(cls.__subclasses__()), dict(cls.__dict__))
+        ncs.__default_set__ = False
+        cls._set_default(ncs)
         for key, value in item.kwargs.items():
             setattr(ncs, key, value)
         return ncs
