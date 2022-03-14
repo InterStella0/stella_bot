@@ -9,7 +9,7 @@ import datetime
 import humanize
 import numpy as np
 from collections import namedtuple, Counter
-from typing import Any, List, Optional, Union, Tuple, Generator, TypeVar
+from typing import Any, List, Optional, Union, Tuple, Generator, TypeVar, ClassVar, Dict
 
 from discord.ext.commands.view import StringView
 from jishaku.codeblocks import Codeblock, codeblock_converter
@@ -368,3 +368,21 @@ class UnorderedArgument(metaclass=_UnorderedArg):
 
         return unordered
 
+
+class State:
+    """The purpose of this class is to pass state without instanting a class converter. This is to avoid if typing module
+    are used in a command extension typehint. They do not allow instance in the class_getitem."""
+    def __init__(self, **kwargs):
+        self.kwargs: Dict[Any] = kwargs
+
+
+class BaseConverter(commands.Converter):
+    """This class should be subclassed by classes that requires State to be used."""
+    def __class_getitem__(cls, item: State) -> BaseConverter:
+        if not isinstance(item, State):
+            return None
+
+        ncs = type(cls.__name__, tuple(cls.__subclasses__()), dict(cls.__dict__))
+        for key, value in item.kwargs.items():
+            setattr(ncs, key, value)
+        return ncs
