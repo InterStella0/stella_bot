@@ -9,7 +9,7 @@ import re
 import time
 
 from os.path import dirname, join
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 import asyncpg
 import discord
@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 from utils.buttons import PersistentRespondView
 from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
-from utils.ipc import IPCData, StellaClient
+from utils.ipc import IPCData, StellaIPC
 from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
 from utils.useful import ListCall, StellaContext, call, count_source_lines, print_exception
 
@@ -36,39 +36,49 @@ to_call = ListCall()
 
 
 class StellaBot(commands.Bot):
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
+        # secrets
+        self.token = kwargs.pop("token")
+        self.user_db = kwargs.pop("user_db")
+        self.pass_db = kwargs.pop("pass_db")
+        self.db = kwargs.pop("db")
+
+        # clients
+        self.ipc_client = StellaIPC(
+            host=kwargs.pop("websocket_ip"),
+            secret_key=kwargs.pop("ipc_key"),
+            port=kwargs.pop("ipc_port")
+        )
+        self.git = GitHub(kwargs.pop("git_token"))
+        kweights = kwargs.pop("prefix_weights")
+        self.prefix_neural_network = PrefixNeuralNetwork.from_weight(*kweights.values())
+        self.derivative_prefix_neural = DerivativeNeuralNetwork(kwargs.pop("prefix_derivative"))
+
+        # configuration
         self.tester = kwargs.pop("tester", False)
         self.help_src = kwargs.pop("help_src", None)
-        self.db = kwargs.pop("db", None)
-        self.user_db = kwargs.pop("user_db", None)
-        self.pass_db = kwargs.pop("pass_db", None)
-        self.color = kwargs.pop("color", None)
-        self.websocket_IP = kwargs.pop("websocket_ip")
-        self.ipc_key = kwargs.pop("ipc_key")
-        self.ipc_port = kwargs.pop("ipc_port")
-        self.ipc_client = StellaClient(host=self.websocket_IP, secret_key=self.ipc_key, port=self.ipc_port)
-        self.git_token = kwargs.pop("git_token")
+        self.color = 0xffcccb
         self.error_channel_id = kwargs.pop("error_channel")
         self.bot_guild_id = kwargs.pop("bot_guild")
-        self.git = GitHub(self.git_token)
-        self.pool_pg = None
-        self.uptime = None
-        self.global_variable = None
-        self.all_bot_prefixes = {}
+        # main bot owner is kept separate for displaying in places like report context
+        owner_ids = kwargs.pop("owner_ids")
+        self._stella_id, *_ = owner_ids
+        self._default_prefix = kwargs.pop("default_prefix")
+        self._tester_prefix = kwargs.pop("tester_prefix", self._default_prefix)
+
+        # caches
         self.pending_bots = set()
         self.confirmed_bots = set()
-        self.token = kwargs.pop("token", None)
         self.blacklist = set()
+        self.all_bot_prefixes = {}
         self.existing_prefix = {}
         self.cached_context = collections.deque(maxlen=100)
         self.command_running = {}
         self.user_lock = {}
-        self._default_prefix = kwargs.pop("default_prefix")
-        self._tester_prefix = kwargs.pop("tester_prefix")
 
-        # main bot owner is kept separate
-        owner_ids = kwargs.pop("owner_ids")
-        self._stella_id, *_ = owner_ids
+        # placeholders
+        self.pool_pg = None
+        self.launch_time = None
 
         super().__init__(
             self.get_prefix,
@@ -76,10 +86,6 @@ class StellaBot(commands.Bot):
             strip_after_prefix=True,
             **kwargs,
         )
-
-        kweights = kwargs.pop("prefix_weights")
-        self.prefix_neural_network = PrefixNeuralNetwork.from_weight(*kweights.values())
-        self.derivative_prefix_neural = DerivativeNeuralNetwork(kwargs.pop("prefix_derivative"))
 
     @in_executor()
     def get_prefixes_dataset(self, data: List[List[Union[int, str]]]) -> np.array:
@@ -95,7 +101,7 @@ class StellaBot(commands.Bot):
         predicted = np.column_stack((inputs, result.flat[::]))
         return predicted
 
-    async def add_blacklist(self, snowflake_id, reason):
+    async def add_blacklist(self, snowflake_id: int, reason: str) -> None:
         timed = datetime.datetime.utcnow()
         values = (snowflake_id, reason, timed)
         await self.pool_pg.execute("INSERT INTO blacklist VALUES($1, $2, $3)", *values)
@@ -107,7 +113,7 @@ class StellaBot(commands.Bot):
         }
         await self.ipc_client.request("global_blacklist_id", **payload)
 
-    async def remove_blacklist(self, snowflake_id):
+    async def remove_blacklist(self, snowflake_id: int) -> None:
         await self.pool_pg.execute("DELETE FROM blacklist WHERE snowflake_id=$1", snowflake_id)
         self.blacklist.remove(snowflake_id)
         await self.ipc_client.request("global_unblacklist_id", snowflake_id=snowflake_id)
@@ -130,10 +136,10 @@ class StellaBot(commands.Bot):
         if not getattr(command._buckets, "_cooldown", None):
             command._buckets = commands.CooldownMapping.from_cooldown(1, 5, commands.BucketType.user)
 
-    def add_user_lock(self, lock: UserLock):
+    def add_user_lock(self, lock: UserLock) -> None:
         self.user_lock.update({lock.user.id: lock})
 
-    async def check_user_lock(self, user: Union[discord.Member, discord.User]):
+    async def check_user_lock(self, user: Union[discord.Member, discord.User]) -> None:
         if lock := self.user_lock.get(user.id):
             if lock.locked():
                 if isinstance(lock, UserLock):
@@ -142,7 +148,7 @@ class StellaBot(commands.Bot):
             else:
                 self.user_lock.pop(user.id, None)
 
-    async def running_command(self, ctx: StellaContext, **flags):
+    async def running_command(self, ctx: StellaContext, **flags: bool) -> None:
         dispatch = flags.pop("dispatch", True)
         self.cached_context.append(ctx)
         if dispatch:
@@ -168,7 +174,7 @@ class StellaBot(commands.Bot):
             ctx.running = False
             self.command_running.pop(ctx.message.id, None)
 
-    async def invoke(self, ctx: StellaContext, **flags) -> None:
+    async def invoke(self, ctx: StellaContext, **flags: bool) -> None:
         dispatch = flags.get("dispatch", True)
         if ctx.command is not None:
             run_in_task = flags.pop("in_task", True)
@@ -202,12 +208,12 @@ class StellaBot(commands.Bot):
     async def setup_hook(self) -> None:
         self.loop.create_task(self.after_ready())
 
-    async def after_ready(self):
+    async def after_ready(self) -> None:
         await self.wait_until_ready()
         self.add_view(PersistentRespondView(self))
         await self.greet_server()
 
-    async def greet_server(self):
+    async def greet_server(self) -> None:
         self.ipc_client(self.user.id)
         try:
             await self.ipc_client.subscribe()
@@ -222,7 +228,7 @@ class StellaBot(commands.Bot):
                     await message.edit(content=f"Restart lasted {time_taken}")
             print("Server connected.")
 
-    @to_call.append
+    @to_call.add
     async def loading_cog(self) -> None:
         """Loads the cog"""
         exclude = "_", "."
@@ -239,7 +245,7 @@ class StellaBot(commands.Bot):
 
         await bot.load_extension("jishaku")
 
-    @to_call.append
+    @to_call.add
     async def fill_bots(self) -> None:
         """Fills the pending/confirmed bots in discord.py"""
         for attr in "pending", "confirmed":
@@ -248,7 +254,7 @@ class StellaBot(commands.Bot):
 
         print("Bots list are now filled.")
 
-    @to_call.append
+    @to_call.add
     async def fill_blacklist(self) -> None:
         """Loading up the blacklisted users."""
         records = await self.pool_pg.fetch("SELECT snowflake_id FROM blacklist")
@@ -324,7 +330,7 @@ class StellaBot(commands.Bot):
             except Exception as e:
                 print_exception("Could not connect to database:", e)
             else:
-                self.uptime = datetime.datetime.utcnow()
+                self.launch_time = datetime.datetime.utcnow()
                 self.pool_pg = pool_pg
                 print(f"Connected to the database ({time.time() - start})s")
                 await self.after_db()
@@ -332,40 +338,40 @@ class StellaBot(commands.Bot):
                     await self.start(self.token)
         await self.pool_pg.close()
 
-    def starter(self):
+    def starter(self) -> None:
         asyncio.run(self.main())
 
 
 intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions', 'message_content')}
 intents = discord.Intents(**intent_data)
-with open("d_json/bot_var.json") as states_bytes:
-    states = json.load(states_bytes)
-bot_data = {
-    "token": states.get("TOKEN"),
-    "default_prefix": states.get("DEFAULT_PREFIX", "uwu "),
-    "tester_prefix": states.get("TESTER_PREFIX", "?uwu "),
-    "bot_guild": states.get("BOT_GUILD"),
-    "error_channel": states.get("ERROR_CHANNEL"),
-    "color": 0xffcccb,
-    "db": states.get("DATABASE"),
-    "user_db": states.get("USER"),
-    "pass_db": states.get("PASSWORD"),
-    "tester": states.get("TEST"),
-    "help_src": states.get("HELP_SRC"),
-    "ipc_port": states.get("IPC_PORT"),
-    "ipc_key": states.get("IPC_KEY"),
+with open("d_json/bot_var.json") as f:
+    config = json.load(f)
+
+bot_kwargs = {
+    "token": config["TOKEN"],
+    "user_db": config["USER"],
+    "pass_db": config["PASSWORD"],
+    "db": config["DATABASE"],
+    "websocket_ip": config["WEBSOCKET_IP"],
+    "ipc_port": config["IPC_PORT"],
+    "ipc_key": config["IPC_KEY"],
+    "git_token": config.get("GIT_TOKEN"),
+    "prefix_weights": config.get("PREFIX_WEIGHT"),
+    "prefix_derivative": config.get("PREFIX_DERIVATIVE_PATH"),
+    "tester": config.get("TEST"),
+    "help_src": config.get("HELP_SRC"),
+    "error_channel": config.get("ERROR_CHANNEL"),
+    "bot_guild": config.get("BOT_GUILD"),
+    "owner_ids": config["OWNER_IDS"],
+    "default_prefix": config.get("DEFAULT_PREFIX", "uwu "),
+    "tester_prefix": config.get("TESTER_PREFIX", "?uwu "),
     "intents": intents,
-    "owner_ids": states.get("OWNER_IDS"),
-    "websocket_ip": states.get("WEBSOCKET_IP"),
-    "prefix_weights": states.get("PREFIX_WEIGHT"),
-    "prefix_derivative": states.get("PREFIX_DERIVATIVE_PATH"),
-    "git_token": states.get("GIT_TOKEN"),
     "activity": discord.Activity(type=discord.ActivityType.listening, name="logged to my pc."),
     "description": "{}'s personal bot that is partially for the public. "
                    f"Written with only `{count_source_lines('.'):,}` lines. plz be nice"
 }
 
-bot = StellaBot(**bot_data)
+bot = StellaBot(**bot_kwargs)
 
 
 @bot.event

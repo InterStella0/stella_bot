@@ -20,6 +20,7 @@ import pytz
 
 from discord.ext import commands
 from discord.utils import maybe_coroutine
+from typing_extensions import ParamSpec
 
 from utils.context_managers import BreakableTyping
 from utils.decorators import in_executor, pages
@@ -33,7 +34,7 @@ async def try_call(method: Union[Awaitable[Any], Callable[..., Any]], *args: Any
        value.
     """
     try:
-        return await maybe_coroutine(method, *args, **kwargs)  # type: ignore[no-untyped-call]
+        return await maybe_coroutine(method, *args, **kwargs)
     except exception as e:
         return (None, e)[ret]
 
@@ -313,8 +314,8 @@ async def maybe_method(func: Union[Awaitable[Any], Callable[..., Any]], cls: Opt
                        *args: Any, **kwargs: Any) -> Any:
     """Pass the class if func is not a method."""
     if not inspect.ismethod(func):
-        return await maybe_coroutine(func, cls, *args, **kwargs)  # type: ignore[no-untyped-call]
-    return await maybe_coroutine(func, *args, **kwargs)  # type: ignore[no-untyped-call]
+        return await maybe_coroutine(func, cls, *args, **kwargs)
+    return await maybe_coroutine(func, *args, **kwargs)
 
 
 @pages()
@@ -323,14 +324,19 @@ def empty_page_format(_: Any, __: Any, entry: T) -> T:
     return entry
 
 
+P = ParamSpec("P")
+
+
 class ListCall(List[Any]):
     """Quick data structure for calling every element in the array regardless of awaitable or not"""
-    def append(self, rhs: Awaitable[Any]) -> None:
-        return super().append(rhs)
+    def add(self, rhs: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+        super().append(rhs)
+
+        return rhs
 
     def call(self, *args: Any, **kwargs: Any) -> asyncio.Future[List[Any]]:
         return asyncio.gather(
-            *(maybe_coroutine(func, *args, **kwargs) for func in self))  # type: ignore[no-untyped-call]
+            *(maybe_coroutine(func, *args, **kwargs) for func in self))
 
 
 def in_local(func: Callable[[], Any], target: Any) -> Any:
@@ -404,7 +410,7 @@ def islicechunk(sequence: Sequence[T], *, chunk: int = 1) -> Iterator[Sequence[T
             An iterable that got cut up given by chunk
      """
     end = 0
-    for i, x in enumerate(sequence):
+    for i in range(len(sequence)):
         if not i % chunk:
             end += chunk
             yield sequence[end - chunk: end]

@@ -35,7 +35,7 @@ class _SendMessagePayload(TypedDict):
 _HandlerType = Callable[[IPCData], Coroutine[Any, Any, Any]]
 
 
-class StellaClient(ipc.Client):
+class StellaIPC(ipc.Client):
     def __init__(self, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.bot_id = kwargs.pop("bot_id", None)

@@ -1,44 +1,43 @@
 from __future__ import annotations
+
 import contextlib
+import copy
+import datetime
 import inspect
+import itertools
 import json
-import os
 import re
-import traceback
+import textwrap
+
+from collections import namedtuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import discord
-import copy
 import humanize
-import datetime
-import textwrap
-import itertools
 
 from discord import ui
-from discord.ui import View
-from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
-from fuzzywuzzy import process
 from discord.ext import commands
-
-from utils.useful import StellaEmbed, plural, empty_page_format, unpack, StellaContext, aware_utc, text_chunker, \
-    in_executor
-from utils.decorators import pages, event_check
-from utils.errors import CantRun, BypassError
-from utils.parser import ReplReader, repl_wrap
-from utils.greedy_parser import UntilFlag, command, GreedyParser
-from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, PersistentRespondView, \
-    ButtonView, BaseView
-from utils.new_converters import CodeblockConverter
-from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMenuBase
-from utils import flags as flg
-from collections import namedtuple
+from discord.ui import View
+from fuzzywuzzy import process
 from jishaku.codeblocks import Codeblock
-from typing import Any, Tuple, List, Union, Optional, Dict, TYPE_CHECKING, Callable
+from pygit2 import GIT_SORT_TOPOLOGICAL, Repository
+
+from utils import flags as flg
+from utils.buttons import BaseButton, BaseView, ButtonView, InteractionPages, MenuViewBase, PersistentRespondView
+from utils.decorators import event_check, pages
+from utils.errors import BypassError, CantRun
+from utils.greedy_parser import GreedyParser, UntilFlag, command
+from utils.menus import HelpMenuBase, ListPageInteractionBase, MenuViewInteractionBase
+from utils.new_converters import CodeblockConverter
+from utils.parser import ReplReader, repl_wrap
+from utils.useful import (StellaContext, StellaEmbed, aware_utc, empty_page_format, in_executor, plural, text_chunker,
+                          unpack)
 
 if TYPE_CHECKING:
     from main import StellaBot
 
 CommandGroup = Union[commands.Command, commands.Group, GreedyParser]
-CogHelp = namedtuple("CogAmount", 'name commands emoji description')
+CogHelp = namedtuple("CogHelp", 'name commands emoji description')
 CommandHelp = namedtuple("CommandHelp", 'command brief command_obj')
 emoji_dict = {"Bots": '<:robot_mark:848257366587211798>',
               "Useful": '<:useful:848258928772776037>',
@@ -516,7 +515,7 @@ class Helpful(commands.Cog):
     @commands.command(aliases=["up"],
                       help="Shows the bot uptime from when it was started.")
     async def uptime(self, ctx: StellaContext):
-        c_uptime = datetime.datetime.utcnow() - self.bot.uptime
+        c_uptime = datetime.datetime.utcnow() - self.bot.launch_time
         await ctx.embed(
             title="Uptime",
             description=f"Current uptime: `{humanize.precisedelta(c_uptime)}`"
@@ -666,7 +665,7 @@ class Helpful(commands.Cog):
             view = ButtonView(ctx)
             await ctx.maybe_reply(f"```py\n{code}```", view=view, allowed_mentions=discord.AllowedMentions.none())
         else:
-            await ctx.maybe_reply(f"```py\nNo Output```")
+            await ctx.maybe_reply("```py\nNo Output```")
 
     @commands.command(help="Reports to the owner through the bot. Automatic blacklist if abuse.")
     @commands.cooldown(1, 60, commands.BucketType.user)
@@ -738,7 +737,7 @@ class Helpful(commands.Cog):
             return f"[`{c.hex[:6]}`] [{message}]({repo_link}) ({aware_utc(time, mode='R')})"
 
         embed.add_field(name="Recent Changes", value="\n".join(map(format_commit, iterator)), inline=False)
-        embed.add_field(name="Launch Time", value=f"{aware_utc(self.bot.uptime, mode='R')}")
+        embed.add_field(name="Launch Time", value=f"{aware_utc(self.bot.launch_time, mode='R')}")
         embed.add_field(name="Bot Ping", value=f"{self.bot.latency * 1000:.2f}ms")
         bots = sum(u.bot for u in self.bot.users)
         content = f"`{len(self.bot.guilds):,}` servers, `{len(self.bot.users) - bots:,}` users, `{bots:,}` bots"
