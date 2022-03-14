@@ -2,27 +2,44 @@
 
 # db
 asyncpg
+
 # config
 python-dotenv
+
 # image processing
 pillow
 numpy
 scipy
 matplotlib
+
 # discord
+# unmaintained
 discord-ext-ipc @ git+https://github.com/ext-creators/discord-ext-ipc@865947e9ac8bb019b456007faed423b00b658365
+# unmaintained
 discord-ext-menus @ git+https://github.com/Rapptz/discord-ext-menus@fbb8803779373357e274e1540b368365fd9d8074
-discord.py @ git+https://github.com/Rapptz/discord.py@a909c1ff069b1bdb332b7f3b01ef1c4b8a3a3a15
-jishaku
+# a lot of unreleased changes
+discord.py @ git+https://github.com/Rapptz/discord.py@934ab4151add79a2140c7084679b15b6c5eb6f91
+# async cog loading support
+jishaku @ git+https://github.com/Gorialis/jishaku@27284df50b19acdf729feac8162dd3cf104133b4
+
 # apis
+# unmaintained
 aiogithub @ git+https://github.com/reupen/aiogithub.git@7dab796756b36f6c2535e3fec2e5318853357d10
+
 # neural nets
 tensorflow
+
 # text/formatting utils
 humanize
 tabulate
+fuzzywuzzy[speedup]
+
 # date/time utils
 pytz
+
 # unsorted
 pygit2
-fuzzywuzzy[speedup]
+
+# speedups
+uvloop
+orjson
