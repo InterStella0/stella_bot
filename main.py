@@ -25,7 +25,7 @@ from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
 from utils.ipc import IPCData, StellaIPC
 from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
-from utils.useful import ListCall, StellaContext, call, count_source_lines, print_exception
+from utils.useful import ListCall, StellaContext, count_source_lines, print_exception
 
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
@@ -42,14 +42,14 @@ class StellaBot(commands.Bot):
         self.user_db = kwargs.pop("user_db")
         self.pass_db = kwargs.pop("pass_db")
         self.db = kwargs.pop("db")
+        self.websocket_ip = kwargs.pop("websocket_ip")
+        self.ipc_key = kwargs.pop("ipc_key")
+        self.ipc_port = kwargs.pop("ipc_port")
+        self.git_token = kwargs.pop("git_token")
 
         # clients
-        self.ipc_client = StellaIPC(
-            host=kwargs.pop("websocket_ip"),
-            secret_key=kwargs.pop("ipc_key"),
-            port=kwargs.pop("ipc_port")
-        )
-        self.git = GitHub(kwargs.pop("git_token"))
+        self.ipc_client = StellaIPC(host=self.websocket_ip, secret_key=self.ipc_key, port=self.ipc_port)
+        self.git = GitHub(self.git_token)
         kweights = kwargs.pop("prefix_weights")
         self.prefix_neural_network = PrefixNeuralNetwork.from_weight(*kweights.values())
         self.derivative_prefix_neural = DerivativeNeuralNetwork(kwargs.pop("prefix_derivative"))
@@ -57,7 +57,7 @@ class StellaBot(commands.Bot):
         # configuration
         self.tester = kwargs.pop("tester", False)
         self.help_src = kwargs.pop("help_src", None)
-        self.color = 0xffcccb
+        self.color = kwargs.pop("color")
         self.error_channel_id = kwargs.pop("error_channel")
         self.bot_guild_id = kwargs.pop("bot_guild")
         # main bot owner is kept separate for displaying in places like report context
@@ -228,7 +228,7 @@ class StellaBot(commands.Bot):
                     await message.edit(content=f"Restart lasted {time_taken}")
             print("Server connected.")
 
-    @to_call.add
+    @to_call.append
     async def loading_cog(self) -> None:
         """Loads the cog"""
         exclude = "_", "."
@@ -245,7 +245,7 @@ class StellaBot(commands.Bot):
 
         await bot.load_extension("jishaku")
 
-    @to_call.add
+    @to_call.append
     async def fill_bots(self) -> None:
         """Fills the pending/confirmed bots in discord.py"""
         for attr in "pending", "confirmed":
@@ -254,7 +254,7 @@ class StellaBot(commands.Bot):
 
         print("Bots list are now filled.")
 
-    @to_call.add
+    @to_call.append
     async def fill_blacklist(self) -> None:
         """Loading up the blacklisted users."""
         records = await self.pool_pg.fetch("SELECT snowflake_id FROM blacklist")
@@ -365,6 +365,7 @@ bot_kwargs = {
     "owner_ids": config["OWNER_IDS"],
     "default_prefix": config.get("DEFAULT_PREFIX", "uwu "),
     "tester_prefix": config.get("TESTER_PREFIX", "?uwu "),
+    "color": 0xffcccb,
     "intents": intents,
     "activity": discord.Activity(type=discord.ActivityType.listening, name="logged to my pc."),
     "description": "{}'s personal bot that is partially for the public. "

@@ -20,7 +20,6 @@ import pytz
 
 from discord.ext import commands
 from discord.utils import maybe_coroutine
-from typing_extensions import ParamSpec
 
 from utils.context_managers import BreakableTyping
 from utils.decorators import in_executor, pages
@@ -324,15 +323,10 @@ def empty_page_format(_: Any, __: Any, entry: T) -> T:
     return entry
 
 
-P = ParamSpec("P")
-
-
 class ListCall(List[Any]):
     """Quick data structure for calling every element in the array regardless of awaitable or not"""
-    def add(self, rhs: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+    def append(self, rhs: Callable[..., Awaitable[Any]]) -> None:
         super().append(rhs)
-
-        return rhs
 
     def call(self, *args: Any, **kwargs: Any) -> asyncio.Future[List[Any]]:
         return asyncio.gather(
