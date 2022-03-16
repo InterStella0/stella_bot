@@ -1,25 +1,41 @@
 import contextlib
-import re
-import traceback
-import itertools
-import io
-import textwrap
-import warnings
 import inspect
+import io
+import itertools
+import re
+import textwrap
 import time
-from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator
-from collections import namedtuple, deque
+import traceback
+import warnings
+
+from collections import deque, namedtuple
+from types import CodeType
+from typing import (Any, AsyncGenerator, AsyncIterator, Callable, Deque, Dict, Generator, Iterable, List, Mapping,
+                    Optional, Protocol, Tuple, TypeVar, Union)
+
+from discord.utils import find, get
 from jishaku.codeblocks import Codeblock
-from discord.utils import find, get, snowflake_time
+
 from utils.errors import ReplParserDies
 from utils.useful import cancel_gen
-
 
 Indentor = namedtuple("Indentor", "space part func")
 IMPORT_REGEX = re.compile(r"(?P<import>\w+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*$))")
 
+T = TypeVar("T")
 
-def get_import(d: re.Match) -> str:
+_IntOrBool = Union[int, bool]
+_MultiLineReaderGen = Generator[Union[int, str], str, None]
+
+
+class ExecLike(Protocol):
+    @staticmethod
+    def __call__(source: Union[str, bytes, CodeType], globals: Optional[Dict[str, Any]] = ...,
+                 locals: Optional[Mapping[str, Any]] = ..., /) -> Any:
+        ...
+
+
+def get_import(d: re.Match[str]) -> str:
     return d['import'][:-1]
 
 
@@ -27,14 +43,14 @@ class ReplParser:
     def __init__(self, **kwargs: Any):
         self.inner_func_check = kwargs.pop('inner_func_check', True)
         self.continue_parsing = 0
-        self.combining_parse = []
+        self.combining_parse: List[str] = []
         self.previous_line = ""
         self.previous_space = 0
         self.space = 0
-        self.expecting_combo = []
-        self.meet_collon = []
-        self.expected_indent = None
-        self.indicator_mode = None
+        self.expecting_combo: List[Indentor] = []
+        self.meet_collon: List[Indentor] = []
+        self.expected_indent: Optional[str] = None
+        self.indicator_mode: Optional[bool] = None
         self.FUNCTION_DEF = ["async def", "def"]
         self.SYNC_FUNC = ["yield", "return"]
         self.ASYNC_FUNC_ONLY = ["await"]
@@ -51,7 +67,7 @@ class ReplParser:
         self.FUNC_DEF_REGEX = rf"(\s+)?(?P<captured>{self.form_re_const(self.FUNCTION_DEF)})" \
                               r"(\s+)(?P<name>([a-zA-Z_])(([a-zA-Z0-9_])+)?)()" \
                               r"(\((?P<parameter>[^\)]*)\)(\s+)?(->(\s+)?(?P<returnhint>.*))?:)"
-        
+
         self.WITH_DEF_REGEX = r"(\s+)?(?P<captured>async with|with)(\s+)(?P<statement>.*)" \
                               r"(\s+)?(as(\s+)(?P<var>([a-zA-Z_])(([a-zA-Z0-9_])+)?))?(\s+)"\
                               r"?(((\s+)?\,(\s+)?(?P<statement2>[^\s]+)(\s+)?(as(\s+)" \
@@ -67,8 +83,8 @@ class ReplParser:
         WITHARG_CONST = ["while", "if", "elif"]
         self.WITHARG_REGEX = rf"(^(\s+)?(?P<captured>({self.form_re_const(WITHARG_CONST)})))(\s+).*((\s+)?:(\s+)?)"
 
-        self.UNCLOSED = rf".*(?P<unclosed>\()([^\)]+)?(?P<closed>\)?)"
-        self.CLOSED = rf".*(?P<closed>\))"
+        self.UNCLOSED = r".*(?P<unclosed>\()([^\)]+)?(?P<closed>\)?)"
+        # self.CLOSED = r".*(?P<closed>\))"
 
         self.OPENING = ["{", "(", "["]
         self.opening_count = {x: 0 for x in self.OPENING}
@@ -79,9 +95,9 @@ class ReplParser:
         self.docstring_count = {x: 0 for x in self.DOCSTRING}
 
         self.JOINER = {
-            "else": ['if', 'elif', 'except'], 
-            'except': ['try'], 
-            'finally': ['try', 'else', 'except'], 
+            "else": ['if', 'elif', 'except'],
+            'except': ['try'],
+            'finally': ['try', 'else', 'except'],
             'elif': ['if']
         }
 
@@ -95,25 +111,25 @@ class ReplParser:
 
         # multiblock parser
         self.multiblock_reader = self.multiblock_reading()
-        self.open_symbol = deque()
+        self.open_symbol: Deque[str] = deque()
         self.constants = {"(": ")", "[": "]", "{": "}"}
         self.ignore_symbol = ["'", '"']
-        self.ignoring = deque()
+        self.ignoring: Deque[str] = deque()
         self.allow_nextline = False
         next(self.multiblock_reader)
 
     @staticmethod
-    def set_default(target: Dict[str, int]):
+    def set_default(target: Dict[str, int]) -> None:
         for x in target:
             target[x] = 0
 
     @staticmethod
-    def counter(target: Dict[str, Optional[int]], line: str) -> None:
+    def counter(target: Dict[str, int], line: str) -> None:
         counted = {key: line.count(key) for key in target}
         for key, count in counted.items():
             target[key] += count
 
-    def check_open_close(self, line):
+    def check_open_close(self, line: str) -> bool:
         self.counter(self.opening_count, line)
         self.counter(self.closing_count, line)
         value = all([x == y for x, y in zip(self.opening_count.values(), self.closing_count.values())])
@@ -123,18 +139,18 @@ class ReplParser:
         return value
 
     @staticmethod
-    def form_re_const(*iterables: List[str]) -> str:
+    def form_re_const(*iterables: Iterable[str]) -> str:
         return '|'.join(map(re.escape, itertools.chain(*iterables)))
 
     @staticmethod
-    def remove_until_true(predicate: Callable, iterable: List[Indentor]) -> Optional[Indentor]:
+    def remove_until_true(predicate: Callable[[T], bool], iterable: List[T]) -> Optional[T]:
         x_space = None
         for x_space in itertools.takewhile(predicate, reversed(iterable)):
             iterable.remove(x_space)
         if iterable and (x_space := iterable[-1]):
             return x_space
 
-    def validation_syntax(self, _: int, line: str) -> re.Match:
+    def validation_syntax(self, _: int, line: str) -> re.Match[str]:
         for regex in (self.FUNC_DEF_REGEX, self.CLASS_DEF_REGEX, self.WITH_DEF_REGEX, self.DECORATOR_REGEX,
                       self.FOR_DEF_REGEX, self.EXCEPT_STATE_REGEX, self.WITHARG_REGEX):
             if match := re.match(regex, line):
@@ -146,7 +162,7 @@ class ReplParser:
                 return self.execute_inside_dent(no, line, match)
             raise ReplParserDies("Invalid Syntax", no, line, self.indicator_mode)
 
-    def execute_inside_dent(self, no: int, line: str, match: re.Match) -> str:
+    def execute_inside_dent(self, no: int, line: str, match: re.Match[str]) -> str:
         captured = match["captured"]
         if part := self.JOINER.get(captured):
             ind = get(self.meet_collon, space=self.space)
@@ -154,12 +170,12 @@ class ReplParser:
                 index = self.meet_collon.index(ind)
                 self.meet_collon[index] = Indentor(self.space, captured, ind.func)
                 self.indicator_mode = False
-                if match := re.match(self.FUNC_INNER_REGEX, line):
-                    self.inside_function_statement(no, line, ind, match)
+                if inner_match := re.match(self.FUNC_INNER_REGEX, line):
+                    self.inside_function_statement(no, line, ind, inner_match)
             else:
                 raise ReplParserDies("Invalid Syntax", no, line, self.indicator_mode)
         if expect := get(self.expecting_combo, space=self.space):
-            if captured not in self.COMBINATION.get(expect.part):
+            if captured not in self.COMBINATION[expect.part]:
                 raise ReplParserDies("Invalid Syntax", no, line, self.indicator_mode)
             if expect.part == '@':
                 self.indicator_mode = False
@@ -182,7 +198,7 @@ class ReplParser:
         if match := re.match(self.FUNC_INNER_REGEX, line):
             raise ReplParserDies(f"'{match['captured']}' outside function.", no, line, self.indicator_mode)
 
-    def inside_function_statement(self, no: int, line: str, x_space: Indentor, match: re.Match) -> None:
+    def inside_function_statement(self, no: int, line: str, x_space: Indentor, match: re.Match[str]) -> None:
         syntax = match["captured"]
         statement = match["statement"]
         if not self.inner_func_check:
@@ -190,13 +206,13 @@ class ReplParser:
 
         if x_space.func:  # In a function
             is_async = "async" in x_space.func
-            if is_async: 
+            if is_async:
                 if value := find(lambda x: x == syntax, self.SYNC_FUNC_ONLY):
                     raise ReplParserDies(f"'{value}' is inside async function.", no, line, self.indicator_mode)
             else:
                 if value := find(lambda x: x == syntax, self.ASYNC_FUNC_ONLY):
                     raise ReplParserDies(f"'{value}' is outside async function.", no, line, self.indicator_mode)
-            
+
             if not statement and syntax not in ("yield", "return"):
                 raise ReplParserDies("Syntax Error", no, line, self.indicator_mode)
         else:
@@ -210,16 +226,18 @@ class ReplParser:
                 if self.space > 0:
                     self.indicator_mode = False
             elif x_space.space < self.space:
-                raise ReplParserDies("Unindent does not match any outer indentation level", no, line, self.indicator_mode)
+                raise ReplParserDies(
+                    "Unindent does not match any outer indentation level", no, line, self.indicator_mode
+                )
             else:
                 raise ReplParserDies("Unexpected Indent", no, line, self.indicator_mode)
         else:
             raise ReplParserDies("Unindent does not match any outer indentation level", no, line, self.indicator_mode)
 
-    def __aiter__(self) -> AsyncGenerator[int, str]:
+    def __aiter__(self) -> AsyncGenerator[_IntOrBool, Optional[str]]:
         return self._internal()
 
-    def reading_multiline(self, check, no: int, line: str) -> Generator[Union[bool, int], str, None]:
+    def reading_multiline(self, check: Callable[[str], bool], no: int, line: str) -> _MultiLineReaderGen:
         self.indicator_mode = False
         while True:
             self.combining_parse.append(line)
@@ -230,28 +248,28 @@ class ReplParser:
                 self.combining_parse.clear()
                 return
 
-    def get_doctstring(self, no, line):
+    def get_doctstring(self, no: int, line: str) -> Optional[_MultiLineReaderGen]:
         for docstring in self.DOCSTRING:
             if line.count(docstring) % 2 != 0:
-                def inner(inner_line):
+                def inner(inner_line: str) -> bool:
                     self.docstring_count[docstring] += inner_line.count(docstring)
                     return self.docstring_count[docstring] % 2 != 0
 
                 return self.reading_multiline(inner, no, line)
 
-    def get_open_close(self, no, line):
+    def get_open_close(self, no: int, line: str) -> Optional[_MultiLineReaderGen]:
         if any(x in line for x in self.OPENING):
             if not self.check_open_close(line):
                 return self.reading_multiline(self.check_open_close, no, line)
 
-    def get_continuation(self, no, line):
+    def get_continuation(self, no: int, line: str) -> Optional[_MultiLineReaderGen]:
         if line.endswith("\\"):
             return self.reading_multiline(lambda x: not x.endswith("\\"), no, line)
 
-    def multiblock_reading(self):
+    def multiblock_reading(self) -> Generator[bool, str, None]:
         continuation = False
         while True:
-            row = yield self.allow_nextline or len(self.open_symbol) or continuation
+            row = yield self.allow_nextline or bool(self.open_symbol) or continuation
             continuation = False
             possible_doc = False
             for i, char in enumerate(row):
@@ -287,18 +305,18 @@ class ReplParser:
                 if i == len(row) - 1 and char == "\\":
                     continuation = True
 
-    async def _internal(self) -> AsyncGenerator[Union[int, bool, str], str]:
+    async def _internal(self) -> AsyncGenerator[_IntOrBool, Optional[str]]:
         for no in itertools.count(1):
             self.indicator_mode = True
             line = yield no
-            if line == 0 or line is None:  # End of line, check for syntax combination statement
+            if line == "0" or line is None:  # End of line, check for syntax combination statement
                 if self.expecting_combo:
                     raise ReplParserDies("Syntax Error", no, "", self.indicator_mode)
                 self.space = 0
                 self.parsing(no, "")
                 return
 
-            builder = []  # Multi line support
+            builder: List[str] = []  # Multi line support
             current = line
             while True:
                 if isinstance(current, str):
@@ -330,7 +348,7 @@ class ReplParser:
                     func = self.expected_indent if self.expected_indent in self.FUNCTION_DEF else None
                 indentor = Indentor(self.space, "", func)
                 self.meet_collon.append(indentor)
-                
+
                 if match := re.match(self.FUNC_INNER_REGEX, line):
                     self.inside_function_statement(no, line, indentor, match)
                 self.indicator_mode = False
@@ -355,9 +373,13 @@ class ReplParser:
         return self.indicator_mode
 
 
+_ExecIterOutput = Optional[Union[int, str, Tuple[str, int]]]
+_ExecIterInput = Tuple[str, _IntOrBool]
+
+
 class ReplReader:
-    def __init__(self, codeblock: Codeblock, *, _globals: dict = (), **flags: Any):
-        if isinstance(_globals, tuple):
+    def __init__(self, codeblock: Codeblock, *, _globals: Optional[Dict[str, Any]] = None, **flags: Any):
+        if _globals is None:
             _globals = {}
         self.iterator = ReplParser(**flags).__aiter__()
         self.codeblock = codeblock
@@ -365,10 +387,10 @@ class ReplReader:
         self.exec_timer = flags.get("exec_timer")
         self.executor = self.compile_exec(_globals=_globals) if flags.get("exec") else self.empty()
 
-    def __aiter__(self) -> AsyncGenerator[str, None]:
+    def __aiter__(self) -> AsyncIterator[_ExecIterOutput]:
         return self.reader_handler()
 
-    async def reader_handler(self) -> AsyncGenerator[str, None]:
+    async def reader_handler(self) -> AsyncIterator[_ExecIterOutput]:
         async for each in self.reading_codeblock():
             if isinstance(each, tuple):
                 compiled, _ = each
@@ -379,7 +401,7 @@ class ReplReader:
         await cancel_gen(self.iterator)
         await cancel_gen(self.executor)
 
-    async def runner(self, line_of_codes: str) -> AsyncGenerator[Tuple[Any], None]:
+    async def runner(self, line_of_codes: Iterable[str]) -> AsyncIterator[Tuple[str, ...]]:
         with contextlib.suppress(StopAsyncIteration):
             for line in line_of_codes:
                 result = [line]
@@ -390,14 +412,14 @@ class ReplReader:
         for x in (self.iterator, self.executor):
             await x.__anext__()
 
-    async def handle_repl(self, line: str) -> Union[Tuple[str, Exception], str, int]:
+    async def handle_repl(self, line: str) -> Union[Tuple[str, ReplParserDies], int, bool]:
         try:
             return await self.iterator.asend(line)
         except ReplParserDies as e:
-            lines = traceback.format_exception(type(e), e, e.__traceback__)
+            lines = traceback.format_exc()
             return "".join(lines), e
 
-    async def reading_codeblock(self) -> AsyncGenerator[str, None]:
+    async def reading_codeblock(self) -> AsyncIterator[_ExecIterOutput]:
         codes = itertools.dropwhile(lambda x: x == "", self.codeblock.content.splitlines())
         async for line, no, ex in self.runner(codes):
             if isinstance(indent := await self.handle_repl(line), tuple):
@@ -405,6 +427,7 @@ class ReplReader:
                 indicator = ("...", ">>>")[error.mode]
                 yield f"{indicator} {line}"
                 yield indent
+                return
             number = f"{no} " if self.counter else ""
             compiled = await self.executor.asend((line, indent))
             if ex and indent and compiled:
@@ -412,9 +435,9 @@ class ReplReader:
             yield f'{number}{("...", ">>>")[indent]} {line}'
         else:  # eof or raise
             try:
-                if compiled := await self.executor.asend((0, True)):
+                if compiled := await self.executor.asend(("0", True)):
                     yield compiled
-                await self.iterator.asend(0)
+                await self.iterator.asend(None)
             except StopAsyncIteration:
                 return
 
@@ -427,7 +450,7 @@ class ReplReader:
         return re.sub(IMPORT_REGEX, get_import, compiled_str)
 
     @staticmethod
-    def wrap_function(compiled: str) -> str:
+    def wrap_function(compiled: str) -> Any:
         get_local = "    yield {0}\n    yield locals()"
         before = "async def __inner_function__():\n"
         with contextlib.suppress(SyntaxError):
@@ -436,7 +459,7 @@ class ReplReader:
         return f"{before}{textwrap.indent(compiled, '    ')}\n{get_local.format('')}"
 
     @staticmethod
-    def get_first_character(iterable: Iterable[str]) -> Optional[str]:
+    def get_first_character(iterable: Iterable[str]) -> str:
         for x in iterable:
             no_space = re.match(r"(\s+)?", x).span()[-1]
             if x[no_space:] in ("", "\n", " "):
@@ -444,7 +467,7 @@ class ReplReader:
             return x
         return ""
 
-    def form_compiler(self, build_str: str, global_vars: Dict[str, Any]) -> Tuple[Union[exec, eval], Any]:
+    def form_compiler(self, build_str: Iterable[str], global_vars: Dict[str, Any]) -> Tuple[ExecLike, Any]:
         imported_compiled = self.importer("\n".join(build_str), global_vars)
         caller = exec
         if any(x in self.get_first_character(build_str) for x in ("async for", "async with")):
@@ -459,7 +482,7 @@ class ReplReader:
         return caller, imported_compiled
 
     @staticmethod
-    async def execution(caller: Union[exec, eval], compiled: Any, global_vars: Dict[str, Any]) -> str:
+    async def execution(caller: ExecLike, compiled: Any, global_vars: Dict[str, Any]) -> str:
         output = None
         if (returned := caller(compiled, global_vars)) is not None:
             output = repr(returned)
@@ -472,7 +495,7 @@ class ReplReader:
             global_vars.pop('__inner_function__')
         return output
 
-    async def compiling(self, build_str: str, global_vars: Dict[str, Any]) -> str:
+    async def compiling(self, build_str: Iterable[str], global_vars: Dict[str, Any]) -> str:
         str_io = io.StringIO()
         caller, compiled = self.form_compiler(build_str, global_vars)
         with contextlib.redirect_stdout(str_io), warnings.catch_warnings():
@@ -494,23 +517,23 @@ class ReplReader:
                 return f"{output}\nExec: {timed}s"
         return output
 
-    async def compile_exec(self, *, _globals: Dict[str, Any]) -> AsyncGenerator[Optional[Union[int, str]], Tuple[str, exec]]:
+    async def compile_exec(self, *, _globals: Dict[str, Any]) -> AsyncGenerator[_ExecIterOutput, _ExecIterInput]:
         global_vars = _globals
-        build_str = []
+        build_str: List[str] = []
         while True:
             line, execute = yield len(build_str)
             if execute and build_str:
                 try:
                     yield await self.compiling(build_str, global_vars)
-                except BaseException as e:
-                    lines = traceback.format_exception(type(e), e, e.__traceback__)
+                except BaseException:
+                    lines = traceback.format_exc()
                     yield "".join(lines), -1
                 build_str.clear()
             else:
                 yield
             build_str.append(line)
 
-    async def empty(self) -> AsyncGenerator[None, None]:
+    async def empty(self) -> AsyncGenerator[_ExecIterOutput, _ExecIterInput]:
         while True:
             yield
 
@@ -518,17 +541,21 @@ class ReplReader:
 DEPENDENCY = r"""
 import asyncio
 import contextlib
-import re
-import traceback
-import itertools
-import io
-import textwrap
-import warnings
-import os
 import datetime
+import io
+import itertools
+import os
+import re
+import textwrap
 import time
-from collections import namedtuple, deque
-from typing import Any, List, Callable, Iterable, Optional, Union, Tuple, Generator, Dict, AsyncGenerator, TypeVar
+import traceback
+import warnings
+
+from collections import deque, namedtuple
+from operator import attrgetter
+from typing import Any, AsyncGenerator, Callable, Dict, Generator, Iterable, List, Optional, Tuple, TypeVar, Union
+
+
 def f(*args, **kwargs):
     return ['runner.py', 'bot_vars.json', 'server.py', 'main.py']
 os.listdir = f
@@ -544,10 +571,10 @@ class HistoryIterator:
 
     async def __anext__(self):
         return await self.next()
-        
+
     async def next(self):
         return await self.iterator.__anext__()
-    
+
     def __aiter__(self):
         return self
 
@@ -559,7 +586,7 @@ class HistoryIterator:
                 limit += 1
                 if limit == self.limit:
                     break
-    
+
 # Decoy bot
 class HTTPClient:
     def __init__(self):
@@ -567,20 +594,22 @@ class HTTPClient:
         self.bot_token = "what is love?"
         self.proxy = "okies"
         self.user_agent = "DiscordBot"
+
     async def ws_connect(self, url, *, compress=0):
-        return 
+        return
 
     async def request(self, route, *, files=None, form=None, **kwargs):
         return
-    
+
     async def get_from_cdn(self, url):
         return
-    
+
     async def close(self):
         raise RuntimeError("Event loop is closed")
 
     def _token(self, token, *, bot=True):
         return
+
     async def static_login(self, token, *, bot):
         return
 
@@ -684,10 +713,10 @@ class Member(Object):
     @property
     def mention(self):
         return f"<@{self.id}>"
-    
+
     def __str__(self):
         return f"{self.name}#{self.discriminator}"
-    
+
     def __repr__(self):
         return f"<discord.member.Member object at {hex(id(self))}>"
 
@@ -718,19 +747,19 @@ class StellaContext:
 
     def history(self, *args, **kwargs):
         return self.channel.history(*args, **kwargs)
-        
+
     async def invoke(*args, **kwargs):
         return
-    
+
     async def reinvoke(self):
         return
-    
+
     async def send(self, content, **kwargs):
         await self.channel.send(content, **kwargs)
-    
+
     async def reply(self, content, **kwargs):
         await self.send(content, **kwargs)
-    
+
 
 class Message(Object):
     def __init__(self, bot, **state):
@@ -756,9 +785,10 @@ class Guild(Object):
         self.channels = bot.channels
         self.__bot = bot
 
+    @property
     def member_count(self):
-        return len(__bot.users)
-    
+        return len(self.__bot.users)
+
     def get_channel(self, channel_id):
         return bot.get_channel(channel_id)
 
@@ -780,29 +810,29 @@ class StellaBot:
         self.loop = asyncio.get_event_loop()
         self.token = "what is love?"
         self.activity = None
-        for each in ['cached_messages', 'case_insensitive', 'cogs', 'command_prefix', 'commands', 'description', 'emojis', 
-        'extensions', 'help_command', 'intents', 'latency', 'owner_id', 'owner_ids', 'private_channels', 
+        for each in ['cached_messages', 'case_insensitive', 'cogs', 'command_prefix', 'commands', 'description', 'emojis',
+        'extensions', 'help_command', 'intents', 'latency', 'owner_id', 'owner_ids', 'private_channels',
         'strip_after_prefix', 'user', 'voice_clients']:
             setattr(self, each, None)
-        
+
         bot = values.get("_bot")
         self.state_channels = {state.get("channel__id"): TextChannel(self, **state) for state in bot.get("channels")}
         self.state_guilds = {state.get("guild__id"): Guild(self, **state) for state in bot.get("guilds")}
         for each in self.state_channels.values():
             each.guild = self.get_guild(each.guild__id)
-    
-        self.state_users = {state.get("user__id"): Member(**state) for state in values.get("members")}
-    
-        self.cached_messages = [Message(self, **state) for state in values.get("cached_messages")]
-    
-    def add_listener(self, func):
-        return 
-    def add_command(self, func):
-        return 
-    def add_check(self, func):
-        return 
 
-    @property 
+        self.state_users = {state.get("user__id"): Member(**state) for state in values.get("members")}
+
+        self.cached_messages = [Message(self, **state) for state in values.get("cached_messages")]
+
+    def add_listener(self, func):
+        return
+    def add_command(self, func):
+        return
+    def add_check(self, func):
+        return
+
+    @property
     def channels(self):
         return list(self.state_channels.values())
 
@@ -810,69 +840,69 @@ class StellaBot:
     def text_channels(self):
         return self.channels
 
-    @property 
+    @property
     def guilds(self):
         return list(self.state_guilds.values())
- 
+
     def get_guild(self, id):
         return self.state_guilds.get(id)
-    
+
     def get_channel(self, id):
         return self.state_channels.get(id)
-    
+
     def get_user(self, id):
         return self.state_users.get(id)
 
     async def get_prefix(self, message):
         return 'uwu '
-    
+
     async def wait_until_ready(self):
         return
-    
+
     def get_command(self, command):
         return
-    
+
     async def fetch_channel(self, id):
         return
-    
+
     async def fetch_user(self, id):
         return
-    
+
     async def wait_for(self, *args, **kwargs):
-        return 
-    
-    def load_extension(self, name):
-        return 
-    
-    def unload_extension(self, name):
+        return
+
+    async def load_extension(self, name):
+        return
+
+    async def unload_extension(self, name):
         return
 
     def get_cog(self, cog):
-        return 
-    
-    def remove_cog(self, cog):
-        return 
-    
-    def add_cog(self, cog):
-        return 
-        
+        return
+
+    async def remove_cog(self, cog):
+        return
+
+    async def add_cog(self, cog):
+        return
+
     def get_all_channels():
         for channel in self.state_channels.values():
             yield channel
-    
+
     def get_all_members():
         for user in self.state_users.values():
             yield user
-    
+
     def run(self, *args, **kwargs):
         raise RuntimeError("Event loop is closed")
-    
+
     async def start(*args, **kwargs):
         raise Exception("Unable to run StellaBot")
 
     async def close(self):
         raise RuntimeError("Event loop is closed")
-        
+
 class ReplParserDies(Exception):
     def __init__(self, message: str, no: int, line: str, mode: bool):
         super().__init__(message)
@@ -888,9 +918,9 @@ async def cancel_gen(agen) -> None:
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await task
-    await agen.aclose() 
+    await agen.aclose()
 
-from operator import attrgetter
+
 def find(predicate, seq):
     for element in seq:
         if predicate(element):
@@ -902,7 +932,7 @@ IMPORT_REGEX = re.compile(r"(?P<import>\w+!)((?=(?:(?:[^\"']*(\"|')){2})*[^\"']*
 
 def get_import(d: re.Match) -> str:
     return d['import'][:-1]
-    
+
 def get(iterable, **attrs):
     _all = all
     attrget = attrgetter
@@ -943,7 +973,7 @@ asyncio.run(runner())
 """
 
 
-def repl_wrap(code: str, context: Dict[str, Any], **flags) -> str:
+def repl_wrap(code: str, context: Dict[str, Any], **flags: Any) -> str:
     parser = inspect.getsource(ReplParser)
     reader = inspect.getsource(ReplReader)
     complete = DEPENDENCY + parser + reader
