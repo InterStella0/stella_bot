@@ -603,7 +603,7 @@ class Helpful(commands.Cog):
             c = ctx.channel
             u = ctx.author
             guild_values = [{"channel__id": c.id, "channel__name": None, "guild__id": None}]
-            user_values = [{"user__id": u.id, "user__name": u.name, "user__nick": u.nick, "user__bot": u.bot,
+            user_values = [{"user__id": u.id, "user__name": u.name, "user__nick": None, "user__bot": u.bot,
                             "user__discriminator": u.discriminator}]
             message_values = [{"message__id": m.id, "message__content": m.content, "message__author": u.id,
                                "channel_id": m.channel.id, "guild__id": m.guild}
