@@ -329,11 +329,11 @@ class StellaBot(commands.Bot):
         async with self, pool_pg:
             self.uptime = datetime.datetime.utcnow()
             self.pool_pg = pool_pg
-            with contextlib.suppress(KeyboardInterrupt):
-                await self.start(self.token)
+            await self.start(self.token)
 
     def starter(self):
-        asyncio.run(self.main())
+        with contextlib.suppress(KeyboardInterrupt):
+            asyncio.run(self.main())
 
 
 intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions', 'message_content')}
