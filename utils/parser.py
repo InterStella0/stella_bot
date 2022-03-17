@@ -443,11 +443,12 @@ class ReplReader:
 
     @staticmethod
     def importer(compiled_str: str, global_vars: Dict[str, Any]) -> str:
-        for ori in re.finditer(IMPORT_REGEX, compiled_str):
-            x = get_import(ori)
-            global_vars.update({x: __import__(x)})
+        def apply_inline_import(m: re.Match[str]) -> str:
+            module_name = get_import(m)
+            global_vars.update({module_name: __import__(module_name)})
+            return module_name
 
-        return re.sub(IMPORT_REGEX, get_import, compiled_str)
+        return re.sub(IMPORT_REGEX, apply_inline_import, compiled_str)
 
     @staticmethod
     def wrap_function(compiled: str) -> Any:
