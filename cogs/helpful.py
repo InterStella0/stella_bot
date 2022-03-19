@@ -515,7 +515,7 @@ class Helpful(commands.Cog):
     @commands.command(aliases=["up"],
                       help="Shows the bot uptime from when it was started.")
     async def uptime(self, ctx: StellaContext):
-        c_uptime = datetime.datetime.utcnow() - self.bot.launch_time
+        c_uptime = datetime.datetime.utcnow() - self.bot.uptime
         await ctx.embed(
             title="Uptime",
             description=f"Current uptime: `{humanize.precisedelta(c_uptime)}`"
@@ -737,7 +737,7 @@ class Helpful(commands.Cog):
             return f"[`{c.hex[:6]}`] [{message}]({repo_link}) ({aware_utc(time, mode='R')})"
 
         embed.add_field(name="Recent Changes", value="\n".join(map(format_commit, iterator)), inline=False)
-        embed.add_field(name="Launch Time", value=f"{aware_utc(self.bot.launch_time, mode='R')}")
+        embed.add_field(name="Launch Time", value=f"{aware_utc(self.bot.uptime, mode='R')}")
         embed.add_field(name="Bot Ping", value=f"{self.bot.latency * 1000:.2f}ms")
         bots = sum(u.bot for u in self.bot.users)
         content = f"`{len(self.bot.guilds):,}` servers, `{len(self.bot.users) - bots:,}` users, `{bots:,}` bots"

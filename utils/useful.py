@@ -404,7 +404,7 @@ def islicechunk(sequence: Sequence[T], *, chunk: int = 1) -> Iterator[Sequence[T
             An iterable that got cut up given by chunk
      """
     end = 0
-    for i in range(len(sequence)):
+    for i, _x in enumerate(sequence):
         if not i % chunk:
             end += chunk
             yield sequence[end - chunk: end]

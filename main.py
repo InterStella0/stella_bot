@@ -78,7 +78,7 @@ class StellaBot(commands.Bot):
 
         # placeholders
         self.pool_pg = None
-        self.launch_time = None
+        self.uptime = None
 
         super().__init__(
             self.get_prefix,
@@ -206,6 +206,7 @@ class StellaBot(commands.Bot):
         return self.get_guild(self.bot_guild_id).get_channel(self.error_channel_id)
 
     async def setup_hook(self) -> None:
+        await self.after_db()
         self.loop.create_task(self.after_ready())
 
     async def after_ready(self) -> None:
@@ -318,28 +319,27 @@ class StellaBot(commands.Bot):
 
     async def main(self) -> None:
         """Starts the bot properly"""
-        async with self:
+        try:
             print("Connecting to database...")
             start = time.time()
-            try:
-                pool_pg = await asyncpg.create_pool(
-                    database=self.db,
-                    user=self.user_db,
-                    password=self.pass_db
-                )
-            except Exception as e:
-                print_exception("Could not connect to database:", e)
-            else:
-                self.launch_time = datetime.datetime.utcnow()
-                self.pool_pg = pool_pg
-                print(f"Connected to the database ({time.time() - start})s")
-                await self.after_db()
-                with contextlib.suppress(KeyboardInterrupt):
-                    await self.start(self.token)
-        await self.pool_pg.close()
+            pool_pg = await asyncpg.create_pool(
+                database=self.db,
+                user=self.user_db,
+                password=self.pass_db
+            )
+            print(f"Connected to the database ({time.time() - start})s")
+        except Exception as e:
+            print_exception("Could not connect to database:", e)
+            return
+
+        async with self, pool_pg:
+            self.uptime = datetime.datetime.utcnow()
+            self.pool_pg = pool_pg
+            await self.start(self.token)
 
     def starter(self) -> None:
-        asyncio.run(self.main())
+        with contextlib.suppress(KeyboardInterrupt):
+            asyncio.run(self.main())
 
 
 intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions', 'message_content')}
