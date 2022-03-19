@@ -587,7 +587,7 @@ class Helpful(commands.Cog):
         await ctx.maybe_reply(embed=embed)
 
     @in_executor()
-    def get_wrapped(self, ctx, code, **flags):
+    def get_wrapped(self, ctx: StellaContext, code: Codeblock, **flags: Optional[bool]):
         if ctx.guild:
             guild_values = [{"channel__id": c.id, "channel__name": c.name, "guild__id": c.guild.id}
                             for c in ctx.guild.text_channels]
@@ -602,7 +602,7 @@ class Helpful(commands.Cog):
             c = ctx.channel
             u = ctx.author
             guild_values = [{"channel__id": c.id, "channel__name": None, "guild__id": None}]
-            user_values = [{"user__id": u.id, "user__name": u.name, "user__nick": u.nick, "user__bot": u.bot,
+            user_values = [{"user__id": u.id, "user__name": u.name, "user__nick": None, "user__bot": u.bot,
                             "user__discriminator": u.discriminator}]
             message_values = [{"message__id": m.id, "message__content": m.content, "message__author": u.id,
                                "channel_id": m.channel.id, "guild__id": m.guild}
@@ -627,6 +627,9 @@ class Helpful(commands.Cog):
     @command(help="Simulate a live python interpreter interface when given a python code.")
     @commands.max_concurrency(1, commands.BucketType.user)
     async def repl(self, ctx: StellaContext, code: UntilFlag[CodeblockConverter], *, flags: flg.ReplFlag):
+        await self.execute_python(ctx, code, **dict(flags))
+
+    async def execute_python(self, ctx: StellaContext, code: Codeblock, **flags: Optional[bool]):
         globals_ = {
             'ctx': ctx,
             'author': ctx.author,
@@ -635,7 +638,6 @@ class Helpful(commands.Cog):
             'discord': discord,
             'commands': commands
         }
-        flags = dict(flags)
         if code.language is None:
             content = code.content
             code = Codeblock("py", f"\n{content}\n")
@@ -666,6 +668,12 @@ class Helpful(commands.Cog):
             await ctx.maybe_reply(f"```py\n{code}```", view=view, allowed_mentions=discord.AllowedMentions.none())
         else:
             await ctx.maybe_reply("```py\nNo Output```")
+
+    @command(help="A timeit command for your python code.")
+    @commands.max_concurrency(1, commands.BucketType.user)
+    async def timeit(self, ctx: StellaContext, *, code: CodeblockConverter):
+        flags = {"exec": True, "exec_timer": True, "inner_func_check": False, "counter": False}
+        await self.execute_python(ctx, code, **flags)
 
     @commands.command(help="Reports to the owner through the bot. Automatic blacklist if abuse.")
     @commands.cooldown(1, 60, commands.BucketType.user)
