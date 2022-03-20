@@ -19,6 +19,7 @@ from discord.ext import commands
 
 from utils.context_managers import UserLock
 from utils.menus import ListPageInteractionBase, MenuBase, MenuViewInteractionBase
+from utils.modal import BaseModal
 from utils.useful import StellaEmbed
 
 if TYPE_CHECKING:
@@ -75,6 +76,22 @@ class BaseView(ui.View):
 
     def set_timeout(self, new_time: float) -> None:
         self._View__timeout_expiry = new_time
+
+    async def _scheduled_task(self, item: discord.ui.item, interaction: discord.Interaction):
+        try:
+            if self.timeout:
+                self.__timeout_expiry = time.monotonic() + self.timeout
+
+            allow = await self.interaction_check(interaction)
+            if not allow:
+                return
+
+            await item.callback(interaction)
+
+            if not interaction.response._responded:
+                await interaction.response.defer()
+        except Exception as e:
+            return await self.on_error(e, item, interaction)
 
 
 class CallbackView(BaseView):
@@ -486,7 +503,7 @@ class InteractionPages(BaseView, MenuBase):
         self.cooldown = commands.CooldownMapping.from_cooldown(1, 10, commands.BucketType.user)
         self.prompter: Optional[InteractionPages.PagePrompt] = None
 
-    class PagePrompt(ui.Modal):
+    class PagePrompt(BaseModal):
         page_number = ui.TextInput(label="Page Number", min_length=1, required=True)
 
         def __init__(self, view: InteractionPages):
