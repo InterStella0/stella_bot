@@ -20,7 +20,7 @@ discord-ext-menus @ git+https://github.com/Rapptz/discord-ext-menus@fbb880377937
 # a lot of unreleased changes
 discord.py @ git+https://github.com/Rapptz/discord.py@934ab4151add79a2140c7084679b15b6c5eb6f91
 # async cog loading support
-jishaku @ git+https://github.com/Gorialis/jishaku@27284df50b19acdf729feac8162dd3cf104133b4
+jishaku[procinfo] @ git+https://github.com/Gorialis/jishaku@27284df50b19acdf729feac8162dd3cf104133b4
 
 # apis
 # unmaintained
