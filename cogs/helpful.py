@@ -28,6 +28,7 @@ from utils.decorators import event_check, pages
 from utils.errors import BypassError, CantRun
 from utils.greedy_parser import GreedyParser, UntilFlag, command
 from utils.menus import HelpMenuBase, ListPageInteractionBase, MenuViewInteractionBase
+from utils.modal import BaseModal
 from utils.new_converters import CodeblockConverter
 from utils.parser import ReplReader, repl_wrap
 from utils.useful import (StellaContext, StellaEmbed, aware_utc, empty_page_format, in_executor, plural, text_chunker,
@@ -153,6 +154,8 @@ class HelpDropDown(discord.ui.Select):
         help_obj = self.view.help_command
         command_name = self.values[0]
         command = self.commands.get(command_name)
+        from discord.ext.commands.help import _context
+        _context.set(self.view.ctx)
         embed = help_obj.get_command_help(command)
         await interaction.response.send_message(content=f"Help for **{command_name}**", embed=embed, ephemeral=True)
 
@@ -170,11 +173,11 @@ class HelpMenuView(MenuViewBase):
                          **kwargs)
         self.original_embed = embed
         self.help_command = help_object
-        self._search_prompt: Optional[ui.Modal] = None
+        self._search_prompt: Optional[BaseModal] = None
         self.add_item(SearchHelp())
         self.old_items = []
 
-    class PromptSearch(ui.Modal, title="Help Command Search"):
+    class PromptSearch(BaseModal, title="Help Command Search"):
         text_command = ui.TextInput(label="command", max_length=20)
 
         def __init__(self, view: HelpMenuView):
@@ -189,6 +192,8 @@ class HelpMenuView(MenuViewBase):
                 await interaction.response.send_message(content="I can't search an empty command", ephemeral=True)
                 return
 
+            from discord.ext.commands.help import _context
+            _context.set(self.view.context)
             if view := await self.help_command.search_command(cmd):
                 message = f"Showing closest to `{cmd}` with :"
                 view.add_item(HomeButton(view=self.view))
@@ -230,7 +235,7 @@ class HelpButton(BaseButton):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         view = self.view
-        bot = view.help_command.context.bot
+        bot: StellaBot = interaction.client
         select = self.selected or "No Category"
         cog = bot.get_cog(select)
         data = [(cog, commands_list) for commands_list in view.mapper.get(cog)]
@@ -255,8 +260,10 @@ class HelpSearchButton(BaseButton):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         help_obj = self.view.help_command
-        bot = help_obj.context.bot
+        bot: StellaBot = interaction.client
         command = bot.get_command(self.selected)
+        from discord.ext.commands.help import _context
+        _context.set(self.view.context)
         embed = help_obj.get_command_help(command)
         await interaction.response.send_message(content=f"Help for **{self.selected}**", embed=embed, ephemeral=True)
 

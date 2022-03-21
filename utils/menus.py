@@ -4,7 +4,6 @@ from typing import Dict, Any, Union, Iterable
 from discord.ui import View, Button
 from discord.ext import menus, commands
 from discord.ext.menus import First, Last, PageSource
-
 PAGE_REGEX = r'(Page)?(\s)?((\[)?((?P<current>\d+)/(?P<last>\d+))(\])?)'
 
 
@@ -105,8 +104,7 @@ class HelpMenuBase(MenuBase, inherit_buttons=False):
         raise NotImplementedError
 
     async def start(self, ctx: commands.Context, **kwargs: Any) -> None:
-        self.help_command = ctx.bot.help_command
-        self.help_command.context = ctx
+        self.help_command: commands.HelpCommand = ctx.bot.help_command
         await super().start(ctx, **kwargs)
 
 

@@ -19,12 +19,13 @@ from PIL import Image
 from discord import TextStyle
 from discord.ext import commands
 from discord.ext.commands import Greedy
-from discord.ui import Modal, TextInput
+from discord.ui import TextInput
 
 from utils import flags as flg
 from utils.buttons import BaseView, QueueView
 from utils.decorators import in_executor
 from utils.greedy_parser import GreedyParser, Separator
+from utils.modal import BaseModal
 from utils.new_converters import StateConverter, State
 from utils.useful import StellaContext, StellaEmbed, plural, aware_utc
 
@@ -358,7 +359,7 @@ class WordleView(BaseView):
         self.game.ctx.bot.loop.create_task(self.disable_items())
 
 
-class WordlePrompt(Modal):
+class WordlePrompt(BaseModal):
     text_input = TextInput(label="Guess a word", default="", placeholder="Guess your word!")
     text_display = TextInput(label="Display", required=False, default="", style=TextStyle.paragraph,
                              placeholder="No need to fill these. This is your display")
