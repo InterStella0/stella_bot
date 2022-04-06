@@ -79,10 +79,10 @@ class ReplParser:
         self.docstring_count = {x: 0 for x in self.DOCSTRING}
 
         self.JOINER = {
-            "else": ['if', 'elif', 'except'], 
+            "else": ['if', 'elif', 'except', 'for', 'while'], 
             'except': ['try'], 
             'finally': ['try', 'else', 'except'], 
-            'elif': ['if']
+            'elif': ['if', 'elif']
         }
 
         self.COMBINATION = {
