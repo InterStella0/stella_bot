@@ -295,14 +295,16 @@ class Myself(commands.Cog):
 
     async def cogs_handler(self, ctx: StellaContext, extensions: ValidCog,
                            method: Literal["load", "unload", "reload"]) -> None:
-        async def do_cog(exts: str) -> Any:
-            func = getattr(self.bot, f"{method}_extension")
-            return await func(f"cogs.{exts}")
+        async def do_cog(exts: str) -> str:
+            try:
+                func = getattr(self.bot, f"{method}_extension")
+                await func(f"cogs.{exts}")
+            except Exception as e:
+                return f"cogs.{exts} failed to {method}: {e}"
+            else:
+                return f"cogs.{exts} is {method}ed"
 
-        outputs = await asyncio.gather(*[
-            try_call(do_cog, ext, ret=True) or f"cogs.{ext} is {method}ed"
-            for ext in extensions
-        ])
+        outputs = await asyncio.gather(*map(do_cog, extensions))
         await ctx.embed(description="\n".join(map(str, outputs)))
 
     @greedy_parser.command()
