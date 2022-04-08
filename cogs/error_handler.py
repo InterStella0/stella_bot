@@ -124,10 +124,13 @@ class ErrorHandler(commands.Cog):
             await send_del(embed=StellaEmbed.to_error(description=f"{error}"))
         else:
             if isinstance(error, commands.CommandError):
-                if template := await self.generate_signature_error(ctx, error):
-                    if isinstance(error, commands.MissingRequiredArgument):
-                        return await handle_missing_param(template)
-                    return await send_del(embed=template)
+                try:
+                    if template := await self.generate_signature_error(ctx, error):
+                        if isinstance(error, commands.MissingRequiredArgument):
+                            return await handle_missing_param(template)
+                        return await send_del(embed=template)
+                except Exception as e:
+                    error = e  # Failure during signature generation.
 
             await send_del(embed=StellaEmbed.to_error(description=error))
             traceback_error = print_exception(f'Ignoring exception in command {ctx.command}:', error, _print=True)
@@ -147,7 +150,8 @@ class ErrorHandler(commands.Cog):
         if help_com is None:
             return
 
-        help_com.context = ctx
+        from discord.ext.commands.help import _context
+        _context.set(ctx)
         real_signature = self.bot.get_command_signature(ctx, command)
         if ctx.current_parameter is None:
             if not isinstance(error, commands.MissingRequiredArgument):
