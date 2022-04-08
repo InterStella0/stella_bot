@@ -50,7 +50,7 @@ class StellaBot(commands.Bot):
         self.git_token = kwargs.pop("git_token")
         self.error_channel_id = kwargs.pop("error_channel")
         self.bot_guild_id = kwargs.pop("bot_guild")
-        self.git = GitHub(self.git_token)
+        self.git = None
         self.pool_pg = None
         self.uptime = None
         self.global_variable = None
@@ -200,6 +200,7 @@ class StellaBot(commands.Bot):
         return self.get_guild(self.bot_guild_id).get_channel(self.error_channel_id)
 
     async def setup_hook(self) -> None:
+        self.git = GitHub(self.git_token)  # github uses aiohttp in init, need to put in async context
         await self.after_db()
         self.loop.create_task(self.after_ready())
 
