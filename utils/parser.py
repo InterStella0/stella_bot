@@ -488,10 +488,8 @@ class ReplReader:
                 output = print_out + output
 
         if self.exec_timer and timed > 0:
-            if output is None:
-                return f"Exec: {timed}s"
-            else:
-                return f"{output}\nExec: {timed}s"
+            leading_output = "" if output is None else f"{output}\n"
+            return f"{leading_output}Execution Time: {timed}"
         return output
 
     async def compile_exec(self, *, _globals: Dict[str, Any]) -> AsyncGenerator[Optional[Union[int, str]], Tuple[str, exec]]:
