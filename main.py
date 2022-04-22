@@ -386,7 +386,7 @@ async def on_connect() -> None:
 
 @bot.event
 @wait_ready(bot=bot)
-@event_check(lambda m: not bot.tester or bot.sync_is_owner(m.author))
+@event_check(lambda m: not m.author.bot and not bot.tester or bot.sync_is_owner(m.author))
 async def on_message(message: discord.Message) -> None:
     if re.fullmatch(rf"<@!?{bot.user.id}>", message.content):
         await message.channel.send(f"My prefix is `{await bot.get_prefix(message)}`")
