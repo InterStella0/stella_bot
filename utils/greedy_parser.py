@@ -13,11 +13,9 @@ import typing
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Set, Tuple, Type, TypeVar, Union
 
 from discord.ext import commands
-from discord.ext.commands import ArgumentParsingError, CommandError
+from discord.ext.commands import ArgumentParsingError, CommandError, parameters
 from discord.ext.commands.errors import BadUnionArgument
 from discord.ext.commands.view import StringView
-from discord.utils import MISSING
-from typing_extensions import Self
 
 from utils.errors import ConsumerUnableToConvert
 from utils.flags import find_flag
@@ -279,14 +277,14 @@ class GreedyParser(commands.Command):
                 return stored_converter
         return converter
 
-    async def transform(self, ctx: StellaContext, param: inspect.Parameter) -> List[Any]:
+    async def transform(self, ctx: StellaContext, param: parameters.Parameter) -> List[Any]:
         """Because Danny literally only allow commands.converter._Greedy class to be pass here using
            'is' comparison, I have to override it to allow any other Greedy subclass.
            
            It's obvious that Danny doesn't want people to subclass it smh."""
 
         required = param.default is param.empty
-        converter = commands.converter.get_converter(param)
+        converter = param.converter
         optional_converter = self._is_typing_optional(param.annotation)
 
         if optional_converter:
@@ -316,7 +314,7 @@ class GreedyParser(commands.Command):
 
         result = []
         for name, param in params.items():
-            converter = commands.converter.get_converter(param)
+            converter = param.converter
             converter = self.get_optional_converter(converter)
             greedy = isinstance(converter, commands.converter.Greedy)
             if param.kind == param.VAR_KEYWORD:
@@ -365,4 +363,3 @@ def command(name: Optional[str] = None, *, bot: StellaBot = None, **attrs: Any) 
             bot.add_command(command)
         return command
     return decorator
-

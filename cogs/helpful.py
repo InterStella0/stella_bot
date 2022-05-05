@@ -24,7 +24,7 @@ from utils.decorators import pages, event_check
 from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, repl_wrap
 from utils.greedy_parser import UntilFlag, command, GreedyParser
-from utils.buttons import BaseButton, InteractionPages, MenuViewBase, ViewButtonIteration, PersistentRespondView, \
+from utils.buttons import BaseButton, InteractionPages, MenuViewBase, PersistentRespondView, \
     ButtonView, BaseView
 from utils.new_converters import CodeblockConverter
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMenuBase
@@ -51,6 +51,7 @@ home_emoji = '<:house_mark:848227746378809354>'
 def message_getter(message_id: int) -> Callable[[StellaContext], Optional[discord.Message]]:
     def inner(context: StellaContext) -> Optional[discord.Message]:
         return context.get_message(message_id)
+
     return inner
 
 
@@ -75,6 +76,7 @@ def is_command_message():
             return False
 
         return discord.utils.get(bot.cached_context, message__id=payload.message_id) is not None
+
     return event_check(inner)
 
 
@@ -85,6 +87,7 @@ def is_message_context():
             return False
 
         return discord.utils.find(message_getter(payload.message_id), bot.cached_context)
+
     return event_check(inner)
 
 
@@ -108,7 +111,8 @@ class HelpSource(ListPageInteractionBase):
         author = menu.ctx.author
         return embed.set_footer(text=f"Requested by {author}", icon_url=author.display_avatar)
 
-    async def format_view(self, menu: HelpMenu, entry: Tuple[Optional[commands.Cog], List[CommandHelp]]) -> HelpMenuView:
+    async def format_view(self, menu: HelpMenu,
+                          entry: Tuple[Optional[commands.Cog], List[CommandHelp]]) -> HelpMenuView:
         if not menu._running:
             return
         _, list_commands = entry
@@ -153,8 +157,6 @@ class HelpDropDown(discord.ui.Select):
         help_obj = self.view.help_command
         command_name = self.values[0]
         command = self.commands.get(command_name)
-        from discord.ext.commands.help import _context
-        _context.set(self.view.ctx)
         embed = help_obj.get_command_help(command)
         await interaction.response.send_message(content=f"Help for **{command_name}**", embed=embed, ephemeral=True)
 
@@ -163,6 +165,7 @@ class HelpMenuView(MenuViewBase):
     """This class is responsible for starting the view + menus activity for the help command.
        This accepts embed, help_command, context, page_source, dataset and optionally Menu.
        """
+
     def __init__(self, *data: Any, embed: discord.Embed, help_object: StellaBotHelp, context: StellaContext,
                  **kwargs: Any):
         super().__init__(context, HelpSource, *data,
@@ -191,8 +194,6 @@ class HelpMenuView(MenuViewBase):
                 await interaction.response.send_message(content="I can't search an empty command", ephemeral=True)
                 return
 
-            from discord.ext.commands.help import _context
-            _context.set(self.view.context)
             if view := await self.help_command.search_command(cmd):
                 message = f"Showing closest to `{cmd}` with :"
                 view.add_item(HomeButton(view=self.view))
@@ -214,6 +215,7 @@ class HelpMenuView(MenuViewBase):
 class HomeButton(BaseButton):
     """This button redirects the view from the menu, into the category section, which
        adds the old buttons back."""
+
     def __init__(self, *, view=None):
         super().__init__(style=discord.ButtonStyle.success, selected="Home", row=None, emoji=home_emoji)
         self.diff_view = view
@@ -261,8 +263,6 @@ class HelpSearchButton(BaseButton):
         help_obj = self.view.help_command
         bot: StellaBot = interaction.client
         command = bot.get_command(self.selected)
-        from discord.ext.commands.help import _context
-        _context.set(self.view.context)
         embed = help_obj.get_command_help(command)
         await interaction.response.send_message(content=f"Help for **{self.selected}**", embed=embed, ephemeral=True)
 
@@ -281,6 +281,7 @@ class Information(HelpMenuBase):
 
 class HelpMenu(MenuViewInteractionBase, Information):
     """MenuPages class that is specifically for the help command."""
+
     def __init__(self, *args: Any, description: Optional[str] = None, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.description = description or """This shows each commands in this bot. Each page is a category that shows 
@@ -301,6 +302,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     def get_command_signature(self, command: CommandGroup, ctx: Optional[StellaContext] = None) -> str:
         """Method to return a commands name and signature"""
+
         def get_invoke_with():
             msg = ctx.message.content
             prefixmax = re.match(f'{re.escape(ctx.prefix)}', ctx.message.content).regs[0][1]
@@ -460,12 +462,14 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     async def send_cog_help(self, cog: commands.Cog) -> None:
         """Gets invoke when `uwu help <cog>` is invoked."""
-        cog_commands = [self.get_command_help(c) for c in await self.filter_commands(cog.walk_commands(), sort=True)]
-        description = """This shows each commands in this category. Each page is a command 
-                         that shows what's the command is about and a demonstration of usage."""
-        pages = CogMenu(source=empty_page_format(cog_commands), description=description)
+        cog_commands = [*map(self.get_command_help, await self.filter_commands(cog.walk_commands(), sort=True))]
+        pagination = CogMenu(
+            source=empty_page_format(cog_commands),
+            description="This shows each commands in this category. Each page is a command "
+                        "that shows what's the command is about and a demonstration of usage."
+        )
         with contextlib.suppress(discord.NotFound, discord.Forbidden):
-            await pages.start(self.context, wait=True)
+            await pagination.start(self.context, wait=True)
             await self.context.confirmed()
 
     def command_not_found(self, string: str) -> Tuple[str, str]:
@@ -574,7 +578,7 @@ class Helpful(commands.Cog):
             await menu.start(ctx)
         else:
             lines, firstlineno = inspect.getsourcelines(src)
-            location = module.replace('.', '/') + '.py' # type: ignore
+            location = module.replace('.', '/') + '.py'  # type: ignore
             url = f'<{source_url}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}>'
             await ctx.embed(title=f"Here's uh, {content}", description=f"[Click Here]({url})")
 
@@ -654,6 +658,8 @@ class Helpful(commands.Cog):
             accepted = await self.bot.ipc_client.request("execute_python", code=coded)
             if output := accepted.get("output"):
                 code = output
+            elif reason := accepted.get("reason"):
+                raise commands.CommandError(reason)
             else:
                 raise commands.CommandError(f"It died sorry dan maaf")
 
@@ -724,8 +730,8 @@ class Helpful(commands.Cog):
     async def about(self, ctx: StellaContext):
         REPO_URL = "https://github.com/InterStella0/stella_bot"
         embed = StellaEmbed.default(
-            ctx, 
-            title=f"About {self.bot.user}", 
+            ctx,
+            title=f"About {self.bot.user}",
             description=self.bot.description.format(self.bot.stella),
             url=REPO_URL
         )

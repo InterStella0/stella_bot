@@ -1364,7 +1364,7 @@ class FindBot(commands.Cog, name="Bots"):
                         return user.id in self.set_bots
 
             @ui.button(label="Select Bot")
-            async def select_bot(self, _: ui.Button, interaction: discord.Interaction):
+            async def select_bot(self, interaction: discord.Interaction, _: ui.Button):
                 await interaction.response.edit_message(view=None)
                 prompt_timeout = 60
                 # Ensures the winteractionpages doesn't get remove after timeout
@@ -1384,7 +1384,7 @@ class FindBot(commands.Cog, name="Bots"):
                     self.reset_timeout()
 
             @ui.button(label="Generate Bar")
-            async def generate_bar(self, _: ui.Button, interaction: discord.Interaction):
+            async def generate_bar(self, interaction: discord.Interaction, _: ui.Button):
                 embed = self._source.current_embed
                 bot = self._source.current_bot
                 if url := self.url_store.get(bot.id):

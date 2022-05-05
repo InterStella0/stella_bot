@@ -150,8 +150,7 @@ class ErrorHandler(commands.Cog):
         if help_com is None:
             return
 
-        from discord.ext.commands.help import _context
-        _context.set(ctx)
+        help_com.context = ctx
         real_signature = self.bot.get_command_signature(ctx, command)
         if ctx.current_parameter is None:
             if not isinstance(error, commands.MissingRequiredArgument):

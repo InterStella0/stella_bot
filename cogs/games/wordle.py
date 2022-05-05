@@ -334,13 +334,13 @@ class WordleView(BaseView):
         await interaction.response.send_message(f"Sorry, only {author} can use this.", ephemeral=True)
 
     @discord.ui.button(label="Guess", style=discord.ButtonStyle.green)
-    async def guess_button(self, _: discord.ui.Button, interaction: discord.Interaction):
+    async def guess_button(self, interaction: discord.Interaction, _: discord.ui.Button):
         prompter = self._get_prompter()
         prompter.update_text()
         await interaction.response.send_modal(prompter)
 
     @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger)
-    async def stop_button(self, _: discord.ui.Button, __: discord.Interaction):
+    async def stop_button(self, __: discord.Interaction, _: discord.ui.Button):
         await self.game.forfeit()
 
     async def disable_items(self):
