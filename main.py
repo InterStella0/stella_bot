@@ -152,7 +152,7 @@ class StellaBot(commands.Bot):
             check = await self.can_run(ctx, call_once=flags.pop("call_once", True))
             if check or not flags.pop("call_check", True):
                 ctx.running = True
-                await ctx.trigger_typing()
+                await ctx.typing()
                 await ctx.command.invoke(ctx)
             else:
                 raise commands.CheckFailure('The global check once functions failed.')
@@ -309,7 +309,7 @@ class StellaBot(commands.Bot):
 
         ctx = await self.get_context(message)
         if ctx.valid and getattr(ctx.cog, "qualified_name", None) != "Jishaku":
-            await ctx.trigger_typing()
+            await ctx.typing()
         await self.invoke(ctx)
 
     async def main(self) -> None:
