@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable, List, Optional, Set, Tuple, Typ
 
 from discord.ext import commands
 from discord.ext.commands import ArgumentParsingError, CommandError, parameters
+from discord.ext.commands.core import _AttachmentIterator
 from discord.ext.commands.errors import BadUnionArgument
 from discord.ext.commands.view import StringView
 
@@ -277,7 +278,7 @@ class GreedyParser(commands.Command):
                 return stored_converter
         return converter
 
-    async def transform(self, ctx: StellaContext, param: parameters.Parameter) -> List[Any]:
+    async def transform(self, ctx: StellaContext, param: parameters.Parameter, attachment: _AttachmentIterator, /) -> List[Any]:
         """Because Danny literally only allow commands.converter._Greedy class to be pass here using
            'is' comparison, I have to override it to allow any other Greedy subclass.
            
@@ -301,7 +302,7 @@ class GreedyParser(commands.Command):
                         return param.default
                 return await self._transform_greedy_pos(ctx, param, required, converter, converter.converter)
 
-        return await super().transform(ctx, param)
+        return await super().transform(ctx, param, attachment)
 
     @property
     def signature(self) -> str:
