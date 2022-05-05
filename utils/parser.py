@@ -64,7 +64,7 @@ class ReplParser:
 
         self.DECORATOR_REGEX = r"(\s+)?(?P<captured>\@)(?P<name>[^(]+)(?P<parameter>\(.*\))?(\s+)?"
 
-        WITHARG_CONST = ["while", "if", "elif"]
+        WITHARG_CONST = ["while", "if", "elif", "match", "case"]
         self.WITHARG_REGEX = rf"(^(\s+)?(?P<captured>({self.form_re_const(WITHARG_CONST)})))(\s+).*((\s+)?:(\s+)?)"
 
         self.UNCLOSED = rf".*(?P<unclosed>\()([^\)]+)?(?P<closed>\)?)"
