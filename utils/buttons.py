@@ -500,12 +500,14 @@ class PromptView(ViewAuthor):
 
 
 class InteractionPages(CallbackView, MenuBase):
-    def __init__(self, source: ListPageInteractionBase, generate_page: bool = False):
+    def __init__(self, source: ListPageInteractionBase, generate_page: bool = False, *,
+                 message: Optional[discord.Message] = None, delete_after: bool = True):
         super().__init__(timeout=120)
         self._source = source
         self._generate_page = generate_page
         self.ctx: Optional[StellaContext] = None
-        self.message = None
+        self.message = message
+        self.delete_after = delete_after
         self.current_page = 0
         self.current_button = None
         self.current_interaction = None
@@ -582,7 +584,8 @@ class InteractionPages(CallbackView, MenuBase):
     @button(emoji='<:stop_check:754948796365930517>', style=discord.ButtonStyle.blurple)
     async def stop_page(self, _: discord.Interaction, __: ui.Button) -> None:
         self.stop()
-        await self.message.delete(delay=0)
+        if self.delete_after:
+            await self.message.delete(delay=0)
 
     @button(emoji='<:next_check:754948796361736213>', style=discord.ButtonStyle.blurple)
     async def next_page(self, _: discord.Interaction, __: ui.Button) -> None:
@@ -592,7 +595,7 @@ class InteractionPages(CallbackView, MenuBase):
     async def last_page(self, _: discord.Interaction, __: ui.Button) -> None:
         await self.show_page(self._source.get_max_pages() - 1)
 
-    @button(label="Select Page", style=discord.ButtonStyle.gray, stay_active=True)
+    @button(emoji='<:search:945890885533573150>', label="Select Page", style=discord.ButtonStyle.gray, stay_active=True)
     async def select_page(self, interaction: discord.Interaction, _: ui.Button) -> None:
         await self.selecting_page(interaction)
 
@@ -631,7 +634,8 @@ class InteractionPages(CallbackView, MenuBase):
         return True
 
     async def on_timeout(self) -> None:
-        await self.message.delete(delay=0)
+        if self.delete_after:
+            await self.message.delete(delay=0)
 
 
 class PersistentRespondView(ui.View):
