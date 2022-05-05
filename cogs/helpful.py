@@ -748,6 +748,7 @@ class Helpful(commands.Cog):
 
         async def start(self):
             self.message = await self.context.maybe_reply(embed=self.form_embed(), view=self)
+            await self.wait()
 
         async def show_modal(self, interaction: discord.Interaction):
             if self.modal is None:
