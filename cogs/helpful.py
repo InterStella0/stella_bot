@@ -25,13 +25,13 @@ from utils.errors import CantRun, BypassError
 from utils.parser import ReplReader, repl_wrap
 from utils.greedy_parser import UntilFlag, command, GreedyParser
 from utils.buttons import BaseButton, InteractionPages, MenuViewBase, PersistentRespondView, \
-    ButtonView, BaseView
+    ButtonView, BaseView, ViewAuthor, button
 from utils.new_converters import CodeblockConverter
 from utils.menus import ListPageInteractionBase, MenuViewInteractionBase, HelpMenuBase
 from utils import flags as flg
 from collections import namedtuple
 from jishaku.codeblocks import Codeblock
-from typing import Any, Tuple, List, Union, Optional, Dict, TYPE_CHECKING, Callable
+from typing import Any, Tuple, List, Union, Optional, Dict, TYPE_CHECKING, Callable, Literal
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -686,6 +686,148 @@ class Helpful(commands.Cog):
     async def timeit(self, ctx: StellaContext, *, code: CodeblockConverter):
         flags = {"exec": True, "exec_timer": True, "inner_func_check": False, "counter": False}
         await self.execute_repl(ctx, code, **flags)
+
+    class EvalView(ViewAuthor):
+        class Paginator(InteractionPages):
+            def __init__(self, source, ori_view):
+                super().__init__(source, message=ori_view.message, delete_after=False)
+                self.ori_view = ori_view
+
+            @button(emoji='<:stop_check:754948796365930517>', style=discord.ButtonStyle.blurple)
+            async def stop_page(self, interaction: discord.Interaction, __: ui.Button) -> None:
+                if self.delete_after:
+                    await self.message.delete(delay=0)
+                    return
+
+                for x in self.children:
+                    if x.label != "Menu":
+                        x.disabled = True
+
+                await interaction.response.edit_message(view=self)
+
+            @button(emoji="<:house_mark:848227746378809354>", label="Menu", row=1, stay_active=True)
+            async def on_menu_click(self, interaction: discord.Interaction, _: discord.ui.Button):
+                await interaction.response.edit_message(content=None, embed=self.ori_view.form_embed(), view=self.ori_view)
+                self.stop()
+
+        class EvalModal(BaseModal, title="Python Eval"):
+            code = discord.ui.TextInput(label="code", style=discord.TextStyle.long, placeholder="Enter your code here")
+            output = discord.ui.TextInput(label="output", style=discord.TextStyle.long, required=False, placeholder="Execution Output")
+
+            def __init__(self, view):
+                super().__init__()
+                self.view = view
+
+            async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                if len(self.code.value.strip()) == 0:
+                    await interaction.response.send_message("No Code Given", ephemeral=True)
+                    return False
+                if self.view.context.author.id != interaction.user.id:
+                    await interaction.response.send_message(f"Only {interaction.user} can respond to this modal.", ephemeral=True)
+                    return False
+                return True
+
+            async def on_submit(self, interaction: discord.Interaction) -> None:
+                await interaction.response.defer(thinking=True, ephemeral=True)
+                await self.view.execute_python(interaction)
+
+        def __init__(self, ctx):
+            super().__init__(ctx)
+            self.modal = None
+            self.previous_output = None
+            self.message = None
+            self.execution_count = 0
+
+        def form_embed(self):
+            description = ("press 'Enter' to enter your code.\n"
+                           "press 'Full Output' to view full output.\n"
+                           "press 'Stop' to stop the menu.")
+            if count := self.execution_count:
+                description = f"Execution Count: `{count:,}`\n" + description
+            return StellaEmbed.default(self.context, title="Python Eval Menu", description=description)
+
+        async def start(self):
+            self.message = await self.context.maybe_reply(embed=self.form_embed(), view=self)
+
+        async def show_modal(self, interaction: discord.Interaction):
+            if self.modal is None:
+                self.modal = self.EvalModal(self)
+
+            await interaction.response.send_modal(self.modal)
+
+        @staticmethod
+        def shorten_output(width: int, output: str):
+            leading = ""
+            if (amount := len(output)) > width:
+                left = amount - width
+                leading = f"... ({left:,} characters left)"
+            return output[:width] + leading
+
+        async def execute_python(self, interaction: discord.Interaction):
+            code = self.modal.code.value
+            result = await interaction.client.ipc_client.request("execute_python", code=code)
+            if (output := result.get("output")) is not None:
+                output = output or "No Output"
+            else:
+                output = result.get("reason") or "Execution Failure"
+
+            self.execution_count += 1
+            self.modal.output.default = self.shorten_output(3900, output)
+            self.modal.code.default = code
+            formatted = f"```py\n{self.shorten_output(1900, output)}```"
+            await interaction.followup.send(formatted, ephemeral=True)
+            to_edit = {'embed': self.form_embed()}
+            if self.previous_output is None:
+                discord.utils.get(self.children, label="Full Output").disabled = False
+                to_edit['view'] = self
+
+            self.previous_output = output
+            await self.message.edit(**to_edit)
+
+        @discord.ui.button(emoji='\U000023ef', label="Enter", style=discord.ButtonStyle.success)
+        async def on_enter_click(self, interaction: discord.Interaction, _: discord.ui.Button):
+            await self.show_modal(interaction)
+
+        @discord.ui.button(emoji='\U0001f5a5', label="Full Output", disabled=True)
+        async def on_output_click(self, interaction: discord.Interaction, _: discord.ui.Button):
+            if self.previous_output is None:
+                await interaction.response.send_message("No Previous Output", ephemeral=True)
+                return
+
+            await interaction.response.defer()
+            text = text_chunker(self.previous_output, width=1900, max_newline=20)
+            pager = self.Paginator(formatter(text), self)
+            await pager.start(self.context)
+
+        @discord.ui.button(emoji='<:stop_check:754948796365930517>', label="Stop", style=discord.ButtonStyle.danger)
+        async def on_stop_click(self, interaction: discord.Interaction, __: discord.ui.Button):
+            await interaction.response.send_message("Stopping...", ephemeral=True)
+            self.stop()
+
+        async def on_stop(self):
+            for item in self.children:
+                item.disabled = True
+
+            if self.context.bot.get_message(self.message.id):
+                await self.message.edit(view=self)
+
+        async def on_timeout(self) -> None:
+            self.stop()
+
+        def stop(self):
+            self.context.bot.loop.create_task(self.on_stop())
+            super().stop()
+            if (modal := self.modal) is not None:
+                modal.stop()
+
+
+    @command(name="eval", aliases=["e"],
+             brief="Python eval execution in discord modal.",
+             help="A message will be prompted for a series of action relating to python eval execution through discord "
+                  "modal.")
+    @commands.max_concurrency(1, commands.BucketType.user)
+    async def _eval(self, ctx: StellaContext):
+        await self.EvalView(ctx).start()
 
     @commands.command(help="Reports to the owner through the bot. Automatic blacklist if abuse.")
     @commands.cooldown(1, 60, commands.BucketType.user)
