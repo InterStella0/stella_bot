@@ -75,7 +75,11 @@ class MenuBase(menus.MenuPages):
     async def send_initial_message(self, ctx: commands.Context, channel: discord.TextChannel) -> discord.Message:
         page = await self._source.get_page(self.current_page)
         kwargs = await self._get_kwargs_from_page(page)
-        return await ctx.reply(**kwargs)
+        if self.message is None:
+            return await ctx.reply(**kwargs)
+        else:
+            await self.message.edit(**kwargs)
+            return self.message
 
 
 # Remind me to rewrite this trash
