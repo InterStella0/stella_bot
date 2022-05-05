@@ -286,12 +286,7 @@ class StellaContext(commands.Context):  # type: ignore[misc]
         to_send = (self.send, self.maybe_reply)[reply]
         if not self.channel.permissions_for(self.me).embed_links:
             raise commands.BotMissingPermissions(["embed_links"])
-        send_dict = {'tts': False, 'file': None, 'files': None,
-                     'delete_after': None, 'nonce': None}
-        for x, v in kwargs.items():
-            if x in send_dict:
-                send_dict[x] = v
-
+        send_dict = {x: y for x, y in kwargs.items() if x not in embed_only_kwargs}
         return await to_send(content, mention_author=mention_author, embed=ori_embed, **send_dict)
 
     def confirmed(self, message_id: Optional[int] = None) -> Awaitable[None]:
