@@ -71,7 +71,6 @@ class EvalModal(BaseModal, title="Python Eval"):
 
 
 class EvalView(ViewAuthor):
-
     def __init__(self, ctx):
         super().__init__(ctx)
         self.modal = None
