@@ -7,6 +7,7 @@ from jishaku.codeblocks import Codeblock
 
 from utils import flags as flg
 from utils.decorators import in_executor, pages
+from utils.errors import ErrorNoSignature
 from utils.new_converters import CodeblockConverter
 from utils.parser import ReplReader, repl_wrap
 from utils.buttons import InteractionPages, button, ViewAuthor, ButtonView
@@ -237,9 +238,9 @@ class EvalHandler(commands.Cog):
             if output := accepted.get("output"):
                 code = output
             elif reason := accepted.get("reason"):
-                raise commands.CommandError(reason)
+                raise ErrorNoSignature(reason)
             else:
-                raise commands.CommandError(f"It died sorry dan maaf")
+                raise ErrorNoSignature(f"It died sorry dan maaf")
 
         else:
             code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
