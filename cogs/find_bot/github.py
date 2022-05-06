@@ -12,6 +12,7 @@ from cogs.find_bot.baseclass import FindBotCog
 from cogs.find_bot.models import BotRepo
 from utils.buttons import InteractionPages
 from utils.decorators import wait_ready, event_check, pages
+from utils.errors import ErrorNoSignature
 from utils.useful import StellaContext, StellaEmbed, plural, aware_utc
 
 
@@ -65,8 +66,12 @@ class GithubHandler(FindBotCog):
                 yield f'[{aware_utc(time_created, mode="R")}] [{message}]({url} "{sha}")'
 
         repo = bot.repo
-        author = await self.bot.git.get_user(repo.owner.login)
-        value = [f'{u.login}(`{u.contributions}`)' async for u in aislice(repo.get_contributors(), 3)]
+        try:
+            author = await self.bot.git.get_user(repo.owner.login)
+            value = [f'{u.login}(`{u.contributions}`)' async for u in aislice(repo.get_contributors(), 3)]
+        except Exception as e:
+            raise ErrorNoSignature(str(e))
+
         embed = StellaEmbed.default(
             ctx,
             title=repo.full_name,
