@@ -48,6 +48,9 @@ def is_message_context():
 
 
 class CommandMessageRemoverHandler(commands.Cog):
+    def __init__(self, bot: StellaBot):
+        self.bot: StellaBot = bot
+
     @commands.Cog.listener("on_raw_bulk_message_delete")
     async def remove_context_messages(self, payload: discord.RawBulkMessageDeleteEvent):
         bot = self.bot

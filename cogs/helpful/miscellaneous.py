@@ -1,11 +1,7 @@
 from __future__ import annotations
-import contextlib
 import inspect
-import json
-import re
 
 import discord
-import copy
 import humanize
 import datetime
 import textwrap
