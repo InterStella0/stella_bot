@@ -1,67 +1,27 @@
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import datetime
-import io
 import json
-import textwrap
-import time
-import traceback
-from typing import (TYPE_CHECKING, Any, Coroutine, Dict, Generator, List,
-                    Optional, Tuple, Union, Literal)
+from typing import Dict, List, Optional, Union
 
 import discord
 import tabulate
 from discord.ext import commands
 from discord.ext.commands import Greedy
-from jishaku.codeblocks import Codeblock, codeblock_converter
+from jishaku.codeblocks import Codeblock
+
+from .baseclass import BaseMyselfCog
+from .flags import AddBotFlag, SQLFlag, ClearFlag
 from utils import flags as flg
-from utils import greedy_parser, menus
+from utils import greedy_parser
 from utils.buttons import InteractionPages
-from utils.decorators import event_check, pages
-from utils.greedy_parser import GreedyParser, Separator, UntilFlag
-from utils.new_converters import (CodeblockConverter, DatetimeConverter, IsBot,
-                                  JumpValidator, ValidCog)
-from utils.useful import (StellaContext, StellaEmbed, aware_utc, call,
-                          empty_page_format, print_exception, text_chunker, try_call)
-
-if TYPE_CHECKING:
-    from main import StellaBot
+from utils.decorators import pages
+from utils.greedy_parser import UntilFlag
+from utils.new_converters import (CodeblockConverter, IsBot)
+from utils.useful import (StellaContext, StellaEmbed, aware_utc)
 
 
-@pages()
-async def show_result(self, menu: menus.MenuBase, entry: str) -> str:
-    return f"```py\n{entry}```"
-
-
-class AddBotFlag(commands.FlagConverter):
-    joined_at: Optional[DatetimeConverter]
-    jump_url: Optional[JumpValidator]
-    requested_at: Optional[DatetimeConverter]
-    reason: Optional[str]
-    message: Optional[discord.Message]
-    author: Optional[discord.Member]
-
-
-class ClearFlag(commands.FlagConverter):
-    must: Optional[bool] = flg.flag(default=False)
-    messages: Optional[Tuple[discord.Message, ...]] = flg.flag(default=None)
-
-
-class SQLFlag(commands.FlagConverter):
-    not_number: Optional[bool] = flg.flag(aliases=["NN"], default=False)
-    max_row: Optional[int] = flg.flag(aliases=["MR"], default=12)
-
-
-class Myself(commands.Cog):
-    """Commands for stella"""
-    def __init__(self, bot: StellaBot):
-        self.bot = bot
-
-    async def cog_check(self, ctx: StellaContext) -> bool:
-        return await commands.is_owner().predicate(ctx)  # type: ignore
-
+class Miscellaneous(BaseMyselfCog):
     @greedy_parser.command()
     async def addbot(self, ctx: StellaContext, bot: IsBot, *, flags: AddBotFlag):
         flags = dict(flags)
@@ -96,23 +56,6 @@ class Myself(commands.Cog):
         result = await self.bot.pool_pg.execute(query, *values)
         await ctx.maybe_reply(result)
         self.bot.confirmed_bots.add(bot.id)
-
-    @commands.command()
-    async def su(self, ctx: StellaContext, member: Union[discord.Member, discord.User], *, content: str):
-        message = ctx.message
-        message.author = member
-        message.content = ctx.prefix + content
-        self.bot.dispatch("message", message)
-        await ctx.confirmed()
-
-    @commands.Cog.listener()
-    @event_check(lambda s, b, a: (b.content and a.content) or b.author.bot)
-    async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        if await self.bot.is_owner(before.author) and not before.embeds and not after.embeds:
-            if context := discord.utils.find(lambda ctx: ctx.message == after, self.bot.cached_context):
-                await context.reinvoke(message=after)
-            else:
-                await self.bot.process_commands(after)
 
     @greedy_parser.command()
     @commands.bot_has_permissions(read_message_history=True)
@@ -158,20 +101,6 @@ class Myself(commands.Cog):
         self.bot.dispatch('message', message)
         await ctx.confirmed()
 
-    async def cogs_handler(self, ctx: StellaContext, extensions: ValidCog,
-                           method: Literal["load", "unload", "reload"]) -> None:
-        async def do_cog(exts: str) -> str:
-            try:
-                func = getattr(self.bot, f"{method}_extension")
-                await func(f"cogs.{exts}")
-            except Exception as e:
-                return f"cogs.{exts} failed to {method}: {e}"
-            else:
-                return f"cogs.{exts} is {method}ed"
-
-        outputs = await asyncio.gather(*map(do_cog, extensions))
-        await ctx.embed(description="\n".join(map(str, outputs)))
-
     @greedy_parser.command()
     async def sql(self, ctx: StellaContext, query: UntilFlag[CodeblockConverter], *, flags: SQLFlag):
         flags = dict(flags)
@@ -202,24 +131,6 @@ class Myself(commands.Cog):
             await menu.start(ctx)
         else:
             await ctx.maybe_reply(rows)
-
-    @greedy_parser.command()
-    async def reinvoke(self, ctx: StellaContext, command: greedy_parser.UntilFlag[str], *, flags: flg.ReinvokeFlag):
-        message = ctx.message
-        message.author = flags.user or ctx.author
-        message.content = ctx.prefix + command
-        context = await self.bot.get_context(message)
-        try:
-            c_flags = dict(flags)
-            if c_flags.pop("redirect", True):
-                c_flags["redirect_error"] = True
-                c_flags["dispatch"] = False
-            await self.bot.invoke(context, in_task=False, **c_flags)
-            await ctx.confirmed()
-        except commands.CommandError as e:
-            error = print_exception(f'Exception raised while reinvoking {context.command}:', e, _print=False)
-            chunked = text_chunker(error, max_newline=10)
-            await InteractionPages(show_result(chunked)).start(ctx)
 
     @commands.group(invoke_without_command=True)
     async def blacklist(self, ctx: StellaContext, snowflake_id: Optional[Union[discord.Guild, discord.User]]):
@@ -327,40 +238,3 @@ class Myself(commands.Cog):
         with open("d_json/bot_var.json", "w") as w:
             json.dump(bot_var, w, indent=4)
         await ctx.confirmed()
-
-    @commands.command()
-    async def cancel(self, ctx: StellaContext, message: Union[discord.Message, discord.Object]):
-        with contextlib.suppress(KeyError):
-            task = self.bot.command_running.pop(message.id)
-            if task is not None and not task.done():
-                task.cancel()
-                await message.reply("This command was cancelled.")
-            else:
-                await ctx.maybe_reply("This command was already done.")
-            return await ctx.confirmed()
-        await ctx.maybe_reply("Unable to find a running command from this message.")
-
-    @commands.Cog.listener()
-    async def on_command(self, ctx: StellaContext):
-        ctx.done = False
-
-    @commands.Cog.listener()
-    async def on_command_completion(self, ctx: StellaContext):
-        if not ctx.done:
-            ctx.done = True
-
-    @commands.command(name="load", aliases=["cload", "loads"], cls=GreedyParser)
-    async def _cog_load(self, ctx, extension: Separator[ValidCog]):
-        await self.cogs_handler(ctx, extension, "load")
-
-    @commands.command(name="unload", aliases=["cunload", "unloads"], cls=GreedyParser)
-    async def _cog_unload(self, ctx, extension: Separator[ValidCog]):
-        await self.cogs_handler(ctx, extension, "unload")
-
-    @commands.command(name="reload", aliases=["creload", "reloads"], cls=GreedyParser)
-    async def _cog_reload(self, ctx, extension: Separator[ValidCog]):
-        await self.cogs_handler(ctx, extension, "reload")
-
-
-async def setup(bot: StellaBot) -> None:
-    await bot.add_cog(Myself(bot))
