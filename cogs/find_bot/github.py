@@ -13,7 +13,7 @@ from cogs.find_bot.models import BotRepo
 from utils.buttons import InteractionPages
 from utils.decorators import wait_ready, event_check, pages
 from utils.errors import ErrorNoSignature
-from utils.useful import StellaContext, StellaEmbed, plural, aware_utc
+from utils.useful import StellaContext, StellaEmbed, plural, aware_utc, aislice
 
 
 class GithubHandler(FindBotCog):
@@ -48,14 +48,6 @@ class GithubHandler(FindBotCog):
 
     @commands.command(aliases=["wgithub", "github", "botgithub"], help="Tries to show the given bot's GitHub repository.")
     async def whatgithub(self, ctx: StellaContext, bot: BotRepo):
-        async def aislice(citerator: AsyncGenerator[Any, Any], cut: int) -> AsyncGenerator[Any, Any]:
-            i = 0
-            async for v in citerator:
-                i += 1
-                yield v
-                if i == cut:
-                    break
-
         async def formatted_commits() -> AsyncGenerator[str, None]:
             async for c in aislice(repo.get_commits(), 5):
                 commit = c['commit']
