@@ -74,7 +74,11 @@ class NotOwnerConvert(ArgumentBaseError):
         super().__init__(message=f"You're not the owner of this bot. You can't use {converter}")
 
 
-class UserLocked(ArgumentBaseError):
+class ErrorNoSignature(commands.CommandError):
+    """Displays error in embed without generating signature hint"""
+
+
+class UserLocked(ArgumentBaseError, ErrorNoSignature):
     pass
 
 
@@ -82,10 +86,6 @@ class BypassError(ArgumentBaseError):
     def __init__(self, error):
         super().__init__()
         self.original = error
-
-
-class ErrorNoSignature(commands.CommandError):
-    """Displays error in embed without generating signature hint"""
 
 
 class NotInDpy(ErrorNoSignature):
