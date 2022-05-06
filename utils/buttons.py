@@ -634,6 +634,7 @@ class InteractionPages(CallbackView, MenuBase):
         return True
 
     async def on_timeout(self) -> None:
+        self.stop()
         if self.delete_after:
             await self.message.delete(delay=0)
 

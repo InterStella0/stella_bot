@@ -352,6 +352,9 @@ class WordleView(BaseView):
 
         await message.edit(view=self)
 
+    async def on_timeout(self) -> None:
+        self.stop()
+
     def stop(self):
         if self._prompter is not None:
             self._prompter.stop()
