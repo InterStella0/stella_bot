@@ -450,3 +450,12 @@ def multiget(iterable: Iterable[T], *, size: int = 2, **kwargs: Any) -> List[T]:
         if len(value) >= size:
             break
     return value
+
+
+async def aislice(citerator: AsyncGenerator[Any, Any], cut: int) -> AsyncGenerator[Any, Any]:
+    i = 0
+    async for v in citerator:
+        i += 1
+        yield v
+        if i == cut:
+            break
