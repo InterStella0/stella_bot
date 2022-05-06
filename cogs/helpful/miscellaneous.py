@@ -7,14 +7,15 @@ import humanize
 import datetime
 import itertools
 
+from aiogithub.objects import Repo, User
 from pygit2 import Repository, GIT_SORT_TOPOLOGICAL
 from discord.ext import commands
 
 from utils.decorators import pages
-from utils.useful import StellaEmbed, StellaContext, aware_utc, text_chunker
+from utils.useful import StellaEmbed, StellaContext, aware_utc, text_chunker, count_source_lines, plural, aislice
 from utils.errors import BypassError
 from utils.buttons import InteractionPages, PersistentRespondView, ViewAuthor, button
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -30,6 +31,8 @@ class SourceData:
     target: str
     lineno: int
     lastlineno: int
+    repo: Repo
+    author: User
 
 
 class SourcePaginator(InteractionPages):
@@ -88,6 +91,8 @@ class SourceMenu(ViewAuthor):
             self.context,
             title="{0.target} at stella_bot/{0.file}".format(data),
             description="```py\n" + f"\n".join(shorten) + leading + "```"
+        ).set_author(
+            name=data.repo.full_name, icon_url=data.author.avatar_url, url=data.repo.html_url
         )
 
     async def send(self):
@@ -105,6 +110,10 @@ class Miscellaneous(commands.Cog):
     def __init__(self, bot: StellaBot):
         self.bot = bot
         self.cooldown_report = commands.CooldownMapping.from_cooldown(5, 30, commands.BucketType.user)
+        self.stella_github: Optional[Repo] = None
+
+    async def cog_load(self) -> None:
+        self.stella_github = await self.bot.git.get_repo("InterStella0", "stella_bot")
 
     @commands.command(aliases=["ping", "p"],
                       help="Shows the bot latency from the discord websocket.")
@@ -130,8 +139,25 @@ class Miscellaneous(commands.Cog):
                            "It accepts 2 types of content, the command name, or the Cog method name. "
                            "Cog method must specify it's Cog name separate by a period and it's method.")
     async def source(self, ctx: StellaContext, *, content: str = None):
+        repo = self.stella_github
+        author = await self.bot.git.get_user(repo.owner.login)
         if not content:
-            return await ctx.embed(title="here's the entire repo", description=SOURCE_URL)
+            embed = StellaEmbed.default(
+                ctx,
+                title=f"Github - {repo.full_name}",
+                description=repo.description,
+                url=repo.html_url
+            )
+            embed.set_thumbnail(url=ctx.me.display_avatar)
+            embed.set_author(name=f"Made by {author.name}", icon_url=author.avatar_url, url=author.html_url)
+            embed.add_field(name="Line of codes",value=f"{count_source_lines('.'):,}")
+            embed.add_field(name=plural("Star(s)", repo.stargazers_count), value=repo.stargazers_count)
+            embed.add_field(name=plural("Fork(s)", repo.forks_count), value=repo.forks_count)
+            embed.add_field(name="Language", value=repo.language)
+            value = [f'{u.login}(`{u.contributions}`)' async for u in aislice(repo.get_contributors(), 3)]
+            embed.add_field(name="Top Contributors", value="\n".join(f"{i}. {e}" for i, e in enumerate(value, start=1)))
+            return await ctx.maybe_reply(embed=embed)
+
         src, module = None, None
 
         def command_check(command):
@@ -165,7 +191,7 @@ class Miscellaneous(commands.Cog):
         lines, firstlineno = inspect.getsourcelines(src)
         location = module.replace('.', '/') + '.py'  # type: ignore
         url = f'{SOURCE_URL}/blob/master/{location}#L{firstlineno}-L{firstlineno + len(lines) - 1}'
-        data = SourceData(location, url, ''.join(lines), content, firstlineno, firstlineno + len(lines) - 1)
+        data = SourceData(location, url, ''.join(lines), content, firstlineno, firstlineno + len(lines) - 1, repo, author)
         await SourceMenu(ctx, data).send()
 
     @commands.command(help="Gives you the invite link")
@@ -256,4 +282,6 @@ class Miscellaneous(commands.Cog):
         bots = sum(u.bot for u in self.bot.users)
         content = f"`{len(self.bot.guilds):,}` servers, `{len(self.bot.users) - bots:,}` users, `{bots:,}` bots"
         embed.add_field(name="Users", value=content)
+        stella_owner = await self.bot.git.get_user(self.stella_github.owner.login)
+        embed.set_author(name=f"By {stella_owner.name}", icon_url=stella_owner.avatar_url)
         await ctx.embed(embed=embed)
