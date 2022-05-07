@@ -104,3 +104,8 @@ CREATE TABLE IF NOT EXISTS wordle_rank(
     FOREIGN KEY (tag) REFERENCES wordle_tag(tag),
     UNIQUE (user_id, tag, word, attempt)
 );
+
+CREATE TABLE IF NOT EXISTS button_game(
+    user_id BIGINT PRIMARY KEY,
+    amount BIGINT DEFAULT 1
+)
