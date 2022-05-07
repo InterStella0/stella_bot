@@ -5,12 +5,13 @@ from .cmd_msg_remover import CommandMessageRemoverHandler
 from .eval import EvalHandler
 from .help_command import StellaBotHelp
 from .miscellaneous import Miscellaneous
+from .source import SourceCog
 
 if TYPE_CHECKING:
     from main import StellaBot
 
 
-features = EvalHandler, CommandMessageRemoverHandler, Miscellaneous
+features = EvalHandler, CommandMessageRemoverHandler, Miscellaneous, SourceCog
 
 
 class Helpful(*features):

@@ -4,6 +4,7 @@ from typing import Optional, Callable, TYPE_CHECKING
 import discord
 from discord.ext import commands
 
+from cogs.helpful.baseclass import BaseHelpfulCog
 from utils.decorators import event_check
 from utils.useful import StellaContext
 
@@ -47,10 +48,7 @@ def is_message_context():
     return event_check(inner)
 
 
-class CommandMessageRemoverHandler(commands.Cog):
-    def __init__(self, bot: StellaBot):
-        self.bot: StellaBot = bot
-
+class CommandMessageRemoverHandler(BaseHelpfulCog):
     @commands.Cog.listener("on_raw_bulk_message_delete")
     async def remove_context_messages(self, payload: discord.RawBulkMessageDeleteEvent):
         bot = self.bot

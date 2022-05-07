@@ -5,6 +5,7 @@ from discord import ui
 from discord.ext import commands
 from jishaku.codeblocks import Codeblock
 
+from cogs.helpful.baseclass import BaseHelpfulCog
 from utils import flags as flg
 from utils.decorators import in_executor, pages
 from utils.errors import ErrorNoSignature
@@ -163,10 +164,7 @@ class EvalView(ViewAuthor):
             modal.stop()
 
 
-class EvalHandler(commands.Cog):
-    def __init__(self, bot):
-        self.bot: StellaBot = bot
-
+class EvalHandler(BaseHelpfulCog):
     @command(name="eval", aliases=["e"],
              brief="Python eval execution in discord modal.",
              help="A message will be prompted for a series of action relating to python eval execution through discord "
