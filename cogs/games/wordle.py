@@ -21,6 +21,7 @@ from discord.ext import commands
 from discord.ext.commands import Greedy
 from discord.ui import TextInput
 
+from cogs.games.baseclass import BaseGameCog
 from utils import flags as flg
 from utils.buttons import BaseView, QueueView
 from utils.decorators import in_executor
@@ -627,11 +628,7 @@ class QueueWordle(QueueView):
         await self.message.edit(embed=self.embed)
 
 
-class WordleCommandCog(commands.Cog):
-    def __init__(self, bot: StellaBot):
-        self.bot = bot
-        self.lewdle_query = "SELECT word FROM wordle_word WHERE tag='lewdle' AND LENGTH(word) = $1"
-
+class WordleCommandCog(BaseGameCog):
     @commands.group(invoke_without_command=True, help="A wordle game except it's lewd.")
     async def lewdle(self, ctx: StellaContext, *, flags: WordleFlag):
         records = [r[0] for r in await self.bot.pool_pg.fetch(self.lewdle_query, flags.word_count)]
