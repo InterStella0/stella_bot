@@ -211,7 +211,8 @@ class EvalHandler(BaseHelpfulCog):
 
         return repl_wrap(code.content, context, **flags)
 
-    @command(help="Simulate a live python interpreter interface when given a python code.")
+    @command(help="Simulate a live python interpreter interface when given a python code. Please use this public eval"
+                  "wisely as any execution that takes >= 3 seconds are terminated.")
     @commands.max_concurrency(1, commands.BucketType.user)
     async def repl(self, ctx: StellaContext, code: UntilFlag[CodeblockConverter], *, flags: flg.ReplFlag):
         await self.execute_repl(ctx, code, **dict(flags))
@@ -258,7 +259,7 @@ class EvalHandler(BaseHelpfulCog):
         else:
             await ctx.maybe_reply(f"```py\nNo Output```")
 
-    @command(help="A timeit command for your python code.")
+    @command(help="A timeit command for your python code. Execution timeout are set to 3 seconds.")
     @commands.max_concurrency(1, commands.BucketType.user)
     async def timeit(self, ctx: StellaContext, *, code: CodeblockConverter):
         flags = {"exec": True, "exec_timer": True, "inner_func_check": False, "counter": False}
