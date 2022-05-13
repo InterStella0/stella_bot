@@ -10,7 +10,7 @@ from discord.ext import commands
 from cogs.helpful.baseclass import BaseHelpfulCog
 from utils.buttons import ViewAuthor, InteractionPages, button, BaseButton
 from utils.decorators import pages
-from utils.useful import StellaContext, StellaEmbed, plural, count_source_lines, aislice, text_chunker
+from utils.useful import StellaContext, StellaEmbed, plural, count_source_lines, aislice, newline_chunker
 
 
 @dataclass
@@ -91,7 +91,7 @@ class SourceMenu(ViewAuthor):
 
     @discord.ui.button(emoji='\U0001f5a5', label="Show Code", style=discord.ButtonStyle.green)
     async def on_show_click(self, interaction: discord.Interaction, button: discord.ui.Button):
-        linecodes = text_chunker(self.data.codeblock, width=1000, max_newline=10)
+        linecodes = newline_chunker(self.data.codeblock, width=1900, max_newline=10)
         nolinecodes = [*map(len, map(str.splitlines, linecodes))]
         source = SourcePaginator(source_format(linecodes), self, nolinecodes)
         await source.start(self.context)
