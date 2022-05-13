@@ -111,7 +111,7 @@ class BotHandler(FindBotCog):
             cmds = botcmds.commands[:3]
             highest = len(cmds)
             prefixes = random.sample(member.all_raw_prefixes, k=min(len(member.all_raw_prefixes), highest))
-            gen = zip([member.prefix, *prefixes],["<command>", *cmds])
+            gen = zip(itertools.cycle([member.prefix, *prefixes]),["<command>", *cmds])
             e.add_field(name="Example Usage", value="\n".join(f"`{prefix}{cmd}`" for prefix, cmd in gen), inline=False)
 
         e.set_thumbnail(url=member.bot.display_avatar)
