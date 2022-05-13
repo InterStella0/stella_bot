@@ -406,7 +406,7 @@ def islicechunk(sequence: Sequence[T], *, chunk: int = 1) -> Iterator[Sequence[T
 
 
 def text_chunker(text: str, *, width: int = 1880, max_newline: int = 20, wrap: bool = True,
-                 wrap_during_chunk: bool = True) -> List[str]:
+                 wrap_during_chunk: bool = True, reserve_whole_line=False) -> List[str]:
     """Chunks a given text into a flattened list.
         text: str
             massive text that needs to be chunked
@@ -418,6 +418,8 @@ def text_chunker(text: str, *, width: int = 1880, max_newline: int = 20, wrap: b
             whether to chunk before the max_newline pagination
         wrap_during_chunk: bool
             maximum character during max_newline pagination
+        reserve_whole_line: bool
+            reserve the entire line without splitting
 
         return: List[str]
     """
@@ -459,3 +461,33 @@ async def aislice(citerator: AsyncGenerator[Any, Any], cut: int) -> AsyncGenerat
         yield v
         if i == cut:
             break
+
+
+def nearest_nth(iterable: Iterable[str], *, chunk: int, width: int):
+    while chunk:
+        v = iterable[:chunk]
+        size = len("\n".join(v))
+        if size > width:
+            chunk -= 1
+            continue
+        return chunk
+
+
+def newline_chunker(text: str, *, width: int = 1500, max_newline: int = 10):
+    lines = text.splitlines()
+    build = []
+    current_pos = 0
+    while True:
+        lines = lines[current_pos:]
+        if not lines:
+            break
+
+        n = nearest_nth(lines, chunk=max_newline, width=width)
+        if n is None:
+            build.append(lines[0][:width])
+            lines[0] = lines[0][width:]
+            continue
+
+        build.append("\n".join(lines[:n]))
+        current_pos = n
+    return build
