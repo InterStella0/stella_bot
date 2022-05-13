@@ -106,12 +106,12 @@ class BotPrefixes(BotData):
         self.predicted_data = predicted_data
 
     @classmethod
-    async def convert(cls, ctx: StellaContext, argument: str) -> "BotPrefixes":
+    async def convert(cls, ctx: StellaContext, argument: str) -> BotPrefixes:
         member, data = await super().convert(ctx, argument)
         return await cls.from_db(ctx, member, data)
 
     @classmethod
-    async def from_db(cls, ctx: StellaContext, member, data):
+    async def from_db(cls, ctx: StellaContext, member, data) -> BotPrefixes:
         processed = [[x["prefix"], x["usage"], x["last_usage"].timestamp()] for x in data]
         prediction = await ctx.bot.get_prefixes_dataset(processed)
         return cls(member, prediction)
@@ -147,7 +147,7 @@ class BotCommands(BotData):
         self.total_usage = total_usage
 
     @classmethod
-    async def convert(cls, ctx: StellaContext, argument: str) -> "BotCommands":
+    async def convert(cls, ctx: StellaContext, argument: str) -> BotCommands:
         member, data = await super().convert(ctx, argument)
         command_usages = {}
         for payload in data:
