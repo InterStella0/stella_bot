@@ -7,6 +7,7 @@ import functools
 import io
 import itertools
 import operator
+import random
 import textwrap
 import time
 
@@ -104,6 +105,16 @@ class BotHandler(FindBotCog):
         e.add_field(name="Current", value=f"`{prefix}`")
         if member.aliases:
             e.add_field(name="Potential Aliases", value=f"`{alias}`")
+
+        with contextlib.suppress(Exception):
+            botcmds = await BotCommands.convert(ctx, str(member.bot.id))
+            cmds = botcmds.commands[:3]
+            highest = len(cmds)
+            prefixes = random.sample(member.all_raw_prefixes, k=min(len(member.all_raw_prefixes), highest))
+            gen = zip([member.prefix, *prefixes],["<command>", *cmds])
+            e.add_field(name="Example Usage", value="\n".join(f"`{prefix}{cmd}`" for prefix, cmd in gen), inline=False)
+
+        e.set_thumbnail(url=member.bot.display_avatar)
         await ctx.embed(title=f"{member}'s Prefix", embed=e)
 
     @commands.command(aliases=["pu", "shares", "puse"],
