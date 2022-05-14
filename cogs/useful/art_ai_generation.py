@@ -323,7 +323,7 @@ class ChooseArtStyle(ViewAuthor):
         self._is_cancelled = False
 
     async def disable_all(self):
-        if self.context.bot.get_message(self.message) is None:
+        if self.context.bot.get_message(self.message.id) is None:
             return
 
         with contextlib.suppress(Exception):
@@ -381,7 +381,7 @@ class WomboResult(ViewAuthor):
 
     async def display(self, result: PayloadTask):
         self.result = result
-        self._original_photo = await self.context.cog.get_local_url(result.result['final'])
+        self._original_photo = await self.context.cog.get_local_url(self.http, result.result['final'])
         await self.message.edit(embed=self.home_embed(), view=self, content=None)
         await self.wait()
 
