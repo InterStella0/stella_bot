@@ -25,6 +25,7 @@ from cogs.games.baseclass import BaseGameCog
 from utils import flags as flg
 from utils.buttons import BaseView, QueueView, InteractionPages
 from utils.decorators import in_executor, pages
+from utils.errors import ErrorNoSignature
 from utils.greedy_parser import GreedyParser, Separator
 from utils.modal import BaseModal
 from utils.new_converters import StateConverter, State
@@ -486,6 +487,7 @@ class WordleTag:
     name: str
     description: Optional[str]
     amount_words: int
+    dictionary: List[str]
     created_at: datetime.datetime
     uses: int
 
@@ -516,10 +518,15 @@ class WordleTag:
         if not result:
             raise commands.CommandError(f"Tag {argument} does not exist.")
 
+        query_word = "SELECT * FROM wordle_word WHERE tag=$1"
+        dictionary = [d['word'] for d in await ctx.bot.pool_pg.fetch(query_word, argument)]
         owner = cls.resolving_user(ctx, result["user_id"])
         description = result["description"] or "Undocumented"
 
-        return cls(owner, argument, description, result["tag_count"], result["created_at"], result['used'])
+        return cls(owner, argument, description, result["tag_count"], dictionary, result["created_at"], result['used'])
+
+    def __str__(self):
+        return self.name
 
 
 class DuelView(discord.ui.View):
@@ -715,6 +722,36 @@ class WordleCommandCog(BaseGameCog):
             value = "No value was inserted."
         await ctx.maybe_reply(value)
 
+    @wordle.command(name="remove",
+                    aliases=["removes", "deletes", "del", "delete"],
+                    brief="Remove words from your tag dictionary.",
+                    help="Remove words from your tag dictionary. This can take a json file which should contain an "
+                         "array of strings to automatically remove from the database. You can submit up to 1k words.")
+    async def wordle_remove(self, ctx: StellaContext, tag: WordleTags[State(author=True)], words: Greedy[str.upper]):
+        if ctx.message.attachments:
+            attachment: discord.Attachment = ctx.message.attachments[0]
+            words_attachment = json.load(io.BytesIO(await attachment.read()))
+            words.extend([word.upper() for word in words_attachment])
+
+        sql = "DELETE FROM wordle_word WHERE tag=$1 AND UPPER(word)=ANY($2::VARCHAR[])"
+        value = await self.bot.pool_pg.execute(sql, tag, words)
+        await ctx.maybe_reply(value)
+
+    @wordle.command(name="dictionary",
+                    aliases=["dictionaries", "dict", "dicts"])
+    async def wordle_dict(self, ctx: StellaContext, tag: WordleTags[State(author=True)]):
+        wordle = await WordleTag.convert(ctx, tag)
+        if not wordle.amount_words:
+            raise ErrorNoSignature(f"'{wordle}' Dictionary is empty")
+
+        @pages(per_page=10)
+        async def show_page(self, menu, items):
+            x = menu.current_page * 10 + 1
+            desc = "\n".join(f"{i}.{x}" for i, x in enumerate(items, start=x))
+            return StellaEmbed.default(menu.ctx, title="Wordle List", description=desc)
+
+        await InteractionPages(show_page(wordle.dictionary)).start(ctx)
+
     @wordle.command(name="duel",
                     brief="Duel a wordle game with your friends!",
                     help="Duel a wordle game with your friends! Who ever guess the word first wins!"
@@ -751,7 +788,7 @@ class WordleCommandCog(BaseGameCog):
         values = await self.bot.pool_pg.fetch(query)
         @pages(per_page=10)
         async def my_page(self, menu, items):
-            x = menu.current_page + 1
+            x = menu.current_page * 10 + 1
             desc = "\n".join(f"{i}.{x['tag']}" for i, x in enumerate(items, start=x))
             return StellaEmbed.default(menu.ctx, title="Wordle List", description=desc)
 
