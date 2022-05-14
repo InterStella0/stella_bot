@@ -477,7 +477,7 @@ class BotHandler(FindBotCog):
         await menu.start(ctx)
 
     @commands.command(aliases=["pp", "predictprefixes"], help="Shows how likely a prefix is valid for a bot.")
-    async def predictprefix(self, ctx: StellaContext, bot: IsBot):
+    async def predictprefix(self, ctx: StellaContext, *, bot: discord.Member = commands.param(converter=IsBot)):
         data = await self.bot.pool_pg.fetch("SELECT * FROM prefixes_list WHERE bot_id=$1", bot.id)
         if not data:
             raise commands.CommandError("Looks like i have no data to analyse sry.")

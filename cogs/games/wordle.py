@@ -23,8 +23,8 @@ from discord.ui import TextInput
 
 from cogs.games.baseclass import BaseGameCog
 from utils import flags as flg
-from utils.buttons import BaseView, QueueView
-from utils.decorators import in_executor
+from utils.buttons import BaseView, QueueView, InteractionPages
+from utils.decorators import in_executor, pages
 from utils.greedy_parser import GreedyParser, Separator
 from utils.modal import BaseModal
 from utils.new_converters import StateConverter, State
@@ -455,20 +455,22 @@ class WordleTags(StateConverter):
         cls.existing = True
         cls.author = False
 
-    async def convert(self, ctx: StellaContext, argument: str) -> str:
-        print("exist", self.existing)
-        print("author", self.author)
-        argument = argument.casefold()
+    async def convert(self, ctx: StellaContext, ori_argument: str) -> str:
+        argument = ori_argument.casefold()
         if not 3 < len(argument) < 100:
             raise commands.CommandError("Tag length must be between 3 to 100 characters")
 
+        reserved = itertools.chain.from_iterable([[[c.name, *c.aliases] for c in ctx.bot.get_command("wordle").commands]])
+        if argument in map(str.casefold, reserved):
+            raise commands.CommandError(f"'{ori_argument}' is a reserved word")
+
         result = await ctx.bot.pool_pg.fetchrow("SELECT * FROM wordle_tag WHERE tag=$1", argument)
         if not result and self.existing:
-            raise commands.CommandError(f"Tag {argument} does not exist.")
+            raise commands.CommandError(f"Tag {ori_argument} does not exist.")
 
         if result:
             if not self.existing:
-                raise commands.CommandError(f"Tag {argument} already exist with this name.")
+                raise commands.CommandError(f"Tag {ori_argument} already exist with this name.")
 
             if self.author and result["user_id"] != ctx.author.id:
                 raise commands.CommandError("You do not own this wordle tag.")
@@ -738,3 +740,15 @@ class WordleCommandCog(BaseGameCog):
 
         games = MultiWordle(ctx, ctx.author, *players, dictionaries=records, tries=flags.tries, word_count=flags.word_count)
         await games.start()
+
+    @wordle.command(name="list", aliases=["lists", "tags"])
+    async def wordle_lists(self, ctx: StellaContext):
+        query = "SELECT * FROM wordle_tag ORDER BY used DESC"
+        values = await self.bot.pool_pg.fetch(query)
+        @pages(per_page=10)
+        async def my_page(self, menu, items):
+            x = menu.current_page + 1
+            desc = "\n".join(f"{i}.{x['tag']}" for i, x in enumerate(items, start=x))
+            return StellaEmbed.default(menu.ctx, title="Wordle List", description=desc)
+
+        await InteractionPages(my_page(values)).start(ctx)
