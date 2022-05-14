@@ -201,6 +201,8 @@ class WordleGame:
     async def start(self):
         self.task = self.ctx.bot.loop.create_task(self.current_game())
         with contextlib.suppress(asyncio.CancelledError):
+            query = "UPDATE wordle_tag SET used=used+1 WHERE LOWER(tag)=$1"
+            await self.ctx.bot.pool_pg.execute(query, self.name.casefold())
             await self.task
 
         if not self.finish:
@@ -485,6 +487,7 @@ class WordleTag:
     description: Optional[str]
     amount_words: int
     created_at: datetime.datetime
+    uses: int
 
     @staticmethod
     def resolving_user(ctx: StellaContext, uid: int) -> Union[discord.Member, discord.User, discord.Object]:
@@ -516,7 +519,7 @@ class WordleTag:
         owner = cls.resolving_user(ctx, result["user_id"])
         description = result["description"] or "Undocumented"
 
-        return cls(owner, argument, description, result["tag_count"], result["created_at"])
+        return cls(owner, argument, description, result["tag_count"], result["created_at"], result['used'])
 
 
 class DuelView(discord.ui.View):
@@ -684,6 +687,7 @@ class WordleCommandCog(BaseGameCog):
             "**Owner:** `{0.owner}`\n"
             "**Name:** `{0.name}`\n"
             "**Description:** {0.description}\n"
+            "**Uses:** {0.uses}\n"
             "**Dictionary Size:** `{0.amount_words:,}` words\n"
             f"**Created At:** {aware_utc(tag.created_at, mode='f')}"
         )
