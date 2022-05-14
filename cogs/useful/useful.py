@@ -7,6 +7,8 @@ import itertools
 import functools
 from discord.ext import commands
 from collections import namedtuple
+
+from cogs.useful.baseclass import BaseUsefulCog
 from utils.useful import try_call, call, StellaContext, aware_utc
 from typing import Union, Optional, Tuple, TYPE_CHECKING
 
@@ -14,11 +16,7 @@ if TYPE_CHECKING:
     from main import StellaBot
 
 
-class Useful(commands.Cog):
-    """Command what I think is useful."""
-    def __init__(self, bot: StellaBot):
-        self.bot = bot
-
+class Etc(BaseUsefulCog):
     def parse_date(self, token: str) -> datetime.datetime:
         token_epoch = 1293840000
         bytes_int = base64.standard_b64decode(token + "==")
