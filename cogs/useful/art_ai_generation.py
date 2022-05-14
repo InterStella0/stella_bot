@@ -398,6 +398,12 @@ class WomboResult(ViewAuthor):
         pager = WomboGeneration(show_image(self.result.photo_url_list), self)
         await pager.start(self.context)
 
+    @button(emoji='🗑️', label="Delete")
+    async def delete_image(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.defer()
+        await self.message.delete()
+
 
 def image_desc(image_desc: str) -> str:
     if len(image_desc) < 3:
@@ -409,7 +415,7 @@ def image_desc(image_desc: str) -> str:
 
 
 class ArtAI(BaseUsefulCog):
-    @commands.command(help="Generate art work with description given using Dream Wombo AI")
+    @commands.command(help="Generate art work with description given using Dream Wombo AI.")
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def art(self, ctx: StellaContext, *, image_description: image_desc):
         # I'm gonna be honest, I can't find their API so im just gonna reverse engineer it.
