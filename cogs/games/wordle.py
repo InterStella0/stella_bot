@@ -28,7 +28,7 @@ from utils.decorators import in_executor, pages
 from utils.greedy_parser import GreedyParser, Separator
 from utils.modal import BaseModal
 from utils.new_converters import StateConverter, State
-from utils.useful import StellaContext, StellaEmbed, plural, aware_utc
+from utils.useful import StellaContext, StellaEmbed, plural, aware_utc, unpack
 
 if TYPE_CHECKING:
     from main import StellaBot
@@ -460,7 +460,7 @@ class WordleTags(StateConverter):
         if not 3 < len(argument) < 100:
             raise commands.CommandError("Tag length must be between 3 to 100 characters")
 
-        reserved = itertools.chain.from_iterable([[[c.name, *c.aliases] for c in ctx.bot.get_command("wordle").commands]])
+        reserved = unpack([[[c.name, *c.aliases] for c in ctx.bot.get_command("wordle").commands]])
         if argument in map(str.casefold, reserved):
             raise commands.CommandError(f"'{ori_argument}' is a reserved word")
 
