@@ -322,6 +322,17 @@ class ChooseArtStyle(ViewAuthor):
     async def on_timeout(self) -> None:
         self._is_cancelled = False
 
+    async def disable_all(self):
+        if self.context.bot.get_message(self.message) is None:
+            return
+
+        with contextlib.suppress(Exception):
+            await self.message.edit(content="Image generation has started...", embed=None, view=None)
+
+    def stop(self) -> None:
+        super().stop()
+        self.context.bot.loop.create_task(self.disable_all())
+
 
 class WomboGeneration(InteractionPages):
     def __init__(self, source, view: WomboResult):
@@ -354,13 +365,14 @@ class WomboResult(ViewAuthor):
         self.image_description = wombo.image_desc
         self.message = wombo.message
         self.http = wombo.http_art
+        self._original_photo = None
 
     def home_embed(self):
         value = self.result
         return StellaEmbed.default(
             self.context, title=self.image_description
         ).set_image(
-            url=value.result['final']
+            url=self._original_photo
         ).add_field(
             name="Image Generated", value=len(value.photo_url_list)
         ).add_field(
@@ -369,6 +381,7 @@ class WomboResult(ViewAuthor):
 
     async def display(self, result: PayloadTask):
         self.result = result
+        self._original_photo = await self.context.cog.get_local_url(result.result['final'])
         await self.message.edit(embed=self.home_embed(), view=self, content=None)
         await self.wait()
 
