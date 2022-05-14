@@ -411,7 +411,6 @@ def image_desc(image_desc: str) -> str:
 class ArtAI(BaseUsefulCog):
     @commands.command(help="Generate art work with description given using Dream Wombo AI")
     @commands.cooldown(1, 60, commands.BucketType.user)
-    @commands.max_concurrency(1, commands.BucketType.user)
     async def art(self, ctx: StellaContext, *, image_description: image_desc):
         # I'm gonna be honest, I can't find their API so im just gonna reverse engineer it.
         async with aiohttp.ClientSession() as http_art:
