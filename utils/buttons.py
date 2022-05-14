@@ -153,9 +153,13 @@ class ViewAuthor(BaseView):
         """Only allowing the context author to interact with the view"""
         ctx = self.context
         author = ctx.author
-        if await ctx.bot.is_owner(interaction.user):
+        user = interaction.user
+        if await ctx.bot.is_owner(user):
             return True
-        if interaction.user != author:
+        if isinstance(user, discord.Member) and user.guild_permissions.administrator:
+            return True
+
+        if user != author:
             bucket = self.cooldown.get_bucket(ctx.message)
             if not bucket.update_rate_limit():
                 if self.is_command:
