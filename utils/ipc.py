@@ -139,6 +139,7 @@ class StellaClient(ipc.Client):
     async def _read_message_stream(self) -> None:
         async for ws_message in self._message_stream():
             try:
+                print("Response:", ws_message)
                 await self._process_message(ws_message.json())
             except Exception as e:
                 print_exception("Ignoring error in gateway:", e)
