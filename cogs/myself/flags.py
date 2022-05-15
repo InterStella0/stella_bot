@@ -17,7 +17,7 @@ class AddBotFlag(commands.FlagConverter):
 
 
 class ClearFlag(commands.FlagConverter):
-    must: Optional[bool] = flg.flag(default=False)
+    must: Optional[bool] = flg.flag(default=True)
     messages: Optional[Tuple[discord.Message, ...]] = flg.flag(default=None)
 
 

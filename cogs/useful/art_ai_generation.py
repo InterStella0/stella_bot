@@ -86,7 +86,11 @@ class PayloadAccessToken:
 
 class DreamWombo:
     BASE = "https://app.wombo.art"
-    SECRET_KEY = "AIzaSyDCvp5MTJLUdtBYEKYWXJrlLzu1zuKM6Xw"  # This is a default secret_key, its not really a secret tbh
+    # This is a default secret_key, its not really a secret tbh
+    # SERCRET_KEY refers to the google API that the website is permanently using it for, it will be the same
+    # for all users, like yourself, go ahead and go to app.wombo.art and you can see the same key being used
+    # in their source code. (please stop mentioning this to me)
+    SECRET_KEY = "AIzaSyDCvp5MTJLUdtBYEKYWXJrlLzu1zuKM6Xw"
     TOKEN_GENERATOR = 'https://www.googleapis.com/identitytoolkit/v3/relyingparty/signupNewUser'
     TOKEN_REFRESH = 'https://securetoken.googleapis.com/v1/token'
 
@@ -113,17 +117,26 @@ class DreamWombo:
         if not bypass_time and time.time() - self.__previous < 5:
             return
 
+        emoji_status = {"pending": "<a:loading:747680523459231834>",
+                        "generating": "<a:typing:597589448607399949>",
+                        "completed": "<:checkmark:753619798021373974>"}
+
         description = f"**Prompt:** `{payload.input_spec['prompt']}`\n"\
                       f"**Style:** `{self.art_style.name}`\n" \
                       f"**Updated:** {aware_utc(payload.updated_at)}"
+
+        status = payload.state.casefold()
         embed = StellaEmbed.default(
             self.ctx,
-            title=f"Status: {payload.state.capitalize()}",
+            title=f"Status: {emoji_status.get(status)} {status.capitalize()}",
         )
         to_url_show = None
         if photos := payload.photo_url_list:
-            description += f"\n**Images Generated: ** {len(photos)}"
-            to_url_show = photos[-1] if payload.result is None else payload.result['final']
+            size = len(photos)
+            description += f"\n**Image Generation: ** `{size}` (`{size / 20:.0%}`)"
+            to_url_show = photos[-1] if payload.result is None else payload.result.get('final')
+            if to_url_show is None:  # fail safe for result final dict
+                to_url_show = photos[-1]
 
         if to_url_show is not None:
             url = await self.ctx.cog.get_local_url(self.http_art, to_url_show)
@@ -302,11 +315,12 @@ class ChooseArtStyle(ViewAuthor):
         value = select.values[0]
         art = self.art_styles.get(int(value))
         embed = StellaEmbed.default(self.context, title=f"Art Style Selected: {art.name}")
+        embed.description = "**Press Confirm to start generating!**"
         embed.set_image(url=art.photo_url)
         self.selected = art
         confirm = discord.utils.get([n for n in self.children if isinstance(n, discord.ui.Button)], label="Confirm")
         confirm.disabled = False
-        await interaction.response.edit_message(content="Press Confirm to start generating!", embed=embed, view=self)
+        await interaction.response.edit_message(content=None, embed=embed, view=self)
 
     @discord.ui.button(label="Confirm", row=1, style=discord.ButtonStyle.success, disabled=True)
     async def on_confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -327,7 +341,8 @@ class ChooseArtStyle(ViewAuthor):
             return
 
         with contextlib.suppress(Exception):
-            await self.message.edit(content="Image generation has started...", embed=None, view=None)
+            if not self._is_cancelled:
+                await self.message.edit(content="Image generation has started...", embed=None, view=None)
 
     def stop(self) -> None:
         super().stop()
@@ -335,24 +350,26 @@ class ChooseArtStyle(ViewAuthor):
 
 
 class WomboGeneration(InteractionPages):
+    MENU = "Final Image"
+
     def __init__(self, source, view: WomboResult):
         super().__init__(source, message=view.message, delete_after=False)
         self.view = view
 
     @button(emoji='<:stop_check:754948796365930517>', style=discord.ButtonStyle.blurple)
-    async def stop_page(self, interaction: discord.Interaction, __: discord.ui.Button) -> None:
+    async def stop_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         if self.delete_after:
             await self.message.delete(delay=0)
             return
 
         for x in self.children:
-            if not isinstance(x, discord.ui.Button) or x.label != "Menu":
+            if not isinstance(x, discord.ui.Button) or x.label != self.MENU:
                 x.disabled = True
 
         await interaction.response.edit_message(view=self)
 
-    @button(emoji="<:house_mark:848227746378809354>", label="Final Image", row=1, stay_active=True, style=discord.ButtonStyle.success)
-    async def on_menu_click(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @button(emoji="<:house_mark:848227746378809354>", label=MENU, row=1, stay_active=True, style=discord.ButtonStyle.success)
+    async def on_menu_click(self, interaction: discord.Interaction, _: discord.ui.Button):
         embed = self.view.home_embed()
         await interaction.response.edit_message(content=None, embed=embed, view=self.view)
         self.stop()
@@ -398,7 +415,7 @@ class WomboResult(ViewAuthor):
         pager = WomboGeneration(show_image(self.result.photo_url_list), self)
         await pager.start(self.context)
 
-    @button(emoji='🗑️', label="Delete")
+    @button(emoji='🗑️', label="Delete", style=discord.ButtonStyle.danger)
     async def delete_image(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.stop()
         await interaction.response.defer()
@@ -427,8 +444,6 @@ class ArtAI(BaseUsefulCog):
                 art = await view.start(image_description)
             except commands.CommandError:
                 return
-            except Exception:
-                raise
 
             result = await wombo.generate(ctx, art, image_description, view.message)
             await WomboResult(wombo).display(result)
