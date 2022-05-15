@@ -448,13 +448,12 @@ class WomboResult(ViewAuthor):
             return await response.read()
 
     async def download_images(self, urls: List[str]):
-        tasks = []
+        images = []
         for url in urls:
-            tasks.append(asyncio.create_task(self.download_image(url)))
+            images.append(await self.download_image(url))
             await asyncio.sleep(1)
 
-        await asyncio.wait(tasks)
-        return [task.result() for task in tasks]
+        return images
 
     @button(emoji="<:house_mark:848227746378809354>", label=FINAL_IMAGE, style=discord.ButtonStyle.success, row=0)
     async def on_menu_click(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
