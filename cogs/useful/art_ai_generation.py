@@ -429,19 +429,28 @@ class WomboResult(ViewAuthor):
         await self.message.delete()
 
 
-def image_desc(image_desc: str) -> str:
-    if len(image_desc) < 3:
-        raise commands.BadArgument("Image description must be more than 3 characters.")
-    if len(image_desc) > 100:
-        raise commands.BadArgument("Image description must be less than or equal to 100 characters.")
+class ProfanityImageDesc(commands.Converter):
+    async def convert(self, ctx: StellaContext, image_desc: str) -> str:
+        if len(image_desc) < 3:
+            raise commands.BadArgument("Image description must be more than 3 characters.")
+        if len(image_desc) > 100:
+            raise commands.BadArgument("Image description must be less than or equal to 100 characters.")
 
-    return image_desc
+        is_nsfw = ctx.channel.is_nsfw()
+        if is_nsfw:
+            return image_desc
+
+        result = await ctx.bot.ipc_client.request('simple_nsfw_detection', content=image_desc)
+        if result.get("suggestive"):
+            raise commands.BadArgument("Unsafe image description given. Please use this prompt inside an nsfw channel.")
+
+        return image_desc
 
 
 class ArtAI(BaseUsefulCog):
     @commands.command(help="Generate art work with description given using Dream Wombo AI.")
     @commands.cooldown(1, 60, commands.BucketType.user)
-    async def art(self, ctx: StellaContext, *, image_description: image_desc):
+    async def art(self, ctx: StellaContext, *, image_description: str = commands.param(converter=ProfanityImageDesc)):
         # I'm gonna be honest, I can't find their API so im just gonna reverse engineer it.
         async with aiohttp.ClientSession() as http_art:
             wombo = DreamWombo(http_art)
