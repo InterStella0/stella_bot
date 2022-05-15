@@ -451,7 +451,7 @@ class WomboResult(ViewAuthor):
         tasks = []
         for url in urls:
             tasks.append(asyncio.create_task(self.download_image(url)))
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
 
         await asyncio.wait(tasks)
         return [task.result() for task in tasks]
@@ -471,7 +471,7 @@ class WomboResult(ViewAuthor):
 
             prev_embed = self.home_embed()
             prev_embed.set_image(url=None)
-            desc = "<a:typing:597589448607399949> **Generating a GIF image. This may take a 10 seconds or longer**"
+            desc = "<a:typing:597589448607399949> **Generating a GIF image. This may take a 20 seconds or longer**"
             prev_embed.description = desc
             await interaction.response.edit_message(view=self, embed=prev_embed)
             image_bytes = await self.download_images(self.result.photo_url_list)
