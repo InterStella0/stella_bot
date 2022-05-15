@@ -127,7 +127,7 @@ class StellaClient(ipc.Client):
                 continue
             elif recv.type == aiohttp.WSMsgType.PONG:
                 continue
-            elif recv.type == aiohttp.WSMsgType.CLOSED:
+            elif recv.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE):
                 print("IPC websocket session closed, reconnecting...")
                 await self.session.close()
                 await asyncio.sleep(5)
@@ -139,7 +139,6 @@ class StellaClient(ipc.Client):
     async def _read_message_stream(self) -> None:
         async for ws_message in self._message_stream():
             try:
-                print("Response:", ws_message)
                 await self._process_message(ws_message.json())
             except Exception as e:
                 print_exception("Ignoring error in gateway:", e)
