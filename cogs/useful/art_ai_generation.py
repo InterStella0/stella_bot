@@ -17,6 +17,7 @@ import aiohttp
 import dateutil
 import discord
 from discord.ext import commands
+from typing_extensions import Self
 
 from utils.buttons import ViewAuthor, InteractionPages, button
 from utils.decorators import pages
@@ -112,9 +113,9 @@ class DreamWombo:
         self.art_style = art_style
         self.image_desc = image_desc
         self.message = message
-        return await self.progress()
+        return await self._progress()
 
-    async def update_interface(self, payload: PayloadTask, *, bypass_time: bool = False):
+    async def update_interface(self, payload: PayloadTask, *, bypass_time: bool = False) -> None:
         if not bypass_time and time.time() - self.__previous < 5:
             return
 
@@ -140,14 +141,14 @@ class DreamWombo:
                 to_url_show = photos[-1]
 
         if to_url_show is not None:
-            url = await self.ctx.cog.get_local_url(self.http_art, to_url_show)
+            url = await self.ctx.cog.get_local_url(to_url_show)
             embed.set_image(url=url)
 
         embed.description = description
         await self.message.edit(embed=embed, view=None)
 
-    async def progress(self) -> PayloadTask:
-        await self.get_authentication()
+    async def _progress(self) -> PayloadTask:
+        self.token = await self.get_authentication()
 
         task = await self.request_task()
         payload = await self.start_task(task)
@@ -174,27 +175,27 @@ class DreamWombo:
         await self.update_interface(payload, bypass_time=True)
         return payload
 
-    async def get_cached_authentication(self):
+    async def get_cached_authentication(self) -> PayloadToken:
         if self.cog.cache_authentication is None:
             self.cog.cache_authentication = await self.generate_token()
         return self.cog.cache_authentication
 
-    async def get_cached_access_auth(self):
+    async def get_cached_access_auth(self) -> PayloadAccessToken:
         if self.cog.cache_authentication_access is None:
             new_token = await self.get_cached_authentication()
             self.cog.cache_authentication_access = await self.request_access_token(new_token.refresh_token)
 
         return self.cog.cache_authentication_access
 
-    async def get_authentication(self):
+    async def get_authentication(self) -> str:
         access_token = await self.get_cached_access_auth()
         if access_token.expires_in < datetime.datetime.utcnow():
             refresh = access_token.refresh_token
             self.cog.cache_authentication_access = access_token = await self.request_access_token(refresh)
 
-        self.token = f"bearer {access_token.access_token}"
+        return f"bearer {access_token.access_token}"
 
-    async def generate_token(self):
+    async def generate_token(self) -> PayloadToken:
         async with self.http_art.post(self.TOKEN_GENERATOR, params={'key': self.SECRET_KEY}) as response:
             payload = await response.json()
             expire = convert_expiry_date(payload['expiresIn'])
@@ -202,7 +203,7 @@ class DreamWombo:
                 payload['kind'], payload['idToken'], payload['refreshToken'], expire, payload['localId']
             )
 
-    async def request_access_token(self, refresh_token):
+    async def request_access_token(self, refresh_token: str) -> PayloadAccessToken:
         payload = {
             'grant_type': 'refresh_token',
             'refresh_token': refresh_token
@@ -247,10 +248,7 @@ class DreamWombo:
                 raise ErrorNoSignature("Failure to reach API: " + msg)
             return responded
 
-    async def stop(self) -> None:
-        await self.http_art.close()
-
-    async def get_art_styles(self):
+    async def get_art_styles(self) -> List[ArtStyle]:
         regex = r'\{\"props\"\:.*\}'
         async with self.http_art.get(self.BASE) as result:
             value = await result.text()
@@ -278,13 +276,13 @@ class ArtStyle:
     blur_data_url: str
 
     @classmethod
-    def from_json(cls, raw_data):
+    def from_json(cls, raw_data) -> Self:
         return cls(
             raw_data['id'], raw_data['name'], raw_data['created_at'], raw_data['updated_at'], raw_data['deleted_at'],
             raw_data['photo_url'], raw_data['blurDataURL']
         )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -300,7 +298,7 @@ class ChooseArtStyle(ViewAuthor):
         self.selected: Optional[ArtStyle] = None
         self._is_cancelled = None
 
-    async def start(self, image_desc: str):
+    async def start(self, image_desc: str) -> Optional[ArtStyle]:
         self.message = await self.context.send(f"Choose an art style for `{image_desc}`!", view=self)
         await self.wait()
         with contextlib.suppress(discord.NotFound):
@@ -315,12 +313,12 @@ class ChooseArtStyle(ViewAuthor):
         return self.selected
 
     @discord.ui.select(placeholder=SELECT_PLACEHOLDER)
-    async def on_selected_art(self, interaction: discord.Interaction, select: discord.ui.Select):
+    async def on_selected_art(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
         value = select.values[0]
         art = self.art_styles.get(int(value))
         await self.set_value(art, interaction)
 
-    async def set_value(self, art: ArtStyle, interaction: discord.Interaction):
+    async def set_value(self, art: ArtStyle, interaction: discord.Interaction) -> None:
         embed = StellaEmbed.default(self.context, title=f"Art Style Selected: {art.name}")
         embed.description = '**Press "Generate" to start generating with your style!**'
         embed.set_image(url=art.photo_url)
@@ -330,25 +328,25 @@ class ChooseArtStyle(ViewAuthor):
         await interaction.response.edit_message(content=None, embed=embed, view=self)
 
     @discord.ui.button(emoji='<:checkmark:753619798021373974>', label="Generate", row=1, style=discord.ButtonStyle.success, disabled=True)
-    async def on_confirm(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def on_confirm(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.defer()
         self.stop()
 
     @discord.ui.button(emoji='<:stopmark:753625001009348678>', label="Cancel", style=discord.ButtonStyle.danger)
-    async def on_cancel(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def on_cancel(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.defer()
         self._is_cancelled = True
         self.stop()
 
     @discord.ui.button(emoji='🔀', label="Random", style=discord.ButtonStyle.blurple)
-    async def on_random(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def on_random(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         art = random.choice([*self.art_styles.values()])
         await self.set_value(art, interaction)
 
     async def on_timeout(self) -> None:
         self._is_cancelled = False
 
-    async def disable_all(self):
+    async def disable_all(self) -> None:
         if self.context.bot.get_message(self.message.id) is None:
             return
 
@@ -381,7 +379,7 @@ class WomboGeneration(InteractionPages):
         await interaction.response.edit_message(view=self)
 
     @button(emoji="<:house_mark:848227746378809354>", label=MENU, row=1, stay_active=True, style=discord.ButtonStyle.success)
-    async def on_menu_click(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def on_menu_click(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         embed = self.view.home_embed()
         await interaction.response.edit_message(content=None, embed=embed, view=self.view)
         self.stop()
@@ -397,7 +395,7 @@ class WomboResult(ViewAuthor):
         self.wombo = wombo
         self._original_photo = None
 
-    def home_embed(self):
+    def home_embed(self) -> StellaEmbed:
         value = self.result
         amount_pic = len(value.photo_url_list)
         return StellaEmbed.default(
@@ -412,27 +410,26 @@ class WomboResult(ViewAuthor):
             name="Created", value=aware_utc(value.created_at)
         )
 
-    async def display(self, result: PayloadTask):
+    async def display(self, result: PayloadTask) -> None:
         self.result = result
-        self._original_photo = await self.context.cog.get_local_url(self.http, result.result['final'])
+        self._original_photo = await self.context.cog.get_local_url(result.result['final'])
         await self.message.edit(embed=self.home_embed(), view=self, content=None)
-        await self.wait()
 
     @button(emoji='<:statis_mark:848262218554408988>', label="Show Image Generation", style=discord.ButtonStyle.blurple)
-    async def show_images(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def show_images(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
 
         @pages()
         async def show_image(self, menu, item):
             generation = menu.current_page + 1
-            url = await menu.ctx.cog.get_local_url(menu.view.http, item)
+            url = await menu.ctx.cog.get_local_url(item)
             return StellaEmbed.default(menu.ctx, title=f"Image Generation {generation}").set_image(url=url)
 
         pager = WomboGeneration(show_image(self.result.photo_url_list), self)
         await pager.start(self.context)
 
     @button(emoji='🗑️', label="Delete", style=discord.ButtonStyle.danger)
-    async def delete_image(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def delete_image(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.defer()
         await self.message.delete()
@@ -461,21 +458,20 @@ class ArtAI(BaseUsefulCog):
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def art(self, ctx: StellaContext, *, image_description: str = commands.param(converter=ProfanityImageDesc)):
         # I'm gonna be honest, I can't find their API so im just gonna reverse engineer it.
-        async with aiohttp.ClientSession() as http_art:
-            wombo = DreamWombo(http_art)
-            art_styles = await wombo.get_art_styles()
-            try:
-                view = ChooseArtStyle(art_styles, ctx)
-                art = await view.start(image_description)
-            except commands.CommandError:
-                return
+        wombo = DreamWombo(self.http_art)
+        art_styles = await wombo.get_art_styles()
+        try:
+            view = ChooseArtStyle(art_styles, ctx)
+            art = await view.start(image_description)
+        except commands.CommandError:
+            return
 
-            result = await wombo.generate(ctx, art, image_description, view.message)
-            await WomboResult(wombo).display(result)
+        result = await wombo.generate(ctx, art, image_description, view.message)
+        await WomboResult(wombo).display(result)
 
-    async def get_local_url(self, http: aiohttp.ClientSession, url: str):
+    async def get_local_url(self, url: str) -> str:
         if (local_url := self._cached_image.get(url)) is None:
-            async with http.get(url) as response:
+            async with self.http_art.get(url) as response:
                 base = base64.b64encode(await response.read()).decode('utf-8')
             filename = os.urandom(10).hex() + ".png"
             local_url = await self.bot.ipc_client.request('upload_file', base64=base, filename=filename)
