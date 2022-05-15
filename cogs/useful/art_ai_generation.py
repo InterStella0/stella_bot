@@ -283,6 +283,9 @@ class ArtStyle:
             raw_data['photo_url'], raw_data['blurDataURL']
         )
 
+    def __str__(self):
+        return self.name
+
 
 class ChooseArtStyle(ViewAuthor):
     SELECT_PLACEHOLDER = "Choose an art style"
@@ -315,14 +318,14 @@ class ChooseArtStyle(ViewAuthor):
         value = select.values[0]
         art = self.art_styles.get(int(value))
         embed = StellaEmbed.default(self.context, title=f"Art Style Selected: {art.name}")
-        embed.description = "**Press Confirm to start generating!**"
+        embed.description = '**Press "Generate" to start generating with your style!**'
         embed.set_image(url=art.photo_url)
         self.selected = art
-        confirm = discord.utils.get([n for n in self.children if isinstance(n, discord.ui.Button)], label="Confirm")
+        confirm = discord.utils.get([n for n in self.children if isinstance(n, discord.ui.Button)], label="Generate")
         confirm.disabled = False
         await interaction.response.edit_message(content=None, embed=embed, view=self)
 
-    @discord.ui.button(label="Confirm", row=1, style=discord.ButtonStyle.success, disabled=True)
+    @discord.ui.button(label="Generate", row=1, style=discord.ButtonStyle.success, disabled=True)
     async def on_confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         self.stop()
@@ -382,16 +385,20 @@ class WomboResult(ViewAuthor):
         self.image_description = wombo.image_desc
         self.message = wombo.message
         self.http = wombo.http_art
+        self.wombo = wombo
         self._original_photo = None
 
     def home_embed(self):
         value = self.result
+        amount_pic = len(value.photo_url_list)
         return StellaEmbed.default(
-            self.context, title=self.image_description
+            self.context, title=self.image_description.title()
         ).set_image(
             url=self._original_photo
         ).add_field(
-            name="Image Generated", value=len(value.photo_url_list)
+            name="Image Generation", value=f"`{amount_pic}`"
+        ).add_field(
+            name="Style", value=self.wombo.art_style
         ).add_field(
             name="Created", value=aware_utc(value.created_at)
         )
