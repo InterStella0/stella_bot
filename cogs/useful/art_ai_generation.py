@@ -7,6 +7,7 @@ import datetime
 import itertools
 import json
 import os
+import random
 import re
 import time
 from dataclasses import dataclass
@@ -317,6 +318,9 @@ class ChooseArtStyle(ViewAuthor):
     async def on_selected_art(self, interaction: discord.Interaction, select: discord.ui.Select):
         value = select.values[0]
         art = self.art_styles.get(int(value))
+        await self.set_value(art, interaction)
+
+    async def set_value(self, art: ArtStyle, interaction: discord.Interaction):
         embed = StellaEmbed.default(self.context, title=f"Art Style Selected: {art.name}")
         embed.description = '**Press "Generate" to start generating with your style!**'
         embed.set_image(url=art.photo_url)
@@ -326,15 +330,20 @@ class ChooseArtStyle(ViewAuthor):
         await interaction.response.edit_message(content=None, embed=embed, view=self)
 
     @discord.ui.button(emoji='<:checkmark:753619798021373974>', label="Generate", row=1, style=discord.ButtonStyle.success, disabled=True)
-    async def on_confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def on_confirm(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
         self.stop()
 
     @discord.ui.button(emoji='<:stopmark:753625001009348678>', label="Cancel", style=discord.ButtonStyle.danger)
-    async def on_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def on_cancel(self, interaction: discord.Interaction, _: discord.ui.Button):
         await interaction.response.defer()
         self._is_cancelled = True
         self.stop()
+
+    @discord.ui.button(emoji='🔀', label="Random", style=discord.ButtonStyle.blurple)
+    async def on_random(self, interaction: discord.Interaction, _: discord.ui.Button):
+        art = random.choice([*self.art_styles.values()])
+        await self.set_value(art, interaction)
 
     async def on_timeout(self) -> None:
         self._is_cancelled = False
