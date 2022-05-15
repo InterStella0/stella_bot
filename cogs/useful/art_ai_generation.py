@@ -325,12 +325,12 @@ class ChooseArtStyle(ViewAuthor):
         confirm.disabled = False
         await interaction.response.edit_message(content=None, embed=embed, view=self)
 
-    @discord.ui.button(label="Generate", row=1, style=discord.ButtonStyle.success, disabled=True)
+    @discord.ui.button(emoji='<:checkmark:753619798021373974>', label="Generate", row=1, style=discord.ButtonStyle.success, disabled=True)
     async def on_confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         self.stop()
 
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+    @discord.ui.button(emoji='<:stopmark:753625001009348678>', label="Cancel", style=discord.ButtonStyle.danger)
     async def on_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         self._is_cancelled = True
