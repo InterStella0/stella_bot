@@ -408,6 +408,7 @@ class WomboResult(ViewAuthor):
         self.final_button = discord.utils.get(self.children, label=self.FINAL_IMAGE)
         self.remove_item(self.final_button)
         self.gen_button = discord.utils.get(self.children, label=self.IMG_GENERATION)
+        self.remove_item(self.gen_button)  # disabled for now until file handler fixed.
 
     def home_embed(self) -> StellaEmbed:
         value = self.result
