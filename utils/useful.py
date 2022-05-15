@@ -372,7 +372,7 @@ def _iterate_source_line_counts(root: str) -> Iterator[int]:
             yield from _iterate_source_line_counts(path)
         else:
             if path.endswith((".py", ".c")):
-                with open(path) as f:
+                with open(path, encoding="utf8") as f:
                     yield len(f.readlines())
 
 
