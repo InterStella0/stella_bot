@@ -15,4 +15,11 @@ class BaseUsefulCog(commands.Cog):
         self.cache_authentication: Optional[PayloadToken] = None
         self.cache_authentication_access: Optional[PayloadAccessToken] = None
         self._cached_image: Dict[str, str] = {}
+        self.http_art: Optional[aiohttp.ClientSession] = None
 
+    async def cog_load(self) -> None:
+        self.http_art = aiohttp.ClientSession()
+
+    async def cog_unload(self) -> None:
+        if self.http_art:
+            await self.http_art.close()
