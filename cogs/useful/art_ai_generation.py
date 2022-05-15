@@ -4,6 +4,7 @@ import asyncio
 import base64
 import contextlib
 import datetime
+import io
 import itertools
 import json
 import os
@@ -16,11 +17,12 @@ from typing import Optional, List, Any, Dict, Union
 import aiohttp
 import dateutil
 import discord
+from PIL import Image
 from discord.ext import commands
 from typing_extensions import Self
 
 from utils.buttons import ViewAuthor, InteractionPages, button
-from utils.decorators import pages
+from utils.decorators import pages, in_executor
 from utils.errors import ErrorNoSignature
 from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc
 from .baseclass import BaseUsefulCog
@@ -380,12 +382,20 @@ class WomboGeneration(InteractionPages):
 
     @button(emoji="<:house_mark:848227746378809354>", label=MENU, row=1, stay_active=True, style=discord.ButtonStyle.success)
     async def on_menu_click(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        embed = self.view.home_embed()
-        await interaction.response.edit_message(content=None, embed=embed, view=self.view)
+        view = self.view
+        embed = view.home_embed()
+        if view.final_button in view.children:
+            view.remove_item(view.final_button)
+            view.add_item(view.gen_button)
+
+        await interaction.response.edit_message(content=None, embed=embed, view=view)
         self.stop()
 
 
 class WomboResult(ViewAuthor):
+    FINAL_IMAGE = "Final Image"
+    IMG_GENERATION = "Show Image Evolution"
+
     def __init__(self, wombo: DreamWombo):
         super().__init__(wombo.ctx)
         self.result = None
@@ -394,6 +404,10 @@ class WomboResult(ViewAuthor):
         self.http = wombo.http_art
         self.wombo = wombo
         self._original_photo = None
+        self._original_gif = None
+        self.final_button = discord.utils.get(self.children, label=self.FINAL_IMAGE)
+        self.remove_item(self.final_button)
+        self.gen_button = discord.utils.get(self.children, label=self.IMG_GENERATION)
 
     def home_embed(self) -> StellaEmbed:
         value = self.result
@@ -415,7 +429,70 @@ class WomboResult(ViewAuthor):
         self._original_photo = await self.context.cog.get_local_url(result.result['final'])
         await self.message.edit(embed=self.home_embed(), view=self, content=None)
 
-    @button(emoji='<:statis_mark:848262218554408988>', label="Show Image Generation", style=discord.ButtonStyle.blurple)
+    @in_executor()
+    def generate_gif(self, image_bytes: List[bytes]) -> io.BytesIO:
+        images: List[Image.Image] = [Image.open(io.BytesIO(image_byte)) for image_byte in image_bytes]
+        *rest_images, final_image = images
+        width, height = final_image.size
+        final_size = int(width / 2), int(height / 2)
+        resized_images = [image.resize(final_size) for image in images]
+        byte = io.BytesIO()
+        durations = [*[300 for _ in rest_images], 3000]
+        first_image, *rest_images = resized_images
+        first_image.save(byte, format="GIF", save_all=True, append_images=rest_images, optimize=False, duration=durations, loop=0)
+        byte.seek(0)
+        return byte
+
+    async def download_image(self, url: str):
+        async with self.http.get(url) as response:
+            return await response.read()
+
+    async def download_images(self, urls: List[str]):
+        tasks = []
+        for url in urls:
+            tasks.append(asyncio.create_task(self.download_image(url)))
+            await asyncio.sleep(0.3)
+
+        await asyncio.wait(tasks)
+        return [task.result() for task in tasks]
+
+    @button(emoji="<:house_mark:848227746378809354>", label=FINAL_IMAGE, style=discord.ButtonStyle.success, row=0)
+    async def on_menu_click(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        embed = self.home_embed()
+        self.remove_item(button)
+        self.add_item(self.gen_button)
+        await interaction.response.edit_message(content=None, embed=embed, view=self)
+
+    @button(emoji='<a:OMPS_flecha:834116301483540531>', label=IMG_GENERATION, style=discord.ButtonStyle.success, row=0)
+    async def show_gif(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if self._original_gif is None:
+            for item in self.children:
+                item.disabled = True
+
+            prev_embed = self.home_embed()
+            prev_embed.set_image(url=None)
+            desc = "<a:typing:597589448607399949> **Generating a GIF image. This may take a 10 seconds or longer**"
+            prev_embed.description = desc
+            await interaction.response.edit_message(view=self, embed=prev_embed)
+            image_bytes = await self.download_images(self.result.photo_url_list)
+            new_gif = await self.generate_gif(image_bytes)
+            base = base64.b64encode(new_gif.read()).decode('utf-8')
+            filename = os.urandom(10).hex() + ".gif"
+            local_url = await self.context.bot.ipc_client.request('upload_file', base64=base, filename=filename)
+            self._original_gif = local_url
+        else:
+            await interaction.response.defer()
+
+        embed = self.home_embed()
+        for item in self.children:
+            item.disabled = False
+
+        self.remove_item(button)
+        self.add_item(self.final_button)
+        await self.message.edit(embed=embed.set_image(url=self._original_gif), view=self)
+
+    @button(emoji='<:statis_mark:848262218554408988>', label="Show Image Generation", style=discord.ButtonStyle.blurple,
+            row=1)
     async def show_images(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.defer()
 
@@ -428,11 +505,20 @@ class WomboResult(ViewAuthor):
         pager = WomboGeneration(show_image(self.result.photo_url_list), self)
         await pager.start(self.context)
 
-    @button(emoji='🗑️', label="Delete", style=discord.ButtonStyle.danger)
+    @button(emoji='🗑️', label="Delete", style=discord.ButtonStyle.danger, row=1)
     async def delete_image(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.defer()
         await self.message.delete()
+
+    async def on_timeout(self) -> None:
+        if self.context.bot.get_message(self.message.id) is None:
+            return
+
+        for item in self.children:
+            item.disabled = True
+
+        await self.message.edit(view=self)
 
 
 class ProfanityImageDesc(commands.Converter):
