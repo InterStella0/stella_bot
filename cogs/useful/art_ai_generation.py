@@ -561,8 +561,7 @@ class ProfanityImageDesc(commands.Converter):
         if len(image_desc) > 100:
             raise commands.BadArgument("Image description must be less than or equal to 100 characters.")
 
-        is_nsfw = ctx.channel.is_nsfw()
-        if is_nsfw:
+        if not hasattr(ctx.channel, "is_nsfw") or ctx.channel.is_nsfw():
             return image_desc
 
         result = await ctx.bot.ipc_client.request('simple_nsfw_detection', content=image_desc)
