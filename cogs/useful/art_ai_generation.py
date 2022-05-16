@@ -138,6 +138,9 @@ class DreamWombo:
         if photos := payload.photo_url_list:
             size = len(photos)
             description += f"\n**Image Generation: ** `{size}` (`{size / 20:.0%}`)"
+            if status == "completed":
+                description += f"\n{emoji_status['generating']}**Downloading Images**"
+
             to_url_show = photos[-1] if payload.result is None else payload.result.get('final')
             if to_url_show is None:  # fail safe for result final dict
                 to_url_show = photos[-1]
@@ -383,12 +386,12 @@ class WomboGeneration(InteractionPages):
     @button(emoji="<:house_mark:848227746378809354>", label=MENU, row=1, stay_active=True, style=discord.ButtonStyle.success)
     async def on_menu_click(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         view = self.view
-        embed = view.home_embed()
+        embeds = view.showing_original()
         if view.final_button in view.children:
             view.remove_item(view.final_button)
             view.add_item(view.gen_button)
 
-        await interaction.response.edit_message(content=None, embed=embed, view=view)
+        await interaction.response.edit_message(content=None, embeds=embeds, view=view)
         self.stop()
 
 
@@ -413,7 +416,7 @@ class WomboResult(ViewAuthor):
         value = self.result
         amount_pic = len(value.photo_url_list)
         return StellaEmbed.default(
-            self.context, title=self.image_description.title()
+            self.context, title=self.image_description.title(), url=self._original_photo
         ).set_image(
             url=self._original_photo
         ).add_field(
@@ -424,10 +427,18 @@ class WomboResult(ViewAuthor):
             name="Created", value=aware_utc(value.created_at)
         )
 
+    def showing_original(self):
+        embed1 = self.home_embed()
+        embed2 = self.home_embed()
+        embed2.set_image(url=self._original_gif)
+        return [embed1, embed2]
+
     async def display(self, result: PayloadTask) -> None:
         self.result = result
         self._original_photo = await self.context.cog.get_local_url(result.result['final'])
-        await self.message.edit(embed=self.home_embed(), view=self, content=None)
+        self._original_gif = await self.generate_gif_url()
+        embeds = self.showing_original()
+        await self.message.edit(embeds=embeds, view=self, content=None)
 
     @in_executor()
     def generate_gif(self, image_bytes: List[bytes]) -> io.BytesIO:
@@ -458,10 +469,16 @@ class WomboResult(ViewAuthor):
 
     @button(emoji="<:house_mark:848227746378809354>", label=FINAL_IMAGE, style=discord.ButtonStyle.success, row=0)
     async def on_menu_click(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        embed = self.home_embed()
+        embeds = self.showing_original()
         self.remove_item(button)
         self.add_item(self.gen_button)
-        await interaction.response.edit_message(content=None, embed=embed, view=self)
+        await interaction.response.edit_message(content=None, embeds=embeds, view=self)
+
+    async def generate_gif_url(self):
+        image_bytes = await self.download_images(self.result.photo_url_list)
+        new_gif = await self.generate_gif(image_bytes)
+        filename = os.urandom(16).hex() + ".gif"
+        return await self.context.bot.upload_file(byte=new_gif.read(), filename=filename)
 
     @button(emoji='<a:OMPS_flecha:834116301483540531>', label=IMG_GENERATION, style=discord.ButtonStyle.success, row=0)
     async def show_gif(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -474,11 +491,7 @@ class WomboResult(ViewAuthor):
             desc = "<a:typing:597589448607399949> **Generating a GIF image. This may take a 20 seconds or longer**"
             prev_embed.description = desc
             await interaction.response.edit_message(view=self, embed=prev_embed)
-            image_bytes = await self.download_images(self.result.photo_url_list)
-            new_gif = await self.generate_gif(image_bytes)
-            filename = os.urandom(16).hex() + ".gif"
-            local_url = await self.context.bot.upload_file(byte=new_gif.read(), filename=filename)
-            self._original_gif = local_url
+            self._original_gif = await self.generate_gif_url()
             self.reset_timeout()
         else:
             await interaction.response.defer()
