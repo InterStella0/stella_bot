@@ -451,7 +451,7 @@ class WomboResult(ViewAuthor):
         tasks = []
         for url in urls:
             tasks.append(asyncio.create_task(self.download_image(url)))
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.1)
 
         await asyncio.wait(tasks)
         return [task.result() for task in tasks]
