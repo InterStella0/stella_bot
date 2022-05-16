@@ -408,7 +408,6 @@ class WomboResult(ViewAuthor):
         self.final_button = discord.utils.get(self.children, label=self.FINAL_IMAGE)
         self.remove_item(self.final_button)
         self.gen_button = discord.utils.get(self.children, label=self.IMG_GENERATION)
-        self.remove_item(self.gen_button)  # disabled for now until file handler fixed.
 
     def home_embed(self) -> StellaEmbed:
         value = self.result
@@ -476,10 +475,10 @@ class WomboResult(ViewAuthor):
             await interaction.response.edit_message(view=self, embed=prev_embed)
             image_bytes = await self.download_images(self.result.photo_url_list)
             new_gif = await self.generate_gif(image_bytes)
-            base = base64.b64encode(new_gif.read()).decode('utf-8')
-            filename = os.urandom(10).hex() + ".gif"
-            local_url = await self.context.bot.ipc_client.request('upload_file', base64=base, filename=filename)
+            filename = os.urandom(16).hex() + ".gif"
+            local_url = await self.context.bot.upload_file(byte=new_gif.read(), filename=filename)
             self._original_gif = local_url
+            self.reset_timeout()
         else:
             await interaction.response.defer()
 
@@ -558,9 +557,9 @@ class ArtAI(BaseUsefulCog):
     async def get_local_url(self, url: str) -> str:
         if (local_url := self._cached_image.get(url)) is None:
             async with self.http_art.get(url) as response:
-                base = base64.b64encode(await response.read()).decode('utf-8')
+                byte = await response.read()
             filename = os.urandom(10).hex() + ".png"
-            local_url = await self.bot.ipc_client.request('upload_file', base64=base, filename=filename)
+            local_url = await self.bot.upload_file(byte=byte, filename=filename)
             self._cached_image[url] = local_url
 
         return local_url

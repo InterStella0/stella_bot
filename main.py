@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import collections
 import contextlib
 import copy
@@ -312,6 +313,31 @@ class StellaBot(commands.Bot):
             await ctx.typing()
         await self.invoke(ctx)
 
+    SEND_CONSTANT = 2 ** 16
+
+    async def upload_file(self, *, byte: bytes, filename: str):
+        task_id = await self.ipc_client.request("get_upload_id", filename=filename)
+        if not isinstance(task_id, str):
+            raise Exception(task_id)
+
+        while True:
+            current_byte = byte[:self.SEND_CONSTANT]
+            if not current_byte:
+                break
+
+            payload = {
+                'id': task_id,
+                'is_done': False,
+                'current_bytes': base64.b64encode(current_byte).decode('utf-8')
+            }
+            status = await self.ipc_client.request("upload_byte", **payload)
+            if status["code"] != 200:
+                raise Exception(status["error"])
+
+            byte = byte[self.SEND_CONSTANT:]
+
+        return await self.ipc_client.request("upload_byte", id=task_id, is_done=True)
+
     async def main(self) -> None:
         """Starts the bot properly"""
         try:
@@ -434,6 +460,15 @@ async def on_restarting_server(_: IPCData) -> None:
 async def on_kill(data: IPCData) -> None:
     print("Kill has been ordered", data)
     await bot.close()
+
+
+
+@bot.command()
+async def uploading(ctx: StellaContext):
+    attachment = ctx.message.attachments[0]
+    byte = await attachment.read()
+    url = await ctx.bot.upload_file(byte=byte, filename="Testupload.png")
+    await ctx.send("Here: " + url)
 
 
 bot.starter()

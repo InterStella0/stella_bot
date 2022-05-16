@@ -235,8 +235,8 @@ class WordleGame:
         return self._background
 
     async def render_display(self):
-        base = await self._render_display()
-        return await self.ctx.bot.ipc_client.request('upload_file', base64=base, filename="lewdle_board.png")
+        byte = await self._render_display()
+        return await self.ctx.bot.upload_file(byte=byte, filename="lewdle_board.png")
 
     @in_executor()
     def _render_display(self):
@@ -244,8 +244,7 @@ class WordleGame:
         byte = io.BytesIO()
         self._background.save(byte, format="PNG")
         byte.seek(0)
-        base = base64.b64encode(byte.read()).decode('utf-8')
-        return base
+        return byte
 
     def __render_display(self):
         background = self.get_background()

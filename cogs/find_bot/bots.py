@@ -464,8 +464,7 @@ class BotHandler(FindBotCog):
                 if url := self.url_store.get(bot.id):
                     embed.set_image(url=url)
                 elif file := await self.cog.create_bar(self.ctx, bot):
-                    base = base64.b64encode(file.fp.read()).decode('utf-8')
-                    url = await self.cog.bot.ipc_client.request('upload_file', base64=base, filename=file.filename)
+                    url = await self.cog.bot.upload_file(byte=file.fp.read(), filename=file.filename)
                     embed.set_image(url=url)
                     self.url_store.update({bot.id: url})
                 else:
