@@ -107,6 +107,15 @@ class DreamWombo:
         self.message: Optional[discord.Message] = None
         self.cog: Optional[BaseUsefulCog] = None
         self.__previous = time.time()
+        self.__already_downloaded = 0
+        self.cached_images = {}
+
+    async def get_image(self, i):
+        value = self.cached_images.get(i)
+        if isinstance(value, asyncio.Event):
+            await value.wait()
+            value = self.cached_images.get(i)
+        return value
 
     async def generate(self, ctx: StellaContext, art_style: ArtStyle, image_desc: str,
                        message: discord.Message) -> PayloadTask:
@@ -120,6 +129,12 @@ class DreamWombo:
     async def update_interface(self, payload: PayloadTask, *, bypass_time: bool = False) -> None:
         if not bypass_time and time.time() - self.__previous < 5:
             return
+
+        urls = payload.photo_url_list[self.__already_downloaded:]
+        start_id = self.__already_downloaded
+        self.__already_downloaded += len(urls)
+        if urls:
+            self.ctx.bot.loop.create_task(self.download_images(start_id + 1, urls))
 
         emoji_status = {"pending": "<a:loading:747680523459231834>",
                         "generating": "<a:typing:597589448607399949>",
@@ -151,6 +166,24 @@ class DreamWombo:
 
         embed.description = description
         await self.message.edit(embed=embed, view=None)
+
+    async def download_image(self, url: str):
+        async with self.http_art.get(url) as response:
+            return await response.read()
+
+    async def download_images(self, start_id, urls: List[str]):
+        tasks = []
+        for i, url in enumerate(urls, start=start_id):
+            waiter = asyncio.Event()
+            self.cached_images[i] = waiter
+            tasks.append(asyncio.create_task(self.download_image(url)))
+            await asyncio.sleep(0.1)
+
+        await asyncio.wait(tasks)
+        for i, task in enumerate(tasks, start=start_id):
+            result = task.result()
+            self.cached_images[i].set()
+            self.cached_images[i] = result
 
     async def _progress(self) -> PayloadTask:
         self.token = await self.get_authentication()
@@ -454,19 +487,6 @@ class WomboResult(ViewAuthor):
         byte.seek(0)
         return byte
 
-    async def download_image(self, url: str):
-        async with self.http.get(url) as response:
-            return await response.read()
-
-    async def download_images(self, urls: List[str]):
-        tasks = []
-        for url in urls:
-            tasks.append(asyncio.create_task(self.download_image(url)))
-            await asyncio.sleep(0.1)
-
-        await asyncio.wait(tasks)
-        return [task.result() for task in tasks]
-
     @button(emoji="<:house_mark:848227746378809354>", label=FINAL_IMAGE, style=discord.ButtonStyle.success, row=0)
     async def on_menu_click(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         embeds = self.showing_original()
@@ -475,7 +495,7 @@ class WomboResult(ViewAuthor):
         await interaction.response.edit_message(content=None, embeds=embeds, view=self)
 
     async def generate_gif_url(self):
-        image_bytes = await self.download_images(self.result.photo_url_list)
+        image_bytes = [await self.wombo.get_image(i + 1) for i, _ in enumerate(self.result.photo_url_list)]
         new_gif = await self.generate_gif(image_bytes)
         filename = os.urandom(16).hex() + ".gif"
         return await self.context.bot.upload_file(byte=new_gif.read(), filename=filename)
