@@ -315,7 +315,21 @@ class StellaBot(commands.Bot):
 
     SEND_CONSTANT = 2 ** 16
 
-    async def upload_file(self, *, byte: bytes, filename: str):
+    async def upload_file(self, *, byte: bytes, filename: str, retry=4):
+        backoff_multiplier = 3
+        current_error = None
+        for x in range(retry):
+            try:
+                return await self._upload_file(byte=byte, filename=filename)
+            except Exception as e:
+                current_error = e
+                backoff = backoff_multiplier ** x
+                print(f"Failure to upload", filename, ". Retrying after", backoff,"seconds")
+                await asyncio.sleep(backoff)
+
+        raise current_error
+
+    async def _upload_file(self, *, byte: bytes, filename: str):
         task_id = await self.ipc_client.request("get_upload_id", filename=filename)
         if not isinstance(task_id, str):
             raise Exception(task_id)
@@ -336,7 +350,10 @@ class StellaBot(commands.Bot):
 
             byte = byte[self.SEND_CONSTANT:]
 
-        return await self.ipc_client.request("upload_byte", id=task_id, is_done=True)
+        url = await self.ipc_client.request("upload_byte", id=task_id, is_done=True)
+        if not isinstance(url, str):
+            raise Exception(str(url))
+        return url
 
     async def main(self) -> None:
         """Starts the bot properly"""
