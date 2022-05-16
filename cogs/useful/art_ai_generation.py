@@ -108,6 +108,7 @@ class DreamWombo:
         self.cog: Optional[BaseUsefulCog] = None
         self.__previous = time.time()
         self.__already_downloaded = 0
+        self.__failure_gif_download = None
         self.cached_images = {}
 
     async def get_image(self, i):
@@ -147,14 +148,14 @@ class DreamWombo:
         status = payload.state.casefold()
         embed = StellaEmbed.default(
             self.ctx,
-            title=f"Status: {emoji_status.get(status)} {status.capitalize()}",
+            title=f"Status: {status.capitalize()} {emoji_status.get(status)}",
         )
         to_url_show = None
         if photos := payload.photo_url_list:
             size = len(photos)
             description += f"\n**Image Generation: ** `{size}` (`{size / 20:.0%}`)"
             if status == "completed":
-                description += f"\n{emoji_status['generating']}**Downloading Images**"
+                description += "\n**Downloading Images**" + emoji_status['generating']
 
             to_url_show = photos[-1] if payload.result is None else payload.result.get('final')
             if to_url_show is None:  # fail safe for result final dict
@@ -167,11 +168,34 @@ class DreamWombo:
         embed.description = description
         await self.message.edit(embed=embed, view=None)
 
-    async def download_image(self, url: str):
+    async def download_image(self, url: str, retry=3):
+        backoff_multiplier = 3
+        current_error = None
+        for x in range(retry):
+            try:
+                return await self._download_image(url)
+            except Exception as e:
+                current_error = e
+                backoff = backoff_multiplier ** x
+                print(f"Failure to download", url, ". Retrying after", backoff, "seconds")
+                await asyncio.sleep(backoff)
+
+        raise current_error
+
+    async def _download_image(self, url: str):
         async with self.http_art.get(url) as response:
             return await response.read()
 
-    async def download_images(self, start_id, urls: List[str]):
+    async def download_images(self, start_id: int, urls: List[str]):
+        try:
+            await self._download_images(start_id, urls)
+        except Exception as e:
+            print_exception("Ignoring error while downloading images:", e)
+            self.__failure_gif_download = True
+        else:
+            self.__failure_gif_download = False
+
+    async def _download_images(self, start_id: int, urls: List[str]):
         tasks = []
         for i, url in enumerate(urls, start=start_id):
             waiter = asyncio.Event()
@@ -495,6 +519,7 @@ class WomboResult(ViewAuthor):
         await interaction.response.edit_message(content=None, embeds=embeds, view=self)
 
     async def generate_gif_url(self):
+        # TODO: Do more handling on wombo.get_image on failure
         image_bytes = [await self.wombo.get_image(i + 1) for i, _ in enumerate(self.result.photo_url_list)]
         new_gif = await self.generate_gif(image_bytes)
         filename = os.urandom(16).hex() + ".gif"
