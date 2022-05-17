@@ -23,7 +23,7 @@ from typing_extensions import Self
 from utils.buttons import ViewAuthor, InteractionPages, button
 from utils.decorators import pages, in_executor
 from utils.errors import ErrorNoSignature
-from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc
+from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc, plural
 from .baseclass import BaseUsefulCog
 
 
@@ -335,6 +335,7 @@ class ArtStyle:
     deleted_at: Optional[datetime.datetime]
     photo_url: str
     blur_data_url: str
+    count: Optional[int] = 0
 
     @classmethod
     def from_json(cls, raw_data) -> Self:
@@ -354,21 +355,41 @@ class ChooseArtStyle(ViewAuthor):
         super().__init__(ctx)
         options = [discord.SelectOption(label=a.name, value=a.id) for a in arts]
         self.art_styles: Dict[int, ArtStyle] = {a.id: a for a in arts}
-        discord.utils.get(self.children, placeholder=self.SELECT_PLACEHOLDER).options = options
+        self.select = discord.utils.get(self.children, placeholder=self.SELECT_PLACEHOLDER)
+        self.select.options = options
         self.message: Optional[discord.Message] = None
         self.selected: Optional[ArtStyle] = None
         self._is_cancelled = None
 
+    async def update_count_select(self):
+        if not (options := getattr(self.select, "options", None)):
+            return
+
+        records = await self.context.bot.pool_pg.fetch("SELECT * FROM wombo_style")
+        for record in records:
+            style_id = record["style_id"]
+            count = record["style_count"]
+            option = discord.utils.get(options, value=style_id)
+            if option:
+                option.description = plural(f'{count} use(s)', count)
+            if style_id in self.art_styles:
+                self.art_styles[style_id].count = count
+
+        options.sort(key=lambda e: self.art_styles[e.value].count, reverse=True)
+
     async def start(self, image_desc: str) -> Optional[ArtStyle]:
+        await self.update_count_select()
         self.message = await self.context.send(f"Choose an art style for `{image_desc}`!", view=self)
         await self.wait()
+        await asyncio.sleep(0)  # race condition on on_timeout
         with contextlib.suppress(discord.NotFound):
             if self._is_cancelled:
-                await self.message.edit(content="Cancelled", view=None, embed=None)
+                await self.message.edit(content="User cancelled art selecting art...", view=None, embed=None)
                 raise commands.CommandError("Cancelled")
 
             if self._is_cancelled is False:
-                await self.message.edit(content="Art selecting timeout", view=None, embed=None)
+                content = "Did not confirm an art style in time..."
+                await self.message.edit(content=content, view=None, embed=None)
                 raise ErrorNoSignature("Timeout")
 
         return self.selected
@@ -608,6 +629,12 @@ class ArtAI(BaseUsefulCog):
         except commands.CommandError:
             return
 
+        query = ("INSERT INTO wombo_style VALUES($1) " 
+                 "ON CONFLICT(style_id) " 
+                 "DO UPDATE SET "
+                 "style_count = wombo_style.style_count + 1")
+
+        await self.bot.pool_pg.execute(query, art.id)
         result = await wombo.generate(ctx, art, image_description, view.message)
         await WomboResult(wombo).display(result)
 

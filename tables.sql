@@ -109,3 +109,8 @@ CREATE TABLE IF NOT EXISTS button_game(
     user_id BIGINT PRIMARY KEY,
     amount BIGINT DEFAULT 1
 )
+
+CREATE TABLE IF NOT EXISTS wombo_style(
+    style_id INT PRIMARY KEY,
+    style_count INT DEFAULT 1
+)
