@@ -112,5 +112,6 @@ CREATE TABLE IF NOT EXISTS button_game(
 
 CREATE TABLE IF NOT EXISTS wombo_style(
     style_id INT PRIMARY KEY,
-    style_count INT DEFAULT 1
+    style_count INT DEFAULT 1,
+    style_emoji BIGINT
 )
