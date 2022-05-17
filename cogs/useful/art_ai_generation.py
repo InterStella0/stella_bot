@@ -6,6 +6,7 @@ import datetime
 import io
 import itertools
 import json
+import operator
 import os
 import random
 import re
@@ -612,6 +613,9 @@ class WomboResult(ViewAuthor):
 
 class ProfanityImageDesc(commands.Converter):
     async def convert(self, ctx: StellaContext, image_desc: str) -> str:
+        regex = r"<(?P<animated>a?):(?P<name>[a-zA-Z0-9_]{2,32}):(?P<id>[0-9]{18,22})>"
+        image_desc = re.sub(regex, operator.itemgetter("name"), image_desc)
+
         if len(image_desc) < 3:
             raise commands.BadArgument("Image description must be more than 3 characters.")
         if len(image_desc) > 100:
