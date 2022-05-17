@@ -6,7 +6,6 @@ import datetime
 import io
 import itertools
 import json
-import operator
 import os
 import random
 import re
@@ -111,11 +110,14 @@ class DreamWombo:
         self.__failure_gif_download = None
         self.cached_images = {}
 
-    async def get_image(self, i):
+    async def get_image(self, i: int, fallback: str = None):
         value = self.cached_images.get(i)
         if isinstance(value, asyncio.Event):
             await value.wait()
             value = self.cached_images.get(i)
+        elif value is None and fallback is not None:
+            await self.download_images(i, [fallback])
+            return await self.get_image(i)
         return value
 
     async def generate(self, ctx: StellaContext, art_style: ArtStyle, image_desc: str,
@@ -205,8 +207,15 @@ class DreamWombo:
 
         await asyncio.wait(tasks)
         for i, task in enumerate(tasks, start=start_id):
-            result = task.result()
-            self.cached_images[i].set()
+            result = None
+            try:
+                result = task.result()
+            except Exception as e:
+                error = print_exception(f"Failure to download {start_id} image.", e)
+                await self.ctx.bot.error_channel.send(embed=StellaEmbed.to_error(description=error))
+            finally:
+                self.cached_images[i].set()
+
             self.cached_images[i] = result
 
     async def _progress(self) -> PayloadTask:
@@ -525,9 +534,17 @@ class WomboResult(ViewAuthor):
     async def display(self, result: PayloadTask) -> None:
         self.result = result
         self._original_photo = await self.context.cog.get_local_url(result.result['final'])
-        self._original_gif = await self.generate_gif_url()
-        embeds = self.showing_original()
-        await self.message.edit(embeds=embeds, view=self, content=None)
+        kwargs = {}
+        try:
+            self._original_gif = await self.generate_gif_url()
+        except Exception as e:
+            error = print_exception("Ignoring error in generate gif url", e)
+            await self.context.bot.error_channel.send(embed=StellaEmbed.to_error(description=error))
+            kwargs = {'embed': self.home_embed()}
+        else:
+            kwargs = {'embeds': self.showing_original()}
+        finally:
+            await self.message.edit(**kwargs, view=self, content=None)
 
     @in_executor()
     def generate_gif(self, image_bytes: List[bytes]) -> io.BytesIO:
@@ -551,8 +568,14 @@ class WomboResult(ViewAuthor):
         await interaction.response.edit_message(content=None, embeds=embeds, view=self)
 
     async def generate_gif_url(self):
-        # TODO: Do more handling on wombo.get_image on failure
-        image_bytes = [await self.wombo.get_image(i + 1) for i, _ in enumerate(self.result.photo_url_list)]
+        image_bytes = []
+        for i, url in enumerate(self.result.photo_url_list):
+            if byte := await self.wombo.get_image(i + 1, fallback=url):
+                image_bytes.append(byte)
+
+        if len(image_bytes) < 3:
+            raise Exception("Failure to download most of the images")
+
         new_gif = await self.generate_gif(image_bytes)
         filename = os.urandom(16).hex() + ".gif"
         return await self.context.bot.upload_file(byte=new_gif.read(), filename=filename)
