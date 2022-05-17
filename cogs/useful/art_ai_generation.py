@@ -335,7 +335,8 @@ class ArtStyle:
     deleted_at: Optional[datetime.datetime]
     photo_url: str
     blur_data_url: str
-    count: Optional[int] = 0
+    count: int = 0
+    emoji: Optional[int] = None
 
     @classmethod
     def from_json(cls, raw_data) -> Self:
@@ -360,20 +361,30 @@ class ChooseArtStyle(ViewAuthor):
         self.message: Optional[discord.Message] = None
         self.selected: Optional[ArtStyle] = None
         self._is_cancelled = None
+        self.bot = self.context.bot
 
     async def update_count_select(self):
         if not (options := getattr(self.select, "options", None)):
             return
 
-        records = await self.context.bot.pool_pg.fetch("SELECT * FROM wombo_style")
+        records = await self.bot.pool_pg.fetch("SELECT * FROM wombo_style")
         for record in records:
             style_id = record["style_id"]
             count = record["style_count"]
-            option = discord.utils.get(options, value=style_id)
+            emoji_id = record["style_emoji"]
+            emoji = self.bot.get_emoji(emoji_id)
+            option: discord.SelectOption = discord.utils.get(options, value=style_id)
             if option:
-                option.description = plural(f'{count} use(s)', count)
-            if style_id in self.art_styles:
-                self.art_styles[style_id].count = count
+                if count:
+                    option.description = plural(f'{count} use(s)', count)
+                if emoji is not None:
+                    option.emoji = emoji._to_partial()
+
+            if art_style := self.art_styles.get(style_id):
+                if count:
+                    art_style.count = count
+                if emoji:
+                    art_style.emoji = emoji
 
         options.sort(key=lambda e: self.art_styles[e.value].count, reverse=True)
 
@@ -429,7 +440,7 @@ class ChooseArtStyle(ViewAuthor):
         self._is_cancelled = False
 
     async def disable_all(self) -> None:
-        if self.context.bot.get_message(self.message.id) is None:
+        if self.bot.get_message(self.message.id) is None:
             return
 
         with contextlib.suppress(Exception):
@@ -438,7 +449,7 @@ class ChooseArtStyle(ViewAuthor):
 
     def stop(self) -> None:
         super().stop()
-        self.context.bot.loop.create_task(self.disable_all())
+        self.bot.loop.create_task(self.disable_all())
 
 
 class WomboGeneration(InteractionPages):
@@ -629,19 +640,38 @@ class ArtAI(BaseUsefulCog):
         except commands.CommandError:
             return
 
+        await self._update_art_style(art)
+        result = await wombo.generate(ctx, art, image_description, view.message)
+        await WomboResult(wombo).display(result)
+
+    async def _update_art_style(self, art: ArtStyle) -> None:
         query = ("INSERT INTO wombo_style VALUES($1) " 
                  "ON CONFLICT(style_id) " 
                  "DO UPDATE SET "
                  "style_count = wombo_style.style_count + 1")
 
         await self.bot.pool_pg.execute(query, art.id)
-        result = await wombo.generate(ctx, art, image_description, view.message)
-        await WomboResult(wombo).display(result)
+        if art.emoji is None:
+            guild = self.bot.get_guild(self.bot.bot_guild_id)
+            clean_name = art.name.replace(" ", "_")
+            if not (emoji := discord.utils.get(guild.emojis, name=clean_name)):
+                byte = await self.get_read_url(art.photo_url)
+                try:
+                    # Warning: This may raise an error if limit is reached.
+                    emoji = await guild.create_custom_emoji(name=clean_name, image=byte, reason="Art Style Emoji")
+                except discord.HTTPException:
+                    return
+
+            art.emoji = emoji
+            await self.bot.pool_pg.execute("UPDATE wombo_style SET style_emoji=$1 WHERE style_id=$2", emoji.id, art.id)
+
+    async def get_read_url(self, url: str) -> bytes:
+        async with self.http_art.get(url) as response:
+            return await response.read()
 
     async def get_local_url(self, url: str) -> str:
         if (local_url := self._cached_image.get(url)) is None:
-            async with self.http_art.get(url) as response:
-                byte = await response.read()
+            byte = await self.get_read_url(url)
             filename = os.urandom(10).hex() + ".png"
             local_url = await self.bot.upload_file(byte=byte, filename=filename)
             self._cached_image[url] = local_url
