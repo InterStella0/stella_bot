@@ -613,9 +613,23 @@ class WomboResult(ViewAuthor):
 
 class ProfanityImageDesc(commands.Converter):
     async def convert(self, ctx: StellaContext, image_desc: str) -> str:
-        regex = r"<(?P<animated>a?):(?P<name>[a-zA-Z0-9_]{2,32}):(?P<id>[0-9]{18,22})>"
-        image_desc = re.sub(regex, operator.itemgetter("name"), image_desc)
-        image_desc = await commands.clean_content().convert(ctx, image_desc)
+        regex = r'(<a?:(?P<name>[a-zA-Z0-9_]{2,32}):[0-9]{18,22}>)|<@!?(?P<id>[0-9]+)>'
+
+        def replace(val):
+            group = val.groupdict()
+            if name := group["name"]:
+                return name
+
+            val_id = int(group['id'])
+            user = None
+            if ctx.guild:
+                user = ctx.guild.get_member(val_id)
+            user = user or ctx.bot.get_user(val_id)
+            if user is None:
+                return val.group(0)
+            return user.display_name
+
+        image_desc = re.sub(regex, replace, image_desc)
 
         if len(image_desc) < 3:
             raise commands.BadArgument("Image description must be more than 3 characters.")
