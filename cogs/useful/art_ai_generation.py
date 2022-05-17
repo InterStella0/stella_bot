@@ -75,6 +75,11 @@ class PayloadToken:
     expires_in: datetime.datetime
     local_id: str
 
+    @classmethod
+    def from_json(cls, data: Dict[str, str]):
+        expire = convert_expiry_date(data['expiresIn'])
+        return cls(data['kind'], data['idToken'], data['refreshToken'], expire, data['localId'])
+
 
 @dataclass
 class PayloadAccessToken:
@@ -85,6 +90,14 @@ class PayloadAccessToken:
     refresh_token: str
     token_type: str
     user_id: str
+
+    @classmethod
+    def from_json(cls, data):
+        expire = convert_expiry_date(data['expires_in'])
+        return cls(
+                data['access_token'], expire, data['id_token'], data['project_id'],
+                data['refresh_token'], data['token_type'], data['user_id']
+            )
 
 
 class DreamWombo:
@@ -269,10 +282,7 @@ class DreamWombo:
     async def generate_token(self) -> PayloadToken:
         async with self.http_art.post(self.TOKEN_GENERATOR, params={'key': self.SECRET_KEY}) as response:
             payload = await response.json()
-            expire = convert_expiry_date(payload['expiresIn'])
-            return PayloadToken(
-                payload['kind'], payload['idToken'], payload['refreshToken'], expire, payload['localId']
-            )
+            return PayloadToken.from_json(payload)
 
     async def request_access_token(self, refresh_token: str) -> PayloadAccessToken:
         payload = {
@@ -281,11 +291,7 @@ class DreamWombo:
         }
         async with self.http_art.post(self.TOKEN_REFRESH, params={'key': self.SECRET_KEY}, json=payload) as response:
             payload = await response.json()
-            expire = convert_expiry_date(payload['expires_in'])
-            return PayloadAccessToken(
-                payload['access_token'], expire, payload['id_token'], payload['project_id'],
-                payload['refresh_token'], payload['token_type'], payload['user_id']
-            )
+            return PayloadAccessToken.from_json(payload)
 
     async def update_task(self, task: PayloadTask) -> PayloadTask:
         response = await self.request("GET", "/api/tasks/" + task.id)
