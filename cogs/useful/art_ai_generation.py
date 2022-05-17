@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import contextlib
 import datetime
 import io
@@ -15,9 +14,9 @@ from dataclasses import dataclass
 from typing import Optional, List, Any, Dict, Union
 
 import aiohttp
-import dateutil
 import discord
 from PIL import Image
+from dateutil import parser
 from discord.ext import commands
 from typing_extensions import Self
 
@@ -46,7 +45,7 @@ class PayloadTask:
         if date_str is None:
             return
 
-        return dateutil.parser.parse(date_str)
+        return parser.parse(date_str)
 
     @classmethod
     def from_response(cls, payload: Dict[str, Any]):
@@ -551,11 +550,11 @@ class WomboResult(ViewAuthor):
 
     @button(emoji='<:statis_mark:848262218554408988>', label="Show Image Generation", style=discord.ButtonStyle.blurple,
             row=1)
-    async def show_images(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def show_images(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.defer()
 
         @pages()
-        async def show_image(self, menu, item):
+        async def show_image(_, menu, item):
             generation = menu.current_page + 1
             url = await menu.ctx.cog.get_local_url(item)
             return StellaEmbed.default(menu.ctx, title=f"Image Generation {generation}").set_image(url=url)
@@ -564,7 +563,7 @@ class WomboResult(ViewAuthor):
         await pager.start(self.context)
 
     @button(emoji='🗑️', label="Delete", style=discord.ButtonStyle.danger, row=1)
-    async def delete_image(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def delete_image(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.defer()
         await self.message.delete()
