@@ -23,7 +23,7 @@ from typing_extensions import Self
 from utils.buttons import ViewAuthor, InteractionPages, button
 from utils.decorators import pages, in_executor
 from utils.errors import ErrorNoSignature
-from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc, plural
+from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc, plural, ensure_execute
 from .baseclass import BaseUsefulCog
 
 
@@ -620,11 +620,12 @@ class WomboResult(ViewAuthor):
         @pages()
         async def show_image(_, menu, item):
             generation = menu.current_page + 1
-            url = await menu.ctx.cog.get_local_url(item)
+            defer = menu.current_interaction.response.defer
+            url = await ensure_execute(menu.ctx.cog.get_local_url(item), defer, timeout=2)
             return StellaEmbed.default(menu.ctx, title=f"Image Generation {generation}").set_image(url=url)
 
         pager = WomboGeneration(show_image(self.result.photo_url_list), self)
-        await pager.start(self.context)
+        await pager.start(self.context, interaction=interaction)
 
     @button(emoji='🗑️', label="Delete", style=discord.ButtonStyle.danger, row=1)
     async def delete_image(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
