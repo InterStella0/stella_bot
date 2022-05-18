@@ -703,17 +703,36 @@ class ArtAI(BaseUsefulCog):
         await self.bot.pool_pg.execute(query, art.id)
         if art.emoji is None:
             guild = self.bot.get_guild(self.bot.bot_guild_id)
-            clean_name = art.name.replace(" ", "_")
+            clean_name = re.sub("[. ]", "_", art.name)
             if not (emoji := discord.utils.get(guild.emojis, name=clean_name)):
                 byte = await self.get_read_url(art.photo_url)
-                try:
-                    # Warning: This may raise an error if limit is reached.
-                    emoji = await guild.create_custom_emoji(name=clean_name, image=byte, reason="Art Style Emoji")
-                except discord.HTTPException:
+                if (emoji := await self.__create_emoji(guild, clean_name, byte)) is None:
                     return
 
             art.emoji = emoji
             await self.bot.pool_pg.execute("UPDATE wombo_style SET style_emoji=$1 WHERE style_id=$2", emoji.id, art.id)
+
+    @in_executor()
+    def __reduce_emoji_size(self, byte: bytes) -> bytes:
+        with Image.open(io.BytesIO(byte)) as img:
+            width, height = img.size
+            img.thumbnail((int(width / 2), int(height / 2)))
+            b = io.BytesIO()
+            img.save(b, format="PNG")
+            b.seek(0)
+            return b.read()
+
+    async def __create_emoji(self, guild, clean_name, byte):
+        try:
+            # Warning: This may raise an error if limit is reached.
+            return await guild.create_custom_emoji(name=clean_name, image=byte, reason="Art Style Emoji")
+        except discord.HTTPException as e:
+            if e.code == 50045:  # exceeds max
+                byte = await self.__reduce_emoji_size(byte)
+                return await self.__create_emoji(guild, clean_name, byte)
+
+            print_exception("Ignoring error on creating emoji:", e)
+            return
 
     async def get_read_url(self, url: str) -> bytes:
         async with self.http_art.get(url) as response:
