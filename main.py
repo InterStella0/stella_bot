@@ -318,7 +318,7 @@ class StellaBot(commands.Bot):
     async def upload_file(self, *, byte: bytes, filename: str, retry=4):
         backoff_multiplier = 3
         current_error = None
-        for x in range(retry):
+        for x in range(max(retry, 1)):
             try:
                 return await self._upload_file(byte=byte, filename=filename)
             except Exception as e:
