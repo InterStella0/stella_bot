@@ -491,3 +491,14 @@ def newline_chunker(text: str, *, width: int = 1500, max_newline: int = 10):
         build.append("\n".join(lines[:n]))
         current_pos = n
     return build
+
+
+async def ensure_execute(coro, timeout_callback, *, timeout=3):
+    """Call timeout_callback when a timeout is reached while also returning the value of coroutine."""
+    task = asyncio.create_task(coro)
+    try:
+        return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+    except asyncio.TimeoutError:
+        with contextlib.suppress(Exception):
+            await timeout_callback()
+        return await task
