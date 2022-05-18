@@ -333,13 +333,13 @@ class DreamWombo:
             value = await result.text()
             raw_data = re.search(regex, value)
             if raw_data is None:
-                raise ErrorNoSignature("API is not available.")
+                raise ErrorNoSignature("Something went wrong. Please try again later. API is not available.")
 
             data = json.loads(raw_data.group(0))
         try:
             json_data = data['props']['pageProps']['artStyles']
         except KeyError:
-            raise ErrorNoSignature("Failure to extract art styles")
+            raise ErrorNoSignature("Something went wrong. Please try again later. Failure to extract art styles")
         else:
             return [ArtStyle.from_json(dat) for dat in json_data]
 
