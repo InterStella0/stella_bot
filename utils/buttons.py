@@ -567,8 +567,9 @@ class InteractionPages(CallbackView, MenuBase):
 
         return interaction.response.send_modal(self.prompter)
 
-    async def start(self, ctx: StellaContext, /) -> None:
+    async def start(self, ctx: StellaContext, /, *, interaction: Optional[discord.Interaction] = None) -> None:
         self.ctx = ctx
+        self.current_interaction = interaction
         self.message = await self.send_initial_message(ctx, ctx.channel)
 
     async def handle_callback(self, coro: Callable[[ui.Button, discord.Interaction], Awaitable[None]],
