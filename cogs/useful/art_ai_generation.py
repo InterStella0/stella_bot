@@ -322,7 +322,9 @@ class DreamWombo:
         async with self.http_art.request(method, self.BASE + url, **data) as response:
             responded = await response.json()
             if msg := responded.get('msg') or responded.get('detail'):
-                raise ErrorNoSignature("Failure to reach API: " + msg)
+                value = f"Failure to reach API on endpoint {method} {url} with data {data}:\n{responded}"
+                await self.ctx.bot.error_channel.send(embed=StellaEmbed.to_error(description=value))
+                raise ErrorNoSignature("Something went wrong, Please try again later.\nFailure to reach API: " + msg)
             return responded
 
     async def get_art_styles(self) -> List[ArtStyle]:
