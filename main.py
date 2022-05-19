@@ -479,13 +479,4 @@ async def on_kill(data: IPCData) -> None:
     await bot.close()
 
 
-
-@bot.command()
-async def uploading(ctx: StellaContext):
-    attachment = ctx.message.attachments[0]
-    byte = await attachment.read()
-    url = await ctx.bot.upload_file(byte=byte, filename="Testupload.png")
-    await ctx.send("Here: " + url)
-
-
 bot.starter()
