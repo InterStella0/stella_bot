@@ -380,6 +380,7 @@ class ChooseArtStyle(ViewAuthor):
         self.selected: Optional[ArtStyle] = None
         self._is_cancelled = None
         self.bot = self.context.bot
+        self.most_used: Optional[ArtStyle] = None
 
     async def update_count_select(self):
         if not (options := getattr(self.select, "options", None)):
@@ -408,9 +409,10 @@ class ChooseArtStyle(ViewAuthor):
 
     async def start(self, image_desc: str) -> Optional[ArtStyle]:
         await self.update_count_select()
+        self.most_used = max([*self.art_styles.values()], key=lambda x: x.count)
         self.message = await self.context.send(f"Choose an art style for `{image_desc}`!", view=self)
         await self.wait()
-        await asyncio.sleep(0)  # race condition on on_timeout
+        await asyncio.sleep(0.01)  # race condition on on_timeout, no i dont care 0.01
         with contextlib.suppress(discord.NotFound):
             if self._is_cancelled:
                 await self.message.edit(content="User cancelled art selecting art...", view=None, embed=None)
@@ -430,24 +432,32 @@ class ChooseArtStyle(ViewAuthor):
         await self.set_value(art, interaction)
 
     async def set_value(self, art: ArtStyle, interaction: discord.Interaction) -> None:
+        buttons = [n for n in self.children if isinstance(n, discord.ui.Button)]
+        label = discord.utils.get(buttons, label="Most Used")
+        label.disabled = art is self.most_used
         embed = StellaEmbed.default(self.context, title=f"Art Style Selected: {art.name}")
         embed.description = '**Press "Generate" to start generating with your style!**'
         embed.set_image(url=art.photo_url)
         self.selected = art
-        confirm = discord.utils.get([n for n in self.children if isinstance(n, discord.ui.Button)], label="Generate")
+        confirm = discord.utils.get(buttons, label="Generate")
         confirm.disabled = False
         await interaction.response.edit_message(content=None, embed=embed, view=self)
 
-    @discord.ui.button(emoji='<:checkmark:753619798021373974>', label="Generate", row=1, style=discord.ButtonStyle.success, disabled=True)
+    @discord.ui.button(emoji='<:checkmark:753619798021373974>', label="Generate", row=2, style=discord.ButtonStyle.success, disabled=True)
     async def on_confirm(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.defer()
         self.stop()
 
-    @discord.ui.button(emoji='<:stopmark:753625001009348678>', label="Cancel", style=discord.ButtonStyle.danger)
+    @discord.ui.button(emoji='<:stopmark:753625001009348678>', label="Cancel", row=2, style=discord.ButtonStyle.danger)
     async def on_cancel(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.defer()
         self._is_cancelled = True
         self.stop()
+
+    @discord.ui.button(emoji='🔝', label="Most Used", style=discord.ButtonStyle.blurple)
+    async def on_most_used(self, interaction: discord.Interaction, _: discord.ui.Button):
+        art = max(self.art_styles.values(), key=lambda x: x.count)
+        await self.set_value(art, interaction)
 
     @discord.ui.button(emoji='🔀', label="Random", style=discord.ButtonStyle.blurple)
     async def on_random(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
