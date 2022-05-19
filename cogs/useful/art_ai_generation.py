@@ -513,7 +513,7 @@ class WomboGeneration(InteractionPages):
 
 class WomboResult(ViewAuthor):
     FINAL_IMAGE = "Final Image"
-    IMG_GENERATION = "Show Image Evolution"
+    IMG_GENERATION = "Image Evolution"
 
     def __init__(self, wombo: DreamWombo):
         super().__init__(wombo.ctx)
@@ -622,7 +622,7 @@ class WomboResult(ViewAuthor):
         self.add_item(self.final_button)
         await self.message.edit(embed=embed.set_image(url=self._original_gif), view=self)
 
-    @button(emoji='<:statis_mark:848262218554408988>', label="Show Image Generation", style=discord.ButtonStyle.blurple,
+    @button(emoji='<:statis_mark:848262218554408988>', label="Image Generation", style=discord.ButtonStyle.blurple,
             row=1)
     async def show_images(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.defer()
