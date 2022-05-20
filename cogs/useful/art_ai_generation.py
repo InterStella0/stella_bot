@@ -819,7 +819,7 @@ class ImageVote(ViewAuthor):
 
         await self.message.edit(view=self)
 
-    @discord.ui.button(emoji="👍", label="Like")
+    @discord.ui.button(emoji="👍", label="Like", style=discord.ButtonStyle.success)
     async def on_like(self, interaction: discord.Interaction, button: discord.ui.Button):
         query = "INSERT INTO wombo_liker VALUES($1, $2)"
         await interaction.client.pool_pg.execute(query, self.art.name, interaction.user.id)
