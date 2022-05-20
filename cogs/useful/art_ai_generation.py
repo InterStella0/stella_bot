@@ -534,11 +534,10 @@ class WomboSave(discord.ui.Modal, title="Saving generated image"):
         if len(name) < 3:
             raise ErrorNoSignature("'Name' cannot be less than 3.")
 
-        clean_name = name.casefold()
         result = self.result
         img_desc = self.image_desc
         art_name = getattr(self.result.wombo.art_style, "name", None)
-        values = [clean_name, self.ctx.author.id, result._original_photo, 0, img_desc.nsfw, img_desc.name, art_name]
+        values = [name, self.ctx.author.id, result._original_photo, 0, img_desc.nsfw, img_desc.name, art_name]
         await self.bot.pool_pg.execute(query, *values)
         await interaction.response.send_message(f"Your image has been saved! (`{name}`)", ephemeral=True)
         if saver := discord.utils.get([x for x in result.children if hasattr(x, "label")], label="Save"):
@@ -768,7 +767,7 @@ class ImageSaved:
 
     @classmethod
     async def convert(cls, ctx: StellaContext, argument: str) -> Self:
-        sql = "SELECT * FROM wombo_saved WHERE name=$1"
+        sql = "SELECT * FROM wombo_saved WHERE LOWER(name)=$1"
         if result := await ctx.bot.pool_pg.fetchrow(sql, argument.casefold()):
             value = cls.from_record(result)
             if not value.nsfw and not hasattr(ctx.channel, "is_nsfw") or ctx.channel.is_nsfw():
