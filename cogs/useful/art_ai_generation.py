@@ -804,9 +804,9 @@ class ImageVote(ViewAuthor):
     async def start(self, embed):
         query = "SELECT * FROM wombo_liker WHERE user_id=$1 and name=$2"
         author_id = self.context.author.id
-        can_vote = await self.context.bot.pool_pg.fetchrow(query, author_id, self.art.name)
-        can_vote = not bool(can_vote) or author_id == self.art.user_id
-        self.children[0].disabled = can_vote
+        result = await self.context.bot.pool_pg.fetchrow(query, author_id, self.art.name)
+        cannot_vote = result is not None or author_id == self.art.user_id
+        self.children[0].disabled = cannot_vote
         self.message = await self.context.maybe_reply(view=self, embed=embed)
         await self.wait()
 
@@ -898,7 +898,7 @@ class ArtAI(BaseUsefulCog):
             title=art_name.name,
             description=f"**Prompt:** `{art_name.prompt}`\n"
                         f"**Style:** `{art_name.art_style}`\n"
-                        f"**Owned by:** `{user_name}`"
+                        f"**Owned by:** `{user_name}`\n"
                         f"**Like(s):** `{art_name.vote}`",
             url=art_name.image_url
         ).set_image(url=art_name.image_url)
