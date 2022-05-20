@@ -537,6 +537,10 @@ class WomboSave(discord.ui.Modal, title="Saving generated image"):
         result = self.result
         img_desc = self.image_desc
         art_name = getattr(self.result.wombo.art_style, "name", None)
+
+        if await self.bot.pool_pg.fetchrow("SELECT * FROM wombo_saved WHERE LOWER(name)=$1", name):
+            raise asyncpg.UniqueViolationError()
+
         values = [name, self.ctx.author.id, result._original_photo, 0, img_desc.nsfw, img_desc.name, art_name]
         await self.bot.pool_pg.execute(query, *values)
         await interaction.response.send_message(f"Your image has been saved! (`{name}`)", ephemeral=True)
