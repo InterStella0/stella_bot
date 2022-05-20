@@ -125,3 +125,9 @@ CREATE TABLE IF NOT EXISTS wombo_saved(
     prompt VARCHAR(100) NOT NULL,
     style VARCHAR(100) NOT NULL,
 )
+
+CREATE TABLE IF NOT EXISTS wombo_liker(
+    name VARCHAR(100),
+    user_id BIGINT,
+    PRIMARY KEY(name, user_id)
+)
