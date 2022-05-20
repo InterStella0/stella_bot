@@ -508,7 +508,7 @@ class WomboGeneration(InteractionPages):
         embeds = view.showing_original()
         if view.final_button in view.children:
             view.remove_item(view.final_button)
-            view.add_item(view.gen_button)
+            view.add_item_pos(view.gen_button, 0)
 
         await interaction.response.edit_message(content=None, embeds=embeds, view=view)
         self.stop()
@@ -543,7 +543,9 @@ class WomboSave(discord.ui.Modal, title="Saving generated image"):
 
         values = [name, self.ctx.author.id, result._original_photo, 0, img_desc.nsfw, img_desc.name, art_name]
         await self.bot.pool_pg.execute(query, *values)
-        await interaction.response.send_message(f"Your image has been saved! (`{name}`)", ephemeral=True)
+        prefix = self.ctx.clean_prefix
+        saved = f"Your image has been saved! Type '{prefix} arts {name}' to view your image."
+        await interaction.response.send_message(saved, ephemeral=True)
         if saver := discord.utils.get([x for x in result.children if hasattr(x, "label")], label="Save"):
             saver.disabled = True
             await self.result.message.edit(view=result)
@@ -637,7 +639,7 @@ class WomboResult(ViewAuthor):
     async def on_menu_click(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         embeds = self.showing_original()
         self.remove_item(button)
-        self.add_item(self.gen_button)
+        self.add_item_pos(self.gen_button, 0)
         await interaction.response.edit_message(content=None, embeds=embeds, view=self)
 
     async def generate_gif_url(self):
@@ -653,7 +655,7 @@ class WomboResult(ViewAuthor):
         filename = os.urandom(16).hex() + ".gif"
         return await self.context.bot.upload_file(byte=new_gif.read(), filename=filename)
 
-    @button(emoji='<a:OMPS_flecha:834116301483540531>', label=IMG_GENERATION, style=discord.ButtonStyle.success, row=0)
+    @button(emoji='<a:OMPS_flecha:834116301483540531>', label=IMG_GENERATION, style=discord.ButtonStyle.blurple, row=0)
     async def show_gif(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self._original_gif is None:
             for item in self.children:
@@ -674,11 +676,16 @@ class WomboResult(ViewAuthor):
             item.disabled = False
 
         self.remove_item(button)
-        self.add_item(self.final_button)
+        self.add_item_pos(self.final_button, 0)
         await self.message.edit(embed=embed.set_image(url=self._original_gif), view=self)
 
+    def add_item_pos(self, button: discord.ui.Button, pos: int):
+        self.add_item(button)
+        self.children.remove(button)
+        self.children.insert(pos, button)
+
     @button(emoji='<:statis_mark:848262218554408988>', label="Image Generation", style=discord.ButtonStyle.blurple,
-            row=1)
+            row=0)
     async def show_images(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.defer()
 
@@ -692,7 +699,7 @@ class WomboResult(ViewAuthor):
         pager = WomboGeneration(show_image(self.result.photo_url_list), self)
         await pager.start(self.context, interaction=interaction)
 
-    @button(emoji="<:download:316264057659326464>", label="Save", style=discord.ButtonStyle.blurple, row=1)
+    @button(emoji="<:download:316264057659326464>", label="Save", style=discord.ButtonStyle.success, row=1)
     async def save_image(self, interaction: discord.Interaction, _: discord.ui.Button):
         self.input_save = WomboSave(self) if self.input_save is None else self.input_save
         await interaction.response.send_modal(self.input_save)
