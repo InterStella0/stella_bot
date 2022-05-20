@@ -22,7 +22,7 @@ from dateutil import parser
 from discord.ext import commands
 from typing_extensions import Self
 
-from utils.buttons import ViewAuthor, InteractionPages, button
+from utils.buttons import ViewAuthor, InteractionPages, button, BaseView
 from utils.decorators import pages, in_executor
 from utils.errors import ErrorNoSignature
 from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc, plural, ensure_execute, realign
@@ -544,7 +544,7 @@ class WomboSave(discord.ui.Modal, title="Saving generated image"):
         values = [name, self.ctx.author.id, result._original_photo, 0, img_desc.nsfw, img_desc.name, art_name]
         await self.bot.pool_pg.execute(query, *values)
         prefix = self.ctx.clean_prefix
-        saved = f"Your image has been saved! Type '{prefix} arts {name}' to view your image."
+        saved = f"Your image has been saved! Type '{prefix}arts {name}' to view your image."
         await interaction.response.send_message(saved, ephemeral=True)
         if saver := discord.utils.get([x for x in result.children if hasattr(x, "label")], label="Save"):
             saver.disabled = True
@@ -778,7 +778,9 @@ class ImageSaved:
 
     @classmethod
     async def convert(cls, ctx: StellaContext, argument: str) -> Self:
-        sql = "SELECT * FROM wombo_saved WHERE LOWER(name)=$1"
+        sql = ('SELECT ws.*, ('
+               'SELECT COUNT(*) FROM wombo_liker WHERE name=ws.name'
+               ') "count" FROM wombo_saved ws WHERE LOWER(name)=$1')
         if result := await ctx.bot.pool_pg.fetchrow(sql, argument.casefold()):
             value = cls.from_record(result)
             if not value.nsfw and not hasattr(ctx.channel, "is_nsfw") or ctx.channel.is_nsfw():
@@ -790,7 +792,42 @@ class ImageSaved:
     @classmethod
     def from_record(cls, record):
         return cls(record["name"], record["user_id"], record["style"], record["prompt"], record["image_url"],
-                   record["vote"], record["is_nsfw"])
+                   record["count"], record["is_nsfw"])
+
+
+class ImageVote(ViewAuthor):
+    def __init__(self, ctx: StellaContext, art: ImageSaved):
+        super().__init__(ctx)
+        self.art = art
+        self.message: Optional[discord.Message] = None
+
+    async def start(self, embed):
+        query = "SELECT * FROM wombo_liker WHERE user_id=$1 and name=$2"
+        author_id = self.context.author.id
+        can_vote = await self.context.bot.pool_pg.fetchrow(query, author_id, self.art.name)
+        can_vote = not bool(can_vote) or author_id == self.art.user_id
+        self.children[0].disabled = can_vote
+        self.message = await self.context.maybe_reply(view=self, embed=embed)
+        await self.wait()
+
+    async def on_timeout(self) -> None:
+        if not self.context.bot.get_message(self.message.id):
+            return
+
+        for x in self.children:
+            x.disabled = True
+
+        await self.message.edit(view=self)
+
+    @discord.ui.button(emoji="👍", label="Like")
+    async def on_like(self, interaction: discord.Interaction, button: discord.ui.Button):
+        query = "INSERT INTO wombo_liker VALUES($1, $2)"
+        await interaction.client.pool_pg.execute(query, self.art.name, interaction.user.id)
+        user_id = self.art.user_id
+        name = self.context.guild and self.context.guild.get_member(user_id) or self.context.bot.get_user(user_id)
+        await interaction.response.send_message(f"You've liked this image. `{name}` says thanks.", ephemeral=True)
+        button.disabled = True
+        await self.message.edit(view=self)
 
 
 class ArtAI(BaseUsefulCog):
@@ -825,18 +862,26 @@ class ArtAI(BaseUsefulCog):
         async def show_images(inner_self, menu, raw_arts):
             offset = menu.current_page * inner_self.per_page
             arts = [*map(ImageSaved.from_record, raw_arts)]
-            content = "`{no}. {b.name}`"
+            key = "(\u200b|\u200b)"
+            content = "`{no}. {b.name} {key} {b.vote}`"
+            iterable = [content.format(no=i + 1, b=b, key=key) for i, b in enumerate(arts, start=offset)]
             return StellaEmbed.default(
                 ctx,
                 title="All Saved Art",
-                description="\n".join([content.format(no=i + 1, b=b) for i, b in enumerate(arts, start=offset)])
+                description="\n".join(realign(iterable, key))
             )
 
         is_nsfw = getattr(ctx.channel, "is_nsfw", lambda: True)()
-        sql = "SELECT * FROM wombo_saved"
+        sql = ('SELECT ws.*, ('
+               'SELECT COUNT(*) FROM wombo_liker WHERE name=ws.name'
+               ') "count" FROM wombo_saved ws'
+               'ORDER BY count DESC')
         values = ()
         if not is_nsfw:
-            sql = "SELECT * FROM wombo_saved WHERE is_nsfw=$1"
+            sql = ('SELECT ws.*, ('
+                   'SELECT COUNT(*) FROM wombo_liker WHERE name=ws.name'
+                   ') "count" FROM wombo_saved ws WHERE is_nsfw=$1'
+                   'ORDER BY count DESC')
             values = (False,)
         all_arts = await self.bot.pool_pg.fetch(sql, *values)
 
@@ -847,16 +892,17 @@ class ArtAI(BaseUsefulCog):
     async def _handle_art_arg(self, ctx: StellaContext, art_name: ImageSaved):
         user_id = art_name.user_id
         user = ctx.guild and ctx.guild.get_member(user_id) or ctx.bot.get_user(user_id)
-        user_name = getattr(user, "display_name", user_id)
+        user_name = user or user_id
         embed = StellaEmbed.default(
             ctx,
             title=art_name.name,
             description=f"**Prompt:** `{art_name.prompt}`\n"
                         f"**Style:** `{art_name.art_style}`\n"
-                        f"**Owned by:** `{user_name}`",
+                        f"**Owned by:** `{user_name}`"
+                        f"**Like(s):** `{art_name.vote}`",
             url=art_name.image_url
         ).set_image(url=art_name.image_url)
-        await ctx.maybe_reply(embed=embed)
+        await ImageVote(ctx, art_name).start(embed)
 
     async def _handle_art_no_arg(self, ctx: StellaContext):
         @pages()
@@ -866,15 +912,22 @@ class ArtAI(BaseUsefulCog):
                 ctx,
                 title=art.name,
                 description=f"**Prompt:** `{art.prompt}`\n"
-                            f"**Style:** `{art.art_style}`\n",
+                            f"**Style:** `{art.art_style}`\n"
+                            f"**Like(s):** `{art.vote}`",
                 url=art.image_url
             ).set_image(url=art.image_url)
 
         is_nsfw = getattr(ctx.channel, "is_nsfw", lambda: True)()
-        sql = "SELECT * FROM wombo_saved WHERE user_id=$1"
+        sql = ('SELECT ws.*, ('
+               'SELECT COUNT(*) FROM wombo_liker WHERE name=ws.name'
+               ') "count" FROM wombo_saved ws WHERE user_id=$1'
+               'ORDER BY count DESC')
         values = (ctx.author.id,)
         if not is_nsfw:
-            sql =  "SELECT * FROM wombo_saved WHERE is_nsfw=$1 and user_id=$2"
+            sql = ('SELECT ws.*, ('
+                   'SELECT COUNT(*) FROM wombo_liker WHERE name=ws.name'
+                   ') "count" FROM wombo_saved ws WHERE is_nsfw=$1 and user_id=$2'
+                   'ORDER BY count DESC')
             values = (False, ctx.author.id)
         all_arts = await self.bot.pool_pg.fetch(sql, *values)
         if not all_arts:
