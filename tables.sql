@@ -115,3 +115,13 @@ CREATE TABLE IF NOT EXISTS wombo_style(
     style_count INT DEFAULT 1,
     style_emoji BIGINT
 )
+
+CREATE TABLE IF NOT EXISTS wombo_saved(
+    name VARCHAR(100) PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    image_url VARCHAR(3000) NOT NULL,
+    vote INT DEFAULT 0,
+    is_nsfw BOOLEAN NOT NULL,
+    prompt VARCHAR(100) NOT NULL,
+    style VARCHAR(100) NOT NULL,
+)

@@ -10,10 +10,12 @@ import os
 import random
 import re
 import time
+from collections import namedtuple
 from dataclasses import dataclass
 from typing import Optional, List, Any, Dict, Union
 
 import aiohttp
+import asyncpg
 import discord
 from PIL import Image
 from dateutil import parser
@@ -23,6 +25,7 @@ from typing_extensions import Self
 from utils.buttons import ViewAuthor, InteractionPages, button
 from utils.decorators import pages, in_executor
 from utils.errors import ErrorNoSignature
+from utils.modal import BaseModal
 from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc, plural, ensure_execute
 from .baseclass import BaseUsefulCog
 
@@ -115,7 +118,7 @@ class DreamWombo:
         self.token = None
         self.ctx: Optional[StellaContext] = None
         self.art_style: Optional[ArtStyle] = None
-        self.image_desc: Optional[str] = None
+        self.image_desc: Optional[ImageDescription] = None
         self.message: Optional[discord.Message] = None
         self.cog: Optional[BaseUsefulCog] = None
         self.__previous = time.time()
@@ -133,7 +136,7 @@ class DreamWombo:
             return await self.get_image(i)
         return value
 
-    async def generate(self, ctx: StellaContext, art_style: ArtStyle, image_desc: str,
+    async def generate(self, ctx: StellaContext, art_style: ArtStyle, image_desc: ImageDescription,
                        message: discord.Message) -> PayloadTask:
         self.ctx = ctx
         self.cog = ctx.cog
@@ -301,7 +304,7 @@ class DreamWombo:
         payload = {
             'input_spec': {
                 'display_freq': 10,
-                'prompt': self.image_desc,
+                'prompt': self.image_desc.name,
                 'style': self.art_style.id
             }
         }
@@ -407,10 +410,10 @@ class ChooseArtStyle(ViewAuthor):
 
         options.sort(key=lambda e: self.art_styles[e.value].count, reverse=True)
 
-    async def start(self, image_desc: str) -> Optional[ArtStyle]:
+    async def start(self, image_desc: ImageDescription) -> Optional[ArtStyle]:
         await self.update_count_select()
         self.most_used = max([*self.art_styles.values()], key=lambda x: x.count)
-        self.message = await self.context.send(f"Choose an art style for `{image_desc}`!", view=self)
+        self.message = await self.context.send(f"Choose an art style for `{image_desc.name}`!", view=self)
         await self.wait()
         await asyncio.sleep(0.01)  # race condition on on_timeout, no i dont care 0.01
         with contextlib.suppress(discord.NotFound):
@@ -512,6 +515,56 @@ class WomboGeneration(InteractionPages):
         self.stop()
 
 
+class WomboSave(discord.ui.Modal, title="Saving generated image"):
+    name = discord.ui.TextInput(label="Name", min_length=3, max_length=100, placeholder="Name for your image")
+
+    def __init__(self, result: WomboResult):
+        super().__init__()
+        wombo = result.wombo
+        self.result = result
+        self.ctx = wombo.ctx
+        self.bot = self.ctx.bot
+        self.image_desc = wombo.image_desc
+        self.name.default = self.image_desc.name
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        query = "INSERT INTO wombo_saved VALUES($1, $2, $3, $4, $5, $6, $7)"
+        if not (name := self.name.value.strip()):
+            raise ErrorNoSignature("'Name' cannot be empty.")
+
+        if len(name) < 3:
+            raise ErrorNoSignature("'Name' cannot be less than 3.")
+
+        result = self.result
+        img_desc = self.image_desc
+        art_name = getattr(self.result.wombo.art_style, "name", None)
+        values = [name, self.ctx.author.id, result._original_photo, 0, img_desc.nsfw, img_desc.name, art_name]
+        await self.bot.pool_pg.execute(query, *values)
+        await interaction.response.send_message(f"Your image has been saved! (`{name}`)", ephemeral=True)
+        if saver := discord.utils.get([x for x in result.children if hasattr(x, "label")], label="Save"):
+            saver.disabled = True
+            await self.result.message.edit(view=result)
+            result.reset_timeout()
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        resp = None
+        if isinstance(error, ErrorNoSignature):
+            resp = str(error)
+        elif isinstance(error, asyncpg.UniqueViolationError):
+            resp = f'Image with "{self.name}" already exist. Please try something else.'
+
+        if resp is not None:
+            return await interaction.response.send_message(resp, ephemeral=True)
+
+        fallback = f"Something went wrong. Please try again later. Error: {error}"
+        await interaction.response.send_message(fallback, ephemeral=True)
+        exc = print_exception("Error occurred when saving image.", error)
+        await self.bot.error_channel.send(embed=StellaEmbed.to_error(description=exc))
+
+
+
+
+
 class WomboResult(ViewAuthor):
     FINAL_IMAGE = "Final Image"
     IMG_GENERATION = "Image Evolution"
@@ -528,12 +581,13 @@ class WomboResult(ViewAuthor):
         self.final_button = discord.utils.get(self.children, label=self.FINAL_IMAGE)
         self.remove_item(self.final_button)
         self.gen_button = discord.utils.get(self.children, label=self.IMG_GENERATION)
+        self.input_save: Optional[WomboSave] = None
 
     def home_embed(self) -> StellaEmbed:
         value = self.result
         amount_pic = len(value.photo_url_list)
         return StellaEmbed.default(
-            self.context, title=self.image_description.title(), url=self._original_photo
+            self.context, title=self.image_description.name.title(), url=self._original_photo
         ).set_image(
             url=self._original_photo
         ).add_field(
@@ -638,13 +692,26 @@ class WomboResult(ViewAuthor):
         pager = WomboGeneration(show_image(self.result.photo_url_list), self)
         await pager.start(self.context, interaction=interaction)
 
+    @button(emoji="<:download:316264057659326464>", label="Save", style=discord.ButtonStyle.blurple, row=1)
+    async def save_image(self, interaction: discord.Interaction, _: discord.ui.Button):
+        self.input_save = WomboSave(self) if self.input_save is None else self.input_save
+        await interaction.response.send_modal(self.input_save)
+
     @button(emoji='🗑️', label="Delete", style=discord.ButtonStyle.danger, row=1)
     async def delete_image(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.defer()
         await self.message.delete()
 
+    def stop(self) -> None:
+        super().stop()
+        if self.input_save is not None and not self.is_finished():
+            self.input_save.stop()
+
     async def on_timeout(self) -> None:
+        if self.input_save is not None and not self.is_finished():
+            self.input_save.stop()
+
         if self.context.bot.get_message(self.message.id) is None:
             return
 
@@ -652,6 +719,9 @@ class WomboResult(ViewAuthor):
             item.disabled = True
 
         await self.message.edit(view=self)
+
+
+ImageDescription = namedtuple("ImageDescription", "name nsfw")
 
 
 class ProfanityImageDesc(commands.Converter):
@@ -683,16 +753,16 @@ class ProfanityImageDesc(commands.Converter):
             return image_desc
 
         result = await ctx.bot.ipc_client.request('simple_nsfw_detection', content=image_desc)
-        if result.get("suggestive"):
+        if is_nsfw := result.get("suggestive"):
             raise commands.BadArgument("Unsafe image description given. Please use this prompt inside an nsfw channel.")
 
-        return image_desc
+        return ImageDescription(image_desc, bool(is_nsfw))
 
 
 class ArtAI(BaseUsefulCog):
     @commands.command(help="Generate art work with description given using Dream Wombo AI.")
     @commands.cooldown(1, 60, commands.BucketType.user)
-    async def art(self, ctx: StellaContext, *, image_description: str = commands.param(converter=ProfanityImageDesc)):
+    async def art(self, ctx: StellaContext, *, image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
         # I'm gonna be honest, I can't find their API so im just gonna reverse engineer it.
         wombo = DreamWombo(self.http_art)
         art_styles = await wombo.get_art_styles()
@@ -746,9 +816,20 @@ class ArtAI(BaseUsefulCog):
             print_exception("Ignoring error on creating emoji:", e)
             return
 
-    async def get_read_url(self, url: str) -> bytes:
-        async with self.http_art.get(url) as response:
-            return await response.read()
+    async def get_read_url(self, url: str, retries: int = 3) -> bytes:
+        multiplier = 3
+        original_exc = None
+        for retry in range(retries):
+            try:
+                async with self.http_art.get(url) as response:
+                    return await response.read()
+            except aiohttp.ServerDisconnectedError as e:
+                multi = multiplier ** retry
+                original_exc = e
+                print("Server disconnected. Retrying in", multi, "seconds")
+                await asyncio.sleep(multi)
+
+        raise original_exc
 
     async def get_local_url(self, url: str) -> str:
         if (local_url := self._cached_image.get(url)) is None:
