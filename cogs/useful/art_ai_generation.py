@@ -451,6 +451,7 @@ class ChooseArtStyle(ViewAuthor):
     @discord.ui.button(emoji='<:stopmark:753625001009348678>', label="Cancel", row=2, style=discord.ButtonStyle.danger)
     async def on_cancel(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.defer()
+        self.context.command.reset_cooldown(self.context)
         self._is_cancelled = True
         self.stop()
 
