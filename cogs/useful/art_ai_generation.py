@@ -25,8 +25,7 @@ from typing_extensions import Self
 from utils.buttons import ViewAuthor, InteractionPages, button
 from utils.decorators import pages, in_executor
 from utils.errors import ErrorNoSignature
-from utils.modal import BaseModal
-from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc, plural, ensure_execute
+from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc, plural, ensure_execute, realign
 from .baseclass import BaseUsefulCog
 
 
@@ -535,10 +534,11 @@ class WomboSave(discord.ui.Modal, title="Saving generated image"):
         if len(name) < 3:
             raise ErrorNoSignature("'Name' cannot be less than 3.")
 
+        clean_name = name.casefold()
         result = self.result
         img_desc = self.image_desc
         art_name = getattr(self.result.wombo.art_style, "name", None)
-        values = [name, self.ctx.author.id, result._original_photo, 0, img_desc.nsfw, img_desc.name, art_name]
+        values = [clean_name, self.ctx.author.id, result._original_photo, 0, img_desc.nsfw, img_desc.name, art_name]
         await self.bot.pool_pg.execute(query, *values)
         await interaction.response.send_message(f"Your image has been saved! (`{name}`)", ephemeral=True)
         if saver := discord.utils.get([x for x in result.children if hasattr(x, "label")], label="Save"):
@@ -560,9 +560,6 @@ class WomboSave(discord.ui.Modal, title="Saving generated image"):
         await interaction.response.send_message(fallback, ephemeral=True)
         exc = print_exception("Error occurred when saving image.", error)
         await self.bot.error_channel.send(embed=StellaEmbed.to_error(description=exc))
-
-
-
 
 
 class WomboResult(ViewAuthor):
@@ -749,20 +746,48 @@ class ProfanityImageDesc(commands.Converter):
         if len(image_desc) > 100:
             raise commands.BadArgument("Image description must be less than or equal to 100 characters.")
 
-        if not hasattr(ctx.channel, "is_nsfw") or ctx.channel.is_nsfw():
-            return image_desc
-
         result = await ctx.bot.ipc_client.request('simple_nsfw_detection', content=image_desc)
+        if not hasattr(ctx.channel, "is_nsfw") or ctx.channel.is_nsfw():
+            return ImageDescription(image_desc, result.get("suggestive", False))
+
         if is_nsfw := result.get("suggestive"):
             raise commands.BadArgument("Unsafe image description given. Please use this prompt inside an nsfw channel.")
 
         return ImageDescription(image_desc, bool(is_nsfw))
 
 
+@dataclass
+class ImageSaved:
+    name: str
+    user_id: int
+    art_style: str
+    prompt: str
+    image_url: str
+    vote: int
+    nsfw: bool
+
+    @classmethod
+    async def convert(cls, ctx: StellaContext, argument: str) -> Self:
+        sql = "SELECT * FROM wombo_saved WHERE name=$1"
+        if result := await ctx.bot.pool_pg.fetchrow(sql, argument.casefold()):
+            value = cls.from_record(result)
+            if not value.nsfw and not hasattr(ctx.channel, "is_nsfw") or ctx.channel.is_nsfw():
+                raise commands.CommandError("This image is only viewable on nsfw channel.")
+            return value
+
+        raise commands.CommandError(f'No image saved with "{argument}"')
+
+    @classmethod
+    def from_record(cls, record):
+        return cls(record["name"], record["user_id"], record["style"], record["prompt"], record["image_url"],
+                   record["vote"], record["is_nsfw"])
+
+
 class ArtAI(BaseUsefulCog):
     @commands.command(help="Generate art work with description given using Dream Wombo AI.")
     @commands.cooldown(1, 60, commands.BucketType.user)
-    async def art(self, ctx: StellaContext, *, image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
+    async def art(self, ctx: StellaContext,
+                  *, image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
         # I'm gonna be honest, I can't find their API so im just gonna reverse engineer it.
         wombo = DreamWombo(self.http_art)
         art_styles = await wombo.get_art_styles()
@@ -775,6 +800,77 @@ class ArtAI(BaseUsefulCog):
         await self._update_art_style(art)
         result = await wombo.generate(ctx, art, image_description, view.message)
         await WomboResult(wombo).display(result)
+
+    @commands.command(help="Shows a specific saved image according to 'art_name'. "
+                           "No argument to show your own list of saved images.")
+    async def arts(self, ctx: StellaContext, *, art_name: ImageSaved = None):
+        if art_name is None:
+            await self._handle_art_no_arg(ctx)
+        else:
+            await self._handle_art_arg(ctx, art_name)
+
+    @commands.command(help="Display a list of all images that was saved.")
+    async def allarts(self, ctx: StellaContext):
+        @pages(per_page=10)
+        async def show_images(inner_self, menu, raw_arts):
+            offset = menu.current_page * inner_self.per_page
+            arts = [*map(ImageSaved.from_record, raw_arts)]
+            content = "`{no}. {b.name}`"
+            return StellaEmbed.default(
+                ctx,
+                title="All Saved Art",
+                description="\n".join([content.format(no=i + 1, b=b) for i, b in enumerate(arts, start=offset)])
+            )
+
+        is_nsfw = getattr(ctx.channel, "is_nsfw", lambda: True)()
+        sql = "SELECT * FROM wombo_saved"
+        values = ()
+        if not is_nsfw:
+            sql = "SELECT * FROM wombo_saved WHERE is_nsfw=$1"
+            values = (False,)
+        all_arts = await self.bot.pool_pg.fetch(sql, *values)
+
+        if not all_arts:
+            raise ErrorNoSignature("Looks like no images has been saved.")
+        await InteractionPages(show_images(all_arts)).start(ctx)
+
+    async def _handle_art_arg(self, ctx: StellaContext, art_name: ImageSaved):
+        user_id = art_name.user_id
+        user = ctx.guild and ctx.guild.get_member(user_id) or ctx.bot.get_user(user_id)
+        user_name = getattr(user, "display_name", user_id)
+        embed = StellaEmbed.default(
+            ctx,
+            title=art_name.name,
+            description=f"**Prompt:** `{art_name.prompt}`\n"
+                        f"**Style:** `{art_name.art_style}`\n"
+                        f"**Owned by:** `{user_name}`",
+            url=art_name.image_url
+        ).set_image(url=art_name.image_url)
+        await ctx.maybe_reply(embed=embed)
+
+    async def _handle_art_no_arg(self, ctx: StellaContext):
+        @pages()
+        async def show_images(inner_self, menu, raw_art):
+            art = ImageSaved.from_record(raw_art)
+            return StellaEmbed.default(
+                ctx,
+                title=art.name,
+                description=f"**Prompt:** `{art.prompt}`\n"
+                            f"**Style:** `{art.art_style}`\n",
+                url=art.image_url
+            ).set_image(url=art.image_url)
+
+        is_nsfw = getattr(ctx.channel, "is_nsfw", lambda: True)()
+        sql = "SELECT * FROM wombo_saved WHERE user_id=$1"
+        values = (ctx.author.id,)
+        if not is_nsfw:
+            sql =  "SELECT * FROM wombo_saved WHERE is_nsfw=$1 and user_id=$2"
+            values = (False, ctx.author.id)
+        all_arts = await self.bot.pool_pg.fetch(sql, *values)
+        if not all_arts:
+            raise ErrorNoSignature("Looks like you have no image saved.")
+
+        await InteractionPages(show_images(all_arts)).start(ctx)
 
     async def _update_art_style(self, art: ArtStyle) -> None:
         query = ("INSERT INTO wombo_style VALUES($1) " 
