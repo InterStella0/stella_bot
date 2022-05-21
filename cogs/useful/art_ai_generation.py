@@ -986,7 +986,7 @@ class ArtAI(BaseUsefulCog):
             async with self.http_art.get(url) as response:
                 return await response.read()
 
-        await except_retry(callback, error=aiohttp.ServerDisconnectedError)
+        return await except_retry(callback, error=aiohttp.ServerDisconnectedError)
 
     async def get_local_url(self, url: str) -> str:
         if (local_url := self._cached_image.get(url)) is None:
