@@ -795,19 +795,32 @@ class ImageSaved:
                    record["count"], record["is_nsfw"])
 
 
-class ImageVote(ViewAuthor):
-    def __init__(self, ctx: StellaContext, art: ImageSaved):
-        super().__init__(ctx)
+class ImageVote(BaseView):
+    def __init__(self, art: ImageSaved):
+        super().__init__()
         self.art = art
+        self.context: Optional[StellaContext] = None
         self.message: Optional[discord.Message] = None
 
-    async def start(self, embed):
-        query = "SELECT * FROM wombo_liker WHERE user_id=$1 and name=$2"
-        author_id = self.context.author.id
-        result = await self.context.bot.pool_pg.fetchrow(query, author_id, self.art.name)
-        cannot_vote = result is not None or author_id == self.art.user_id
-        self.children[0].disabled = cannot_vote
-        self.message = await self.context.maybe_reply(view=self, embed=embed)
+    def create_embed(self) -> StellaEmbed:
+        ctx = self.context
+        art = self.art
+        user_id = art.user_id
+        user = ctx.guild and ctx.guild.get_member(user_id) or ctx.bot.get_user(user_id)
+        user_name = user or user_id
+        return StellaEmbed.default(
+            ctx,
+            title=art.name,
+            description=f"**Prompt:** `{art.prompt}`\n"
+                        f"**Style:** `{art.art_style}`\n"
+                        f"**Owned by:** `{user_name}`\n"
+                        f"**Like(s):** `{art.vote}`",
+            url=art.image_url
+        ).set_image(url=art.image_url)
+
+    async def start(self, ctx: StellaContext):
+        self.context = ctx
+        self.message = await ctx.maybe_reply(view=self, embed=self.create_embed())
         await self.wait()
 
     async def on_timeout(self) -> None:
@@ -819,15 +832,30 @@ class ImageVote(ViewAuthor):
 
         await self.message.edit(view=self)
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        author_id = interaction.user.id
+        art = self.art
+        if author_id == art.user_id:
+            await interaction.response.send_message("You cannot like your own image.", ephemeral=True)
+            return False
+
+        query = "SELECT * FROM wombo_liker WHERE user_id=$1 and name=$2"
+        result = await self.context.bot.pool_pg.fetchrow(query, author_id, art.name)
+        if result is not None:
+            await interaction.response.send_message("You've already liked this image.", ephemeral=True)
+            return False
+        return True
+
     @discord.ui.button(emoji="👍", label="Like", style=discord.ButtonStyle.success)
     async def on_like(self, interaction: discord.Interaction, button: discord.ui.Button):
+        art = self.art
         query = "INSERT INTO wombo_liker VALUES($1, $2)"
-        await interaction.client.pool_pg.execute(query, self.art.name, interaction.user.id)
-        user_id = self.art.user_id
+        await interaction.client.pool_pg.execute(query, art.name, interaction.user.id)
+        user_id = art.user_id
         name = self.context.guild and self.context.guild.get_member(user_id) or self.context.bot.get_user(user_id)
         await interaction.response.send_message(f"You've liked this image. `{name}` says thanks.", ephemeral=True)
-        button.disabled = True
-        await self.message.edit(view=self)
+        art.vote += 1
+        await self.message.edit(embed=self.create_embed())
 
 
 class ArtAI(BaseUsefulCog):
@@ -890,19 +918,7 @@ class ArtAI(BaseUsefulCog):
         await InteractionPages(show_images(all_arts)).start(ctx)
 
     async def _handle_art_arg(self, ctx: StellaContext, art_name: ImageSaved):
-        user_id = art_name.user_id
-        user = ctx.guild and ctx.guild.get_member(user_id) or ctx.bot.get_user(user_id)
-        user_name = user or user_id
-        embed = StellaEmbed.default(
-            ctx,
-            title=art_name.name,
-            description=f"**Prompt:** `{art_name.prompt}`\n"
-                        f"**Style:** `{art_name.art_style}`\n"
-                        f"**Owned by:** `{user_name}`\n"
-                        f"**Like(s):** `{art_name.vote}`",
-            url=art_name.image_url
-        ).set_image(url=art_name.image_url)
-        await ImageVote(ctx, art_name).start(embed)
+        await ImageVote(art_name).start(ctx)
 
     async def _handle_art_no_arg(self, ctx: StellaContext):
         @pages()
