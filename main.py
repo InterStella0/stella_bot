@@ -26,7 +26,7 @@ from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
 from utils.ipc import IPCData, StellaClient
 from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
-from utils.useful import ListCall, StellaContext, call, count_source_lines, print_exception
+from utils.useful import ListCall, StellaContext, call, count_source_lines, print_exception, except_retry
 
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
@@ -316,18 +316,7 @@ class StellaBot(commands.Bot):
     SEND_CONSTANT = 2 ** 16
 
     async def upload_file(self, *, byte: bytes, filename: str, retry=4):
-        backoff_multiplier = 3
-        current_error = None
-        for x in range(max(retry, 1)):
-            try:
-                return await self._upload_file(byte=byte, filename=filename)
-            except Exception as e:
-                current_error = e
-                backoff = backoff_multiplier ** x
-                print(f"Failure to upload", filename, ". Retrying after", backoff,"seconds")
-                await asyncio.sleep(backoff)
-
-        raise current_error
+        return await except_retry(self._upload_file, byte=byte, filename=filename, retries=retry)
 
     async def _upload_file(self, *, byte: bytes, filename: str):
         task_id = await self.ipc_client.request("get_upload_id", filename=filename)

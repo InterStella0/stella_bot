@@ -25,7 +25,8 @@ from typing_extensions import Self
 from utils.buttons import ViewAuthor, InteractionPages, button, BaseView
 from utils.decorators import pages, in_executor
 from utils.errors import ErrorNoSignature
-from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc, plural, ensure_execute, realign
+from utils.useful import StellaContext, StellaEmbed, print_exception, aware_utc, plural, ensure_execute, realign, \
+    except_retry
 from .baseclass import BaseUsefulCog
 
 
@@ -186,18 +187,7 @@ class DreamWombo:
         await self.message.edit(embed=embed, view=None)
 
     async def download_image(self, url: str, retry=3):
-        backoff_multiplier = 3
-        current_error = None
-        for x in range(retry):
-            try:
-                return await self._download_image(url)
-            except Exception as e:
-                current_error = e
-                backoff = backoff_multiplier ** x
-                print(f"Failure to download", url, ". Retrying after", backoff, "seconds")
-                await asyncio.sleep(backoff)
-
-        raise current_error
+        return await except_retry(self._download_image, url)
 
     async def _download_image(self, url: str):
         async with self.http_art.get(url) as response:
@@ -991,20 +981,12 @@ class ArtAI(BaseUsefulCog):
             print_exception("Ignoring error on creating emoji:", e)
             return
 
-    async def get_read_url(self, url: str, retries: int = 3) -> bytes:
-        multiplier = 3
-        original_exc = None
-        for retry in range(retries):
-            try:
-                async with self.http_art.get(url) as response:
-                    return await response.read()
-            except aiohttp.ServerDisconnectedError as e:
-                multi = multiplier ** retry
-                original_exc = e
-                print("Server disconnected. Retrying in", multi, "seconds")
-                await asyncio.sleep(multi)
+    async def get_read_url(self, url: str) -> bytes:
+        async def callback():
+            async with self.http_art.get(url) as response:
+                return await response.read()
 
-        raise original_exc
+        await except_retry(callback, error=aiohttp.ServerDisconnectedError)
 
     async def get_local_url(self, url: str) -> str:
         if (local_url := self._cached_image.get(url)) is None:

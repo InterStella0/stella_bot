@@ -502,3 +502,18 @@ async def ensure_execute(coro, timeout_callback, *, timeout=3):
         with contextlib.suppress(Exception):
             await timeout_callback()
         return await task
+
+
+async def except_retry(callback: Callable[..., Any], *args: Any, multiplier: int =3, retries: int= 3,
+                       error: Type[Exception] = Exception, **kwargs: Any):
+    last_err = None
+    for retry in range(max(retries, 1)):
+        try:
+            return await callback(*args, **kwargs)
+        except error as e:
+            last_err = e
+            wait = multiplier ** retry
+            print("Failure to invoke", callback, "retrying after", wait, "seconds...")
+            await asyncio.sleep(wait)
+
+    raise last_err
