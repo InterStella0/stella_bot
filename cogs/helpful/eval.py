@@ -188,12 +188,7 @@ class EvalHandler(BaseHelpfulCog):
     @commands.max_concurrency(1, commands.BucketType.user)
     async def _eval(self, ctx: StellaContext, *,
                     code: Optional[Codeblock] = commands.param(converter=CodeblockConverter, default=None)):
-
-        if code is None:
-            await EvalView(ctx).start()
-        else:
-            accepted = await self.bot.ipc_client.request("execute_python", code=code.content)
-            await self._handle_output(ctx, accepted)
+        await self.repl_handler(ctx, code, exec=True, symbol_mode=False, inner_func_check=True, counter=False)
 
     @in_executor()
     def get_wrapped(self, ctx: StellaContext, code: Codeblock, **flags: Optional[bool]):
@@ -273,7 +268,7 @@ class EvalHandler(BaseHelpfulCog):
         await self._handle_output(ctx, accepted)
 
     async def _handle_output(self, ctx: StellaContext, accepted: Dict[str, str]):
-        if output := accepted.get("output"):
+        if (output := accepted.get("output")) is not None:
             code = output
         elif reason := accepted.get("reason"):
             raise ErrorNoSignature(reason)

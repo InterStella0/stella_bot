@@ -26,6 +26,7 @@ def get_import(d: re.Match) -> str:
 class ReplParser:
     def __init__(self, **kwargs: Any):
         self.inner_func_check = kwargs.pop('inner_func_check', True)
+        self.symbol_mode = kwargs.pop('symbol_mode', True)
         self.continue_parsing = 0
         self.combining_parse = []
         self.previous_line = ""
@@ -359,7 +360,8 @@ class ReplReader:
     def __init__(self, codeblock: Codeblock, *, _globals: dict = (), **flags: Any):
         if isinstance(_globals, tuple):
             _globals = {}
-        self.iterator = ReplParser(**flags).__aiter__()
+        self.parser = ReplParser(**flags)
+        self.iterator = self.parser.__aiter__()
         self.codeblock = codeblock
         self.counter = flags.get("counter")
         self.exec_timer = flags.get("exec_timer")
@@ -403,13 +405,18 @@ class ReplReader:
             if isinstance(indent := await self.handle_repl(line), tuple):
                 _, error = indent
                 indicator = ("...", ">>>")[error.mode]
-                yield f"{indicator} {line}"
+                if self.parser.symbol_mode:
+                    yield f"{indicator} {line}"
+
                 yield indent
             number = f"{no} " if self.counter else ""
             compiled = await self.executor.asend((line, indent))
             if ex and indent and compiled:
                 yield compiled
-            yield f'{number}{("...", ">>>")[indent]} {line}'
+
+            if self.parser.symbol_mode:
+                yield f'{number}{("...", ">>>")[indent]} {line}'
+
         else:  # eof or raise
             try:
                 if compiled := await self.executor.asend((0, True)):
