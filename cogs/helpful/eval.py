@@ -182,9 +182,9 @@ class ReplView(EvalView):
 
 class EvalHandler(BaseHelpfulCog):
     @command(name="eval", aliases=["e"],
-             brief="Python eval execution in discord modal.",
-             help="A message will be prompted for a series of action relating to python eval execution through discord "
-                  "modal.")
+             brief="Public python eval execution in discord.",
+             help="Public python eval execution in discord. Using this command without argument will activate the "
+                  "mobile mode.")
     @commands.max_concurrency(1, commands.BucketType.user)
     async def _eval(self, ctx: StellaContext, *,
                     code: Optional[Codeblock] = commands.param(converter=CodeblockConverter, default=None)):
@@ -234,7 +234,8 @@ class EvalHandler(BaseHelpfulCog):
         return repl_wrap(code.content, context, **flags)
 
     @command(help="Simulate a live python interpreter interface when given a python code. Please use this public eval"
-                  "wisely as any execution that takes >= 3 seconds are terminated.")
+                  "wisely as any execution that takes >= 3 seconds are terminated. Using this command "
+                  "without argument will activate the mobile mode.")
     @commands.max_concurrency(1, commands.BucketType.user)
     async def repl(self, ctx: StellaContext, *,
                    code: Optional[Codeblock] = commands.param(converter=CodeblockConverter, default=None)):
@@ -291,8 +292,9 @@ class EvalHandler(BaseHelpfulCog):
         else:
             await ctx.maybe_reply(f"```py\nNo Output```")
 
-    @command(help="A timeit command for your python code. Execution timeout are set to 3 seconds.")
+    @command(help="A timeit command for your python code. Execution timeout are set to 3 seconds. Using this command "
+                  "without argument will activate the mobile mode.")
     @commands.max_concurrency(1, commands.BucketType.user)
     async def timeit(self, ctx: StellaContext, *,
-                     code: Optional[str] = commands.param(converter=CodeblockConverter, default=None)):
+                     code: Optional[Codeblock] = commands.param(converter=CodeblockConverter, default=None)):
         await self.repl_handler(ctx, code, exec=True, exec_timer=True, inner_func_check=False, counter=False)
