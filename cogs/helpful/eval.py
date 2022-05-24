@@ -188,7 +188,7 @@ class EvalHandler(BaseHelpfulCog):
     @commands.max_concurrency(1, commands.BucketType.user)
     async def _eval(self, ctx: StellaContext, *,
                     code: Optional[Codeblock] = commands.param(converter=CodeblockConverter, default=None)):
-        await self.repl_handler(ctx, code, exec=True, symbol_mode=False, inner_func_check=True, counter=False)
+        await self.repl_handler(ctx, code, exec=True, symbol_mode=False, inner_func_check=False, counter=False)
 
     @in_executor()
     def get_wrapped(self, ctx: StellaContext, code: Codeblock, **flags: Optional[bool]):
