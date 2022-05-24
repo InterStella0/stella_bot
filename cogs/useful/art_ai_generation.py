@@ -614,6 +614,16 @@ class WomboResult(ViewAuthor):
     @in_executor()
     def generate_gif(self, image_bytes: List[bytes]) -> io.BytesIO:
         images: List[Image.Image] = [Image.open(io.BytesIO(image_byte)) for image_byte in image_bytes]
+        file_name = os.urandom(16).hex()
+        folder = "nsfw" if self.image_description.nsfw else "sfw"
+        style = self.wombo.art_style.name
+        folder_path = fr"data/{folder}/{style}"
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+        for i, img in enumerate(images[-5:]):
+            img = img.resize((512, 512))
+            filepath = fr"{folder_path}/{file_name}_{i}.png"
+            img.save(filepath, format="PNG")
         *rest_images, final_image = images
         width, height = final_image.size
         final_size = int(width / 2), int(height / 2)
