@@ -620,7 +620,7 @@ class Object:
             self.id = id
 
     def __repr__(self):
-        return f'<type(self).__name__ object at {hex(id(self))}>'
+        return f'<{type(self).__name__} object at {hex(id(self))}>'
 
     @property
     def created_at(self):

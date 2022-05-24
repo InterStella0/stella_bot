@@ -1,4 +1,5 @@
-from typing import Optional, TYPE_CHECKING
+from __future__ import annotations
+from typing import Optional, TYPE_CHECKING, Dict
 
 import discord
 from discord import ui
@@ -48,7 +49,7 @@ class Paginator(InteractionPages):
         self.stop()
 
 
-class EvalModal(BaseModal, title="Python Eval"):
+class EvalModal(BaseModal, title="Python Mobile Eval"):
     code = discord.ui.TextInput(label="code", style=discord.TextStyle.long, placeholder="Enter your code here")
     output = discord.ui.TextInput(label="output", style=discord.TextStyle.long, required=False,
                                   placeholder="Execution Output")
@@ -73,7 +74,7 @@ class EvalModal(BaseModal, title="Python Eval"):
 
 
 class EvalView(ViewAuthor):
-    def __init__(self, ctx):
+    def __init__(self, ctx: StellaContext):
         super().__init__(ctx)
         self.modal = None
         self.previous_output = None
@@ -106,9 +107,13 @@ class EvalView(ViewAuthor):
             leading = f"... ({left:,} characters left)"
         return output[:width] + leading
 
+    async def setting_python(self, code: str):
+        return code
+
     async def execute_python(self, interaction: discord.Interaction):
         code = self.modal.code.value
-        result = await interaction.client.ipc_client.request("execute_python", code=code)
+        prepared = await self.setting_python(code)
+        result = await interaction.client.ipc_client.request("execute_python", code=prepared)
         if (output := result.get("output")) is not None:
             output = output or "No Output"
         else:
@@ -164,14 +169,31 @@ class EvalView(ViewAuthor):
             modal.stop()
 
 
+class ReplView(EvalView):
+    def __init__(self, ctx: StellaContext, cog: EvalHandler, **flags: bool):
+        super().__init__(ctx)
+        self.cog = cog
+        self.flags = flags
+
+    async def setting_python(self, code: str):
+        codeblock = Codeblock("py", code)
+        return await self.cog.get_wrapped(self.context, codeblock, **self.flags)
+
+
 class EvalHandler(BaseHelpfulCog):
     @command(name="eval", aliases=["e"],
              brief="Python eval execution in discord modal.",
              help="A message will be prompted for a series of action relating to python eval execution through discord "
                   "modal.")
     @commands.max_concurrency(1, commands.BucketType.user)
-    async def _eval(self, ctx: StellaContext):
-        await EvalView(ctx).start()
+    async def _eval(self, ctx: StellaContext, *,
+                    code: Optional[Codeblock] = commands.param(converter=CodeblockConverter, default=None)):
+
+        if code is None:
+            await EvalView(ctx).start()
+        else:
+            accepted = await self.bot.ipc_client.request("execute_python", code=code.content)
+            await self._handle_output(ctx, accepted)
 
     @in_executor()
     def get_wrapped(self, ctx: StellaContext, code: Codeblock, **flags: Optional[bool]):
@@ -214,8 +236,15 @@ class EvalHandler(BaseHelpfulCog):
     @command(help="Simulate a live python interpreter interface when given a python code. Please use this public eval"
                   "wisely as any execution that takes >= 3 seconds are terminated.")
     @commands.max_concurrency(1, commands.BucketType.user)
-    async def repl(self, ctx: StellaContext, code: UntilFlag[CodeblockConverter], *, flags: flg.ReplFlag):
-        await self.execute_repl(ctx, code, **dict(flags))
+    async def repl(self, ctx: StellaContext, *,
+                   code: Optional[Codeblock] = commands.param(converter=CodeblockConverter, default=None)):
+        await self.repl_handler(ctx, code, exec=True, inner_func_check=False, counter=False)
+
+    def repl_handler(self, ctx: StellaContext, code: Optional[Codeblock], **flags):
+        if code is None:
+            return ReplView(ctx, self, **flags).start()
+        else:
+            return self.execute_repl(ctx, code, **flags)
 
     async def execute_repl(self, ctx: StellaContext, code: Codeblock, **flags: Optional[bool]):
         globals_ = {
@@ -234,20 +263,23 @@ class EvalHandler(BaseHelpfulCog):
         if flags.get('exec') and not await self.bot.is_owner(ctx.author):
             coded = await self.get_wrapped(ctx, code, **flags)
             accepted = await self.bot.ipc_client.request("execute_python", code=coded)
-            if output := accepted.get("output"):
-                code = output
-            elif reason := accepted.get("reason"):
-                raise ErrorNoSignature(reason)
-            else:
-                raise ErrorNoSignature(f"It died sorry dan maaf")
-
         else:
             code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
-
-        text = text_chunker(code, width=1900, max_newline=20)
+            accepted = {"output": code}
 
         concurrent = ctx.command._max_concurrency
         await concurrent.release(ctx.message)
+        await self._handle_output(ctx, accepted)
+
+    async def _handle_output(self, ctx: StellaContext, accepted: Dict[str, str]):
+        if output := accepted.get("output"):
+            code = output
+        elif reason := accepted.get("reason"):
+            raise ErrorNoSignature(reason)
+        else:
+            raise ErrorNoSignature(f"It died sorry dan maaf")
+
+        text = text_chunker(code, width=1900, max_newline=20)
 
         if len(text) > 1:
             menu = InteractionPages(formatter(text))
@@ -261,6 +293,6 @@ class EvalHandler(BaseHelpfulCog):
 
     @command(help="A timeit command for your python code. Execution timeout are set to 3 seconds.")
     @commands.max_concurrency(1, commands.BucketType.user)
-    async def timeit(self, ctx: StellaContext, *, code: CodeblockConverter):
-        flags = {"exec": True, "exec_timer": True, "inner_func_check": False, "counter": False}
-        await self.execute_repl(ctx, code, **flags)
+    async def timeit(self, ctx: StellaContext, *,
+                     code: Optional[str] = commands.param(converter=CodeblockConverter, default=None)):
+        await self.repl_handler(ctx, code, exec=True, exec_timer=True, inner_func_check=False, counter=False)
