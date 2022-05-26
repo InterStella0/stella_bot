@@ -16,7 +16,7 @@ from discord.ext import ipc
 from starlette import status
 from typing_extensions import Self
 
-from utils.errors import TokenInvalid
+from utils.errors import TokenInvalid, StellaAPIError
 from utils.useful import print_exception, except_retry
 
 
@@ -224,7 +224,9 @@ class StellaAPI:
         async with self.http.request(method, self.BASE + url, **kwargs) as resp:
             if resp.status == status.HTTP_401_UNAUTHORIZED:
                 raise TokenInvalid("Invalid token given.")
-            return await resp.json()
+            if resp.content_type == "application/json":
+                return await resp.json()
+            raise StellaAPIError(await resp.text())
 
     async def upload_file(self, *, file: bytes, filename: str, retries=4) -> StellaFile:
         async def callback():
