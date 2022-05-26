@@ -5,6 +5,14 @@ import discord
 from discord.ext import commands
 
 
+class StellaAPIError(Exception):
+    pass
+
+
+class TokenInvalid(StellaAPIError):
+    pass
+
+
 class ArgumentBaseError(commands.UserInputError):
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)

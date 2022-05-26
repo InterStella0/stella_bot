@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
+import io
+import mimetypes
 import os
+from dataclasses import dataclass
 
 from typing import Any, AsyncIterator, Callable, Coroutine, Dict, List, Optional, TypedDict
 
 import aiohttp
+import discord
 
 from discord.ext import ipc
+from starlette import status
+from typing_extensions import Self
 
-from utils.useful import print_exception
+from utils.errors import TokenInvalid
+from utils.useful import print_exception, except_retry
 
 
 class IPCData(TypedDict, total=False):
@@ -157,3 +165,89 @@ class StellaClient(ipc.Client):
 
         if handlers := self._event_handlers.get(event):
             await asyncio.gather(*[handler(response) for handler in handlers])
+
+
+@dataclass
+class TokenPayload:
+    access_token: str
+    token_type: str
+
+
+@dataclass
+class StellaFile:
+    id: str
+    name: str
+    created_at: datetime.datetime
+
+    @classmethod
+    def from_api(cls, data) -> Self:
+        date_data = discord.utils.parse_time(data['created_at'])
+        return cls(data['file_id'], data['file_name'], date_data)
+
+    @property
+    def url(self):
+        return f"{StellaAPI.BASE}/files/{self.id}"
+
+    def __str__(self):
+        return self.url
+
+
+class StellaAPI:
+    BASE = "https://interstella.online"
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.username = bot.user_db
+        self.password = bot.pass_db
+        self.http: Optional[aiohttp.ClientSession] = None
+        self.headers = None
+        self.access_token = None
+
+    async def generate_token(self):
+        data = {
+            "username": self.username,
+            "password": self.password
+        }
+        http = self.http or aiohttp.ClientSession()
+        async with http:
+            self.http = http
+            values = await self._request("POST", "/token", data=data)
+        token = TokenPayload(values.get("access_token"), values.get("token_type"))
+        headers = {
+            'Authorization': f'Bearer {token.access_token}'
+        }
+        self.http = aiohttp.ClientSession(headers=headers)
+        self.access_token = token.access_token
+        return token
+
+    async def _request(self, method: str, url: str, **kwargs) -> Dict[str, Any]:
+        async with self.http.request(method, self.BASE + url, **kwargs) as resp:
+            if resp.status == status.HTTP_401_UNAUTHORIZED:
+                raise TokenInvalid("Invalid token given.")
+            return await resp.json()
+
+    async def upload_file(self, *, file: bytes, filename: str, retries=4) -> StellaFile:
+        async def callback():
+            try:
+                return await self._upload_file(file, filename)
+            except TokenInvalid:
+                await self.generate_token()
+                return await self._upload_file(file, filename)
+
+        return await except_retry(callback, retries=retries)
+
+    async def _upload_file(self, file: bytes, filename: str) -> StellaFile:
+        data = aiohttp.FormData()
+        extension, _ = mimetypes.guess_type(filename)
+        data.add_field('file', io.BytesIO(file), filename=filename, content_type=extension)
+        data.add_field('name', filename)
+
+        values = await self._request("POST", "/files/", data=data)
+        return StellaFile.from_api(values)
+
+    async def close(self):
+        await self.http.close()
+
+
+
+

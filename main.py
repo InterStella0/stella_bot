@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import collections
 import contextlib
 import copy
@@ -24,7 +23,7 @@ from dotenv import load_dotenv
 from utils.buttons import PersistentRespondView
 from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
-from utils.ipc import IPCData, StellaClient
+from utils.ipc import IPCData, StellaClient, StellaAPI
 from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
 from utils.useful import ListCall, StellaContext, call, count_source_lines, print_exception, except_retry
 
@@ -45,6 +44,7 @@ class StellaBot(commands.Bot):
         self.pass_db = kwargs.pop("pass_db", None)
         self.color = kwargs.pop("color", None)
         self.websocket_IP = kwargs.pop("websocket_ip")
+        self.stella_api = StellaAPI(self)
         self.ipc_key = kwargs.pop("ipc_key")
         self.ipc_port = kwargs.pop("ipc_port")
         self.ipc_client = StellaClient(host=self.websocket_IP, secret_key=self.ipc_key, port=self.ipc_port)
@@ -201,6 +201,7 @@ class StellaBot(commands.Bot):
         return self.get_guild(self.bot_guild_id).get_channel(self.error_channel_id)
 
     async def setup_hook(self) -> None:
+        await bot.stella_api.generate_token()
         self.git = GitHub(self.git_token)  # github uses aiohttp in init, need to put in async context
         await self.after_db()
         self.loop.create_task(self.after_ready())
@@ -313,36 +314,8 @@ class StellaBot(commands.Bot):
             await ctx.typing()
         await self.invoke(ctx)
 
-    SEND_CONSTANT = 2 ** 16
-
-    async def upload_file(self, *, byte: bytes, filename: str, retry=4):
-        return await except_retry(self._upload_file, byte=byte, filename=filename, retries=retry)
-
-    async def _upload_file(self, *, byte: bytes, filename: str):
-        task_id = await self.ipc_client.request("get_upload_id", filename=filename)
-        if not isinstance(task_id, str):
-            raise Exception(task_id)
-
-        while True:
-            current_byte = byte[:self.SEND_CONSTANT]
-            if not current_byte:
-                break
-
-            payload = {
-                'id': task_id,
-                'is_done': False,
-                'current_bytes': base64.b64encode(current_byte).decode('utf-8')
-            }
-            status = await self.ipc_client.request("upload_byte", **payload)
-            if status["code"] != 200:
-                raise Exception(status["error"])
-
-            byte = byte[self.SEND_CONSTANT:]
-
-        url = await self.ipc_client.request("upload_byte", id=task_id, is_done=True)
-        if not isinstance(url, str):
-            raise Exception(str(url))
-        return url
+    async def upload_file(self, *, byte: bytes, filename: str, retries: int = 4):
+        return await self.stella_api.upload_file(file=byte, filename=filename, retries=retries)
 
     async def main(self) -> None:
         """Starts the bot properly"""
@@ -367,6 +340,10 @@ class StellaBot(commands.Bot):
     def starter(self):
         with contextlib.suppress(KeyboardInterrupt):
             asyncio.run(self.main())
+
+    async def close(self) -> None:
+        await super().close()
+        await self.stella_api.close()
 
 
 intent_data = {x: True for x in ('guilds', 'members', 'emojis', 'messages', 'reactions', 'message_content')}
