@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 from utils.buttons import PersistentRespondView
 from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
-from utils.ipc import IPCData, StellaClient, StellaAPI
+from utils.ipc import IPCData, StellaClient, StellaAPI, StellaFile
 from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
 from utils.useful import ListCall, StellaContext, call, count_source_lines, print_exception, except_retry
 
@@ -314,7 +314,7 @@ class StellaBot(commands.Bot):
             await ctx.typing()
         await self.invoke(ctx)
 
-    async def upload_file(self, *, byte: bytes, filename: str, retries: int = 4):
+    async def upload_file(self, *, byte: bytes, filename: str, retries: int = 4) -> StellaFile:
         return await self.stella_api.upload_file(file=byte, filename=filename, retries=retries)
 
     async def main(self) -> None:

@@ -15,7 +15,7 @@ from utils.errors import ErrorNoSignature
 from utils.useful import StellaContext, StellaEmbed, print_exception, realign, \
     except_retry
 from .baseclass import BaseUsefulCog
-from .wombo_dream.interaction import ImageVote, ChooseArtStyle, WomboResult
+from .wombo_dream.interaction import ImageVote, ChooseArtStyle, WomboResult, ImageManagementView
 from .wombo_dream.model import ImageSaved, ImageDescription, ArtStyle
 from .wombo_dream.core import DreamWombo
 
@@ -203,3 +203,8 @@ class ArtAI(BaseUsefulCog):
             self._cached_image[url] = local_url
 
         return local_url
+
+    @commands.command()
+    @commands.is_owner()
+    async def manage_data_art(self, ctx):
+        await ImageManagementView(ctx).start()

@@ -4,6 +4,7 @@ import contextlib
 import io
 import os
 import random
+import shutil
 from typing import Optional, List, Dict
 
 import asyncpg
@@ -14,7 +15,7 @@ from discord.ext import commands
 from utils.decorators import in_executor, pages
 from utils.errors import ErrorNoSignature
 from utils.ipc import StellaFile
-from .model import ImageSaved, ArtStyle, ImageDescription, PayloadTask
+from .model import ImageSaved, ArtStyle, ImageDescription, PayloadTask, ImageMetaData
 from utils.buttons import BaseView, ViewAuthor, InteractionPages, button
 from utils.useful import StellaContext, StellaEmbed, plural, print_exception, aware_utc, ensure_execute
 from .core import DreamWombo
@@ -96,7 +97,8 @@ class ChooseArtStyle(ViewAuthor):
         confirm.disabled = False
         await interaction.response.edit_message(content=None, embed=embed, view=self)
 
-    @discord.ui.button(emoji='<:checkmark:753619798021373974>', label="Generate", row=2, style=discord.ButtonStyle.success, disabled=True)
+    @discord.ui.button(emoji='<:checkmark:753619798021373974>', label="Generate", row=2,
+                       style=discord.ButtonStyle.success, disabled=True)
     async def on_confirm(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.defer()
         self.stop()
@@ -153,7 +155,8 @@ class WomboGeneration(InteractionPages):
 
         await interaction.response.edit_message(view=self)
 
-    @button(emoji="<:house_mark:848227746378809354>", label=MENU, row=1, stay_active=True, style=discord.ButtonStyle.success)
+    @button(emoji="<:house_mark:848227746378809354>", label=MENU, row=1, stay_active=True,
+            style=discord.ButtonStyle.success)
     async def on_menu_click(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         view = self.view
         embeds = view.showing_original()
@@ -292,7 +295,8 @@ class WomboResult(ViewAuthor):
         byte = io.BytesIO()
         durations = [*[300 for _ in rest_images], 3000]
         first_image, *rest_images = resized_images
-        first_image.save(byte, format="GIF", save_all=True, append_images=rest_images, optimize=False, duration=durations, loop=0)
+        first_image.save(byte, format="GIF", save_all=True, append_images=rest_images, optimize=False,
+                         duration=durations, loop=0)
         byte.seek(0)
         return byte
 
@@ -450,3 +454,133 @@ class ImageVote(BaseView):
         await interaction.response.send_message(f"You've liked this image. `{name}` says thanks.", ephemeral=True)
         art.vote += 1
         await self.message.edit(embed=self.create_embed())
+
+
+class ImageManagementView(ViewAuthor):
+    ROOT_FOLDER = "data"
+
+    def __init__(self, ctx: StellaContext):
+        super().__init__(ctx)
+        self.safety = "sfw"
+        self.bot = ctx.bot
+        self._cached_urls = {}
+        self.select_data: List[ImageMetaData] = self._get_recursive_data()
+        self.selected_image: Optional[ImageMetaData] = None
+        self.message = None
+        self.current_page = 0
+
+    async def start(self):
+        self.message = await self.context.embed(description="Select a category", view=self)
+
+    def _get_recursive_data(self) -> Dict[str, List[ImageMetaData]]:
+        data = {}
+        for folder in os.listdir(self.ROOT_FOLDER):
+            fp = rf"{self.ROOT_FOLDER}/{folder}"
+            data[folder] = folder_data = []
+            for category in os.listdir(fp):
+                file_fp = rf"{fp}/{category}"
+                files = [ImageMetaData(file_fp, category, folder == "nsfw", x) for x in os.listdir(file_fp)]
+                for file in files:
+                    if file in folder_data:
+                        continue
+                    folder_data.append(file)
+
+        return data
+
+    @discord.ui.select(placeholder="Safety", options=[
+        discord.SelectOption(label="Sfw", value="sfw"),
+        discord.SelectOption(label="Nsfw", value="nsfw")
+    ])
+    async def on_safety_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        self.safety = select.values[0]
+        self.update_data()
+        await self.update_interface(interaction, 0)
+
+    def update_data(self):
+        self.select_data = self._get_recursive_data()[self.safety]
+
+    async def get_image(self, fp: ImageMetaData):
+        if not (url := self._cached_urls.get(fp)):
+            with open(fp.full_fp, "rb") as r:
+                file = await self.bot.upload_file(byte=r.read(), filename=fp.name)
+            self._cached_urls[fp] = url = file.url
+        return url
+
+    async def create_embed(self, image: ImageMetaData):
+        embed = StellaEmbed.default(self.context)
+        embed.add_field(name="Page", value=f"{self.current_page + 1}/{len(self.select_data)}")
+        embed.add_field(name="category", value=image.category)
+        return embed.set_image(url=await self.get_image(image))
+
+    async def update_interface(self, interaction: discord.Interaction, target_page: int):
+        await interaction.response.defer()
+        try:
+            img = self.select_data[target_page]
+        except IndexError:
+            embed = StellaEmbed.default(self.context, description="No data")
+            self.set_nsfw.disabled = False
+            self.set_sfw.disabled = False
+        else:
+            self.current_page = target_page
+            embed = await self.create_embed(img)
+            self.set_nsfw.disabled = img.is_nsfw
+            self.set_sfw.disabled = not img.is_nsfw
+            self.selected_image = img
+            self.on_seen.disabled = False
+            v = await self.bot.pool_pg.fetchrow("SELECT * FROM wombo_data_seen WHERE name=$1", img.clean_name)
+            if v:
+                self.on_seen.disabled = v['seen']
+
+        self.next_page.disabled = False
+        self.before_page.disabled = False
+        if target_page >= len(self.select_data) - 1:
+            self.next_page.disabled = True
+        if target_page == 0:
+            self.before_page.disabled = True
+
+        await self.message.edit(embed=embed, view=self)
+
+    @discord.ui.button(emoji="<:before_check:754948796487565332>", row=1, disabled=True)
+    async def before_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        page = max(self.current_page - 1, 0)
+        await self.update_interface(interaction, page)
+
+    @discord.ui.button(emoji="<:stop_check:754948796365930517>", row=1)
+    async def stop_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.message.delete(delay=0)
+        self.stop()
+
+    @discord.ui.button(emoji="<:next_check:754948796361736213>", row=1, disabled=True)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        page = min(self.current_page + 1, len(self.select_data) - 1)
+        await self.update_interface(interaction, page)
+
+    @in_executor()
+    def change_image_file(self, safety_folder):
+        image = self.selected_image
+        changed_fp = rf"{self.ROOT_FOLDER}/{safety_folder}/{image.category}"
+        if not os.path.exists(changed_fp):
+            os.makedirs(changed_fp)
+
+        for filename in image.all_names():
+            shutil.move(rf"{image.fp}/{filename}", rf"{changed_fp}/{filename}")
+
+    async def handle_change_position(self, safety, interaction):
+        await self.change_image_file(safety)
+        self.update_data()
+        await self.update_interface(interaction, max(self.current_page - 1, 0))
+
+    @discord.ui.button(label="NSFW", style=discord.ButtonStyle.danger, row=2, disabled=True)
+    async def set_nsfw(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_change_position("nsfw", interaction)
+
+    @discord.ui.button(label="SFW", style=discord.ButtonStyle.success, row=2, disabled=True)
+    async def set_sfw(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_change_position("sfw", interaction)
+
+    @discord.ui.button(label="Seen", style=discord.ButtonStyle.blurple, row=2, disabled=True)
+    async def on_seen(self, interaction: discord.Interaction, button: discord.ui.Button):
+        query = "INSERT INTO wombo_data_seen VALUES($1, $2)"
+        await self.bot.pool_pg.execute(query, self.selected_image.clean_name, True)
+        button.disabled = True
+        await interaction.response.edit_message(view=self)

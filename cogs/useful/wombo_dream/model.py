@@ -1,4 +1,5 @@
 import datetime
+import mimetypes
 from collections import namedtuple
 from dataclasses import dataclass
 from dateutil import parser
@@ -135,3 +136,45 @@ class ImageSaved:
     def from_record(cls, record) -> Self:
         return cls(record["name"], record["user_id"], record["style"], record["prompt"], record["image_url"],
                    record["count"], record["is_nsfw"])
+
+
+@dataclass
+class ImageMetaData:
+    fp: str
+    category: str
+    is_nsfw: bool
+    name: str
+
+    @property
+    def full_fp(self) -> str:
+        return rf"{self.fp}/{self.name}"
+
+    @property
+    def clean_name(self) -> str:
+        cleaned, *_ = self.name.rpartition("_")
+        return cleaned
+
+    @property
+    def extension(self) -> str:
+        content_type, _ = mimetypes.guess_type(self.name)
+        return mimetypes.guess_extension(content_type)
+
+    def all_names(self) -> List[str]:
+        return [f"{self.clean_name}_{x}{self.extension}" for x in range(5)]
+
+    def __hash__(self) -> int:
+        return hash(self.full_fp)
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, ImageMetaData):
+            return self.clean_name == other.clean_name and self.extension == other.extension
+        elif isinstance(other, str):
+            other_cleaned, *_ = other.rpartition("_")
+            return self.clean_name == other_cleaned
+        return False
+
+    def __str__(self) -> str:
+        return self.name
+
+    def __repr__(self) -> str:
+        return "<{0.fp}|{0.clean_name}>".format(self)

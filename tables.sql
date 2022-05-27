@@ -131,3 +131,8 @@ CREATE TABLE IF NOT EXISTS wombo_liker(
     user_id BIGINT,
     PRIMARY KEY(name, user_id)
 )
+
+CREATE TABLE IF NOT EXISTS wombo_data_seen(
+    name VARCHAR(1000),
+    seen BOOLEAN DEFAULT FALSE
+)
