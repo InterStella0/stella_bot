@@ -194,7 +194,7 @@ class WomboSave(discord.ui.Modal, title="Saving generated image"):
         values = [name, self.ctx.author.id, result._original_photo.url, 0, img_desc.nsfw, img_desc.name, art_name]
         await self.bot.pool_pg.execute(query, *values)
         prefix = self.ctx.clean_prefix
-        saved = f"Your image has been saved! Type '{prefix}arts {name}' to view your image."
+        saved = f"Your image has been saved! Type '`{prefix}arts {name}`' to view your image."
         await interaction.response.send_message(saved, ephemeral=True)
         if saver := discord.utils.get([x for x in result.children if hasattr(x, "label")], label="Save"):
             saver.disabled = True
