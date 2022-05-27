@@ -113,7 +113,7 @@ class EvalView(ViewAuthor):
     async def execute_python(self, interaction: discord.Interaction):
         code = self.modal.code.value
         prepared = await self.setting_python(code)
-        result = await interaction.client.ipc_client.request("execute_python", code=prepared)
+        result = await interaction.client.stella_api.execute_python(prepared)
         if (output := result.get("output")) is not None:
             output = output or "No Output"
         else:
@@ -258,7 +258,7 @@ class EvalHandler(BaseHelpfulCog):
         code = Codeblock(code.language, code.content.rstrip("\n"))
         if flags.get('exec') and not await self.bot.is_owner(ctx.author):
             coded = await self.get_wrapped(ctx, code, **flags)
-            accepted = await self.bot.ipc_client.request("execute_python", code=coded)
+            accepted = await self.bot.stella_api.execute_python(code=coded)
         else:
             code = "\n".join([o async for o in ReplReader(code, _globals=globals_, **flags)])
             accepted = {"output": code}

@@ -250,6 +250,9 @@ class StellaAPI:
     async def is_nsfw(self, query: str):
         return await self._request("POST", "/simple_nsfw_detection/", data={"query": query})
 
+    async def execute_python(self, code: str):
+        return await self._request("POST", "/execute_python/", data={"code": code})
+
     async def close(self):
         await self.http.close()
 
