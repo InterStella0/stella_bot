@@ -33,7 +33,7 @@ class PayloadTask:
         return parser.parse(date_str)
 
     @classmethod
-    def from_response(cls, payload: Dict[str, Any]):
+    def from_response(cls, payload: Dict[str, Any]) -> Self:
         return cls(
             payload['id'],
             cls.convert_if_value(payload['created_at']),
@@ -48,7 +48,7 @@ class PayloadTask:
         )
 
 
-def convert_expiry_date(seconds: str):
+def convert_expiry_date(seconds: str) -> datetime.datetime:
     return datetime.datetime.utcnow() + datetime.timedelta(seconds=int(seconds))
 
 
@@ -61,7 +61,7 @@ class PayloadToken:
     local_id: str
 
     @classmethod
-    def from_json(cls, data: Dict[str, str]):
+    def from_json(cls, data: Dict[str, str]) -> Self:
         expire = convert_expiry_date(data['expiresIn'])
         return cls(data['kind'], data['idToken'], data['refreshToken'], expire, data['localId'])
 
@@ -77,7 +77,7 @@ class PayloadAccessToken:
     user_id: str
 
     @classmethod
-    def from_json(cls, data):
+    def from_json(cls, data) -> Self:
         expire = convert_expiry_date(data['expires_in'])
         return cls(
                 data['access_token'], expire, data['id_token'], data['project_id'],
@@ -132,6 +132,6 @@ class ImageSaved:
         raise commands.CommandError(f'No image saved with "{argument}"')
 
     @classmethod
-    def from_record(cls, record):
+    def from_record(cls, record) -> Self:
         return cls(record["name"], record["user_id"], record["style"], record["prompt"], record["image_url"],
                    record["count"], record["is_nsfw"])

@@ -38,7 +38,7 @@ class DreamWombo:
         self.__failure_gif_download = None
         self.cached_images = {}
 
-    async def get_image(self, i: int, fallback: str = None):
+    async def get_image(self, i: int, fallback: str = None) -> bytes:
         value = self.cached_images.get(i)
         if isinstance(value, asyncio.Event):
             await value.wait()
@@ -98,14 +98,14 @@ class DreamWombo:
         embed.description = description
         await self.message.edit(embed=embed, view=None)
 
-    async def download_image(self, url: str, retry=3):
+    async def download_image(self, url: str) -> bytes:
         return await except_retry(self._download_image, url)
 
-    async def _download_image(self, url: str):
+    async def _download_image(self, url: str) -> bytes:
         async with self.http_art.get(url) as response:
             return await response.read()
 
-    async def download_images(self, start_id: int, urls: List[str]):
+    async def download_images(self, start_id: int, urls: List[str]) -> None:
         try:
             await self._download_images(start_id, urls)
         except Exception as e:
@@ -114,7 +114,7 @@ class DreamWombo:
         else:
             self.__failure_gif_download = False
 
-    async def _download_images(self, start_id: int, urls: List[str]):
+    async def _download_images(self, start_id: int, urls: List[str]) -> None:
         tasks = []
         for i, url in enumerate(urls, start=start_id):
             waiter = asyncio.Event()

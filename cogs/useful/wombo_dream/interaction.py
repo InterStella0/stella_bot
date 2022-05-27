@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from utils.decorators import in_executor, pages
 from utils.errors import ErrorNoSignature
+from utils.ipc import StellaFile
 from .model import ImageSaved, ArtStyle, ImageDescription, PayloadTask
 from utils.buttons import BaseView, ViewAuthor, InteractionPages, button
 from utils.useful import StellaContext, StellaEmbed, plural, print_exception, aware_utc, ensure_execute
@@ -250,7 +251,7 @@ class WomboResult(ViewAuthor):
             name="Created", value=aware_utc(value.created_at)
         )
 
-    def showing_original(self):
+    def showing_original(self) -> List[StellaEmbed]:
         embed1 = self.home_embed()
         embed2 = self.home_embed()
         embed2.set_image(url=self._original_gif)
@@ -302,7 +303,7 @@ class WomboResult(ViewAuthor):
         self.add_item_pos(self.gen_button, 0)
         await interaction.response.edit_message(content=None, embeds=embeds, view=self)
 
-    async def generate_gif_url(self):
+    async def generate_gif_url(self) -> StellaFile:
         image_bytes = []
         for i, url in enumerate(self.result.photo_url_list):
             if byte := await self.wombo.get_image(i + 1, fallback=url):
@@ -360,7 +361,7 @@ class WomboResult(ViewAuthor):
         await pager.start(self.context, interaction=interaction)
 
     @button(emoji="<:download:316264057659326464>", label="Save", style=discord.ButtonStyle.success, row=1)
-    async def save_image(self, interaction: discord.Interaction, _: discord.ui.Button):
+    async def save_image(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         self.input_save = WomboSave(self) if self.input_save is None else self.input_save
         await interaction.response.send_modal(self.input_save)
 
@@ -411,7 +412,7 @@ class ImageVote(BaseView):
             url=art.image_url
         ).set_image(url=art.image_url)
 
-    async def start(self, ctx: StellaContext):
+    async def start(self, ctx: StellaContext) -> None:
         self.context = ctx
         self.message = await ctx.maybe_reply(view=self, embed=self.create_embed())
         await self.wait()
@@ -440,7 +441,7 @@ class ImageVote(BaseView):
         return True
 
     @discord.ui.button(emoji="👍", label="Like", style=discord.ButtonStyle.success)
-    async def on_like(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def on_like(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         art = self.art
         query = "INSERT INTO wombo_liker VALUES($1, $2)"
         await interaction.client.pool_pg.execute(query, art.name, interaction.user.id)

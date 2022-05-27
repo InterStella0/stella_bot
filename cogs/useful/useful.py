@@ -8,7 +8,7 @@ import functools
 from discord.ext import commands
 from collections import namedtuple
 
-from cogs.useful.baseclass import BaseUsefulCog
+from .baseclass import BaseUsefulCog
 from utils.useful import try_call, call, StellaContext, aware_utc
 from typing import Union, Optional, Tuple, TYPE_CHECKING
 
@@ -112,8 +112,8 @@ class Etc(BaseUsefulCog):
         await ctx.embed(embed=embed, fields=fields)
 
     @commands.command(aliases=["replycounts", "repliescount", "replyscounts", "threadcount"],
-                      help="Finds the original message of a thread. This shows the amount of reply counts, the message itself, "
-                           "the url message of the thread and the author.",
+                      help="Finds the original message of a thread. This shows the amount of reply counts, the message "
+                           "itself, the url message of the thread and the author.",
                       brief="Finds the original message of a thread.")
     async def replycount(self, ctx: StellaContext, message: discord.Message):
         def count_reply(m: Optional[Union[discord.MessageReference, discord.Message]],
