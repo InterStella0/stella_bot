@@ -73,10 +73,7 @@ def button(*, label: Optional[str] = None, custom_id: Optional[str] = None, disa
 
 class BaseView(ui.View):
     def reset_timeout(self) -> None:
-        self.set_timeout(time.monotonic() + self.timeout)
-
-    def set_timeout(self, new_time: float) -> None:
-        self._View__timeout_expiry = new_time
+        self.timeout = self.timeout
 
     async def _scheduled_task(self, item: discord.ui.item, interaction: discord.Interaction):
         try:

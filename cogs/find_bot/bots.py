@@ -442,7 +442,7 @@ class BotHandler(FindBotCog):
                 await interaction.response.edit_message(view=None)
                 prompt_timeout = 60
                 # Ensures the winteractionpages doesn't get remove after timeout
-                self.set_timeout(time.monotonic() + self.timeout + prompt_timeout)
+                self.timeout = time.monotonic() + self.timeout + prompt_timeout
                 set_bots = set([b.id for b in bots])
                 prompt = self.BotPrompter(self.ctx, set_bots=set_bots, timeout=prompt_timeout)
                 content = "Mention a bot."
