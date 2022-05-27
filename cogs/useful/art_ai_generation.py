@@ -663,7 +663,7 @@ class WomboResult(ViewAuthor):
 
             prev_embed = self.home_embed()
             prev_embed.set_image(url=None)
-            desc = "<a:typing:597589448607399949> **Generating a GIF image. This may take a 20 seconds or longer**"
+            desc = "<a:typing:597589448607399949> **Generating a GIF image. This may take a few seconds or longer**"
             prev_embed.description = desc
             await interaction.response.edit_message(view=self, embed=prev_embed)
             self._original_gif = await self.generate_gif_url()
@@ -756,7 +756,7 @@ class ProfanityImageDesc(commands.Converter):
         if len(image_desc) > 100:
             raise commands.BadArgument("Image description must be less than or equal to 100 characters.")
 
-        result = await ctx.bot.ipc_client.request('simple_nsfw_detection', content=image_desc)
+        result = await ctx.bot.stella_api.is_nsfw(image_desc)
         if not hasattr(ctx.channel, "is_nsfw") or ctx.channel.is_nsfw():
             return ImageDescription(image_desc, result.get("suggestive", False))
 

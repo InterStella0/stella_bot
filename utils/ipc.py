@@ -247,6 +247,9 @@ class StellaAPI:
         values = await self._request("POST", "/files/", data=data)
         return StellaFile.from_api(values)
 
+    async def is_nsfw(self, query: str):
+        return await self._request("POST", "/simple_nsfw_detection/", data={"query": query})
+
     async def close(self):
         await self.http.close()
 
