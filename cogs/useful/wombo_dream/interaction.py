@@ -5,7 +5,7 @@ import io
 import os
 import random
 import shutil
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 
 import asyncpg
 import discord
@@ -15,6 +15,7 @@ from discord.ext import commands
 from utils.decorators import in_executor, pages
 from utils.errors import ErrorNoSignature
 from utils.ipc import StellaFile
+from utils.prefix_ai import MobileNetNSFW
 from .model import ImageSaved, ArtStyle, ImageDescription, PayloadTask, ImageMetaData
 from utils.buttons import BaseView, ViewAuthor, InteractionPages, button
 from utils.useful import StellaContext, StellaEmbed, plural, print_exception, aware_utc, ensure_execute
@@ -159,7 +160,7 @@ class WomboGeneration(InteractionPages):
             style=discord.ButtonStyle.success)
     async def on_menu_click(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         view = self.view
-        embeds = view.showing_original()
+        embeds = await view.showing_original()
         if view.final_button in view.children:
             view.remove_item(view.final_button)
             view.add_item_pos(view.gen_button, 0)
@@ -232,14 +233,15 @@ class WomboResult(ViewAuthor):
         self.message = wombo.message
         self.http = wombo.http_art
         self.wombo = wombo
-        self._original_photo = None
-        self._original_gif = None
-        self.final_button = discord.utils.get(self.children, label=self.FINAL_IMAGE)
+        self._original_photo: Optional[StellaFile] = None
+        self._original_gif: Optional[StellaFile] = None
+        self.final_button: discord.ui.Button = discord.utils.get(self.children, label=self.FINAL_IMAGE)
         self.remove_item(self.final_button)
         self.gen_button = discord.utils.get(self.children, label=self.IMG_GENERATION)
         self.input_save: Optional[WomboSave] = None
+        self._nsfw_rating: Optional[Union[bool, str]] = None
 
-    def home_embed(self) -> StellaEmbed:
+    async def home_embed(self) -> StellaEmbed:
         value = self.result
         amount_pic = len(value.photo_url_list)
         return StellaEmbed.default(
@@ -251,12 +253,14 @@ class WomboResult(ViewAuthor):
         ).add_field(
             name="Style", value=self.wombo.art_style
         ).add_field(
+            name="Safe Rating", value=await self.nsfw_rating() or "N/A"
+        ).add_field(
             name="Created", value=aware_utc(value.created_at)
         )
 
-    def showing_original(self) -> List[StellaEmbed]:
-        embed1 = self.home_embed()
-        embed2 = self.home_embed()
+    async def showing_original(self) -> List[StellaEmbed]:
+        embed1 = await self.home_embed()
+        embed2 = await self.home_embed()
         embed2.set_image(url=self._original_gif)
         return [embed1, embed2]
 
@@ -269,9 +273,9 @@ class WomboResult(ViewAuthor):
         except Exception as e:
             error = print_exception("Ignoring error in generate gif url", e)
             await self.context.bot.error_channel.send(embed=StellaEmbed.to_error(description=error))
-            kwargs = {'embed': self.home_embed()}
+            kwargs = {'embed': await self.home_embed()}
         else:
-            kwargs = {'embeds': self.showing_original()}
+            kwargs = {'embeds': await self.showing_original()}
         finally:
             await self.message.edit(**kwargs, view=self, content=None)
 
@@ -300,9 +304,24 @@ class WomboResult(ViewAuthor):
         byte.seek(0)
         return byte
 
+    async def nsfw_rating(self):
+        if self._nsfw_rating is not None:
+            return self._nsfw_rating
+
+        model: MobileNetNSFW = self.context.cog.get_model_style(self.wombo.art_style.name)
+        if model is None:
+            self._nsfw_rating = False
+            return
+
+        with Image.open(io.BytesIO(self._original_photo.byte)) as img:
+            result = await model.predict(img)
+
+        self._nsfw_rating = to_return = result.class_name.upper()
+        return to_return
+
     @button(emoji="<:house_mark:848227746378809354>", label=FINAL_IMAGE, style=discord.ButtonStyle.success, row=0)
     async def on_menu_click(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        embeds = self.showing_original()
+        embeds = await self.showing_original()
         self.remove_item(button)
         self.add_item_pos(self.gen_button, 0)
         await interaction.response.edit_message(content=None, embeds=embeds, view=self)
@@ -326,7 +345,7 @@ class WomboResult(ViewAuthor):
             for item in self.children:
                 item.disabled = True
 
-            prev_embed = self.home_embed()
+            prev_embed = await self.home_embed()
             prev_embed.set_image(url=None)
             desc = "<a:typing:597589448607399949> **Generating a GIF image. This may take a few seconds or longer**"
             prev_embed.description = desc
@@ -336,7 +355,7 @@ class WomboResult(ViewAuthor):
         else:
             await interaction.response.defer()
 
-        embed = self.home_embed()
+        embed = await self.home_embed()
         for item in self.children:
             item.disabled = False
 

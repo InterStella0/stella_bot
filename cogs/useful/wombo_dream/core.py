@@ -85,7 +85,7 @@ class DreamWombo:
             size = len(photos)
             description += f"\n**Image Generation: ** `{size}` (`{size / 20:.0%}`)"
             if status == "completed":
-                description += "\n**Downloading Images**" + emoji_status['generating']
+                description += "\n**Downloading Images** " + emoji_status['generating']
 
             to_url_show = photos[-1] if payload.result is None else payload.result.get('final')
             if to_url_show is None:  # fail safe for result final dict

@@ -58,17 +58,8 @@ class ProfanityImageDesc(commands.Converter):
 
 
 class AIModel(Converter):
-    def get_model_style(self, ctx: StellaContext, style: str) -> MobileNetNSFW:
-        cog: ArtAI = ctx.cog
-        if not (model := cog.cached_models.get(style)):
-            path = f"saved_model/Mobile model_{style}.h5"
-            if not os.path.exists(path):
-                return
-            cog.cached_models[style] = model = MobileNetNSFW.load_from_save(path)
-        return model
-
     async def convert(self, ctx: StellaContext, argument: str) -> MobileNetNSFW:
-        model = self.get_model_style(ctx, argument)
+        model = ctx.cog.get_model_style(argument)
         if not model:
             raise commands.BadArgument(f"Model with '{argument}' style does not exist.")
 
@@ -229,6 +220,14 @@ class ArtAI(BaseUsefulCog):
     async def manage_data_art(self, ctx):
         await ImageManagementView(ctx).start()
 
+    def get_model_style(self, style: str) -> MobileNetNSFW:
+        if not (model := self.cached_models.get(style)):
+            path = f"saved_model/Mobile model_{style}.h5"
+            if not os.path.exists(path):
+                return
+            self.cached_models[style] = model = MobileNetNSFW.load_from_save(path)
+        return model
+
     @commands.command()
     @commands.is_owner()
     async def rate(self, ctx: StellaContext, art_style: MobileNetNSFW = commands.param(converter=AIModel),
@@ -237,7 +236,6 @@ class ArtAI(BaseUsefulCog):
         byte = await attachment.read()
 
         with Image.open(io.BytesIO(byte)) as img:
-            img = img.resize(model.image_size)
             predicted: PredictionNSFW = await model.predict(img)
 
         await ctx.embed(
