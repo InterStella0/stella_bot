@@ -8,10 +8,12 @@ import aiohttp
 import discord
 from PIL import Image
 from discord.ext import commands
+from discord.ext.commands import Converter
 
 from utils.buttons import InteractionPages
 from utils.decorators import pages, in_executor
 from utils.errors import ErrorNoSignature
+from utils.prefix_ai import MobileNetNSFW, PredictionNSFW
 from utils.useful import StellaContext, StellaEmbed, print_exception, realign, \
     except_retry
 from .baseclass import BaseUsefulCog
@@ -53,6 +55,25 @@ class ProfanityImageDesc(commands.Converter):
             raise commands.BadArgument("Unsafe image description given. Please use this prompt inside an nsfw channel.")
 
         return ImageDescription(image_desc, bool(is_nsfw))
+
+
+class AIModel(Converter):
+    def get_model_style(self, ctx: StellaContext, style: str) -> MobileNetNSFW:
+        cog: ArtAI = ctx.cog
+        if not (model := cog.cached_models.get(style)):
+            path = f"saved_model/Mobile model_{style}.h5"
+            if not os.path.exists(path):
+                return
+            cog.cached_models[style] = model = MobileNetNSFW.load_from_save(path)
+        return model
+
+    async def convert(self, ctx: StellaContext, argument: str) -> MobileNetNSFW:
+        model = self.get_model_style(ctx, argument)
+        if not model:
+            raise commands.BadArgument(f"Model with '{argument}' style does not exist.")
+
+        return model
+
 
 
 class ArtAI(BaseUsefulCog):
@@ -208,3 +229,22 @@ class ArtAI(BaseUsefulCog):
     @commands.is_owner()
     async def manage_data_art(self, ctx):
         await ImageManagementView(ctx).start()
+
+    @commands.command()
+    @commands.is_owner()
+    async def rate(self, ctx: StellaContext, art_style: MobileNetNSFW = commands.param(converter=AIModel),
+                   attachment: discord.Attachment = commands.param(converter=discord.Attachment)):
+        model = art_style
+        byte = await attachment.read()
+
+        with Image.open(io.BytesIO(byte)) as img:
+            img = img.resize(model.image_size)
+            predicted: PredictionNSFW = await model.predict(img)
+
+        await ctx.embed(
+            description=f"**NSFW Score:** {predicted.nsfw_score}\n"
+                        f"**SFW Score:** {predicted.sfw_score}\n"
+                        f"**Conclude:** {predicted.class_name} (`{predicted.confidence:.2%}`)",
+        )
+
+

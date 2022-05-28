@@ -1,9 +1,22 @@
 from __future__ import annotations
+
+from dataclasses import dataclass
+
 import numpy as np
 from typing import Optional
-from tensorflow import keras
+
+from keras import Input, Model
+from keras.engine.base_layer import Layer
+from keras.layers import Conv2D, BatchNormalization, ReLU, AvgPool2D, Flatten, Dense, DepthwiseConv2D
+from keras_preprocessing.image import ImageDataGenerator
+from tensorflow import keras, optimizers
 from typing import Dict, Union, List, Tuple
+from PIL import Image
+
+from typing_extensions import Self
+
 from utils.decorators import in_executor
+import tensorflow as tf
 
 
 class PrefixNeuralNetwork:
@@ -130,4 +143,123 @@ class DerivativeNeuralNetwork:
         return np.array([[t[1] for t in input_layout]]), input_layout
 
 
+@dataclass
+class PredictionNSFW:
+    class_name: str
+    confidence: float
+    nsfw_score: float
+    sfw_score: float
 
+    @classmethod
+    def from_result(cls, prediction):
+        score = tf.nn.softmax(prediction[0])
+        classes = ["nsfw", "sfw"]
+        predicted = classes[np.argmax(score)]
+        return cls(predicted, np.max(score), *score)
+
+
+class MobileNetNSFW:
+    def __init__(self, image_width, image_height) -> None:
+        self.image_width: int = image_width
+        self.image_height: int = image_height
+        self.nb_train_samples: int = 16
+        self.nb_validation_samples: int = 4
+        self.batch_size: int = 2
+        self.model: Optional[Model] = None
+
+    @property
+    def image_size(self) -> Tuple[int, int]:
+        return self.image_width, self.image_height
+
+    def form_model(self) -> Model:
+        input = Input(shape=(*self.image_size, 3))
+        layer = Conv2D(filters=32, kernel_size=3, strides=2, padding='same')(input)
+        layer = BatchNormalization()(layer)
+        layer = ReLU()(layer)
+
+        layer = self.mobilenet_wrapper(layer, filters=64, strides=1)
+
+        layer = self.mobilenet_wrapper(layer, filters=128, strides=2)
+        layer = self.mobilenet_wrapper(layer, filters=128, strides=1)
+
+        layer = self.mobilenet_wrapper(layer, filters=256, strides=2)
+        layer = self.mobilenet_wrapper(layer, filters=256, strides=1)
+
+        layer = self.mobilenet_wrapper(layer, filters=512, strides=2)
+        for _ in range(5):
+            layer = self.mobilenet_wrapper(layer, filters=512, strides=1)
+
+        layer = self.mobilenet_wrapper(layer, filters=1024, strides=2)
+        layer = self.mobilenet_wrapper(layer, filters=1024, strides=1)
+
+        layer = AvgPool2D(pool_size=7, strides=1)(layer)
+        layer = Flatten()(layer)
+        output = Dense(units=2, activation='softmax')(layer)
+        model = Model(inputs=input, outputs=output)
+
+        sgd = optimizers.SGD()
+        model.compile(loss='categorical_crossentropy',
+                      optimizer=sgd,
+                      metrics=['accuracy'])
+        return model
+
+    def form_train_generator(self, train_dir: str, valid_dir: str) -> Tuple[str, str]:
+        train_datagen = ImageDataGenerator(rescale=1. / 255)
+
+        test_datagen = ImageDataGenerator(rescale=1. / 255)
+
+        train_generator = train_datagen.flow_from_directory(
+            train_dir,
+            target_size=self.image_size,
+            batch_size=self.batch_size,
+            class_mode='categorical'
+        )
+
+        validation_generator = test_datagen.flow_from_directory(
+            valid_dir,
+            target_size=self.image_size,
+            batch_size=self.batch_size,
+            class_mode='categorical'
+        )
+        return train_generator, validation_generator
+
+    def start(self, train_dir: str, valid_dir: str, epochs: int) -> None:
+        self.model = self.form_model()
+        train_generator, validation_generator = self.form_train_generator(train_dir, valid_dir)
+        self.model.fit(
+            train_generator,
+            steps_per_epoch=self.nb_train_samples // self.batch_size,
+            epochs=epochs, validation_data=validation_generator,
+            validation_steps=self.nb_validation_samples // self.batch_size
+        )
+
+    def save(self, path: str) -> None:
+        self.model.save(path)
+
+    @classmethod
+    def load_from_save(cls, path) -> Self:
+        instance = cls(0, 0)
+        instance.model = keras.models.load_model(path)
+        _, image_width, image_height, _ = instance.model.layers[0].input_shape[0]
+        instance.image_width = image_width
+        instance.image_height = image_height
+        return instance
+
+    @staticmethod
+    def mobilenet_wrapper(layer: Layer, filters: int, strides: int) -> Layer:
+        layer = DepthwiseConv2D(kernel_size=3, strides=strides, padding='same')(layer)
+        layer = BatchNormalization()(layer)
+        layer = ReLU()(layer)
+
+        layer = Conv2D(filters=filters, kernel_size=1, strides=1, padding='same')(layer)
+        layer = BatchNormalization()(layer)
+        layer = ReLU()(layer)
+        return layer
+
+    @in_executor()
+    def predict(self, image: Image.Image) -> PredictionNSFW:
+        img_array = keras.preprocessing.image.img_to_array(image)
+        img_array = tf.expand_dims(img_array, 0)
+        no_rgba = img_array[:, :, :, :3]
+        predictions = self.model.predict(no_rgba)
+        return PredictionNSFW.from_result(predictions)

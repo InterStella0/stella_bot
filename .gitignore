@@ -15,3 +15,4 @@ max_prefix_weights
 command_search.c
 eros.py
 data
+saved_model
