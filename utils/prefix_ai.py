@@ -258,6 +258,7 @@ class MobileNetNSFW:
 
     @in_executor()
     def predict(self, image: Image.Image) -> PredictionNSFW:
+        image = image.resize(self.image_size)
         img_array = keras.preprocessing.image.img_to_array(image)
         img_array = tf.expand_dims(img_array, 0)
         no_rgba = img_array[:, :, :, :3]
