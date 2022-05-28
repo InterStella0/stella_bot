@@ -177,12 +177,13 @@ class TokenPayload:
 class StellaFile:
     id: str
     name: str
+    byte: bytes
     created_at: datetime.datetime
 
     @classmethod
-    def from_api(cls, data) -> Self:
+    def from_api(cls, data: Dict[str, Any], byte) -> Self:
         date_data = discord.utils.parse_time(data['created_at'])
-        return cls(data['file_id'], data['file_name'], date_data)
+        return cls(data['file_id'], data['file_name'], byte, date_data)
 
     @property
     def url(self):
@@ -245,7 +246,7 @@ class StellaAPI:
         data.add_field('name', filename)
 
         values = await self._request("POST", "/files/", data=data)
-        return StellaFile.from_api(values)
+        return StellaFile.from_api(values, file)
 
     async def is_nsfw(self, query: str):
         return await self._request("POST", "/simple_nsfw_detection/", data={"query": query})
