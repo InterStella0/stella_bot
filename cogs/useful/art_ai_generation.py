@@ -75,7 +75,6 @@ class AIModel(Converter):
         return model
 
 
-
 class ArtAI(BaseUsefulCog):
     @commands.command(help="Generate art work with description given using Dream Wombo AI.")
     @commands.cooldown(1, 60, commands.BucketType.user)
@@ -120,13 +119,13 @@ class ArtAI(BaseUsefulCog):
         is_nsfw = getattr(ctx.channel, "is_nsfw", lambda: True)()
         sql = ('SELECT ws.*, ('
                'SELECT COUNT(*) FROM wombo_liker WHERE name=ws.name'
-               ') "count" FROM wombo_saved ws'
+               ') "count" FROM wombo_saved ws '
                'ORDER BY count DESC')
         values = ()
         if not is_nsfw:
             sql = ('SELECT ws.*, ('
                    'SELECT COUNT(*) FROM wombo_liker WHERE name=ws.name'
-                   ') "count" FROM wombo_saved ws WHERE is_nsfw=$1'
+                   ') "count" FROM wombo_saved ws WHERE is_nsfw=$1 '
                    'ORDER BY count DESC')
             values = (False,)
         all_arts = await self.bot.pool_pg.fetch(sql, *values)
@@ -160,7 +159,7 @@ class ArtAI(BaseUsefulCog):
         if not is_nsfw:
             sql = ('SELECT ws.*, ('
                    'SELECT COUNT(*) FROM wombo_liker WHERE name=ws.name'
-                   ') "count" FROM wombo_saved ws WHERE is_nsfw=$1 and user_id=$2'
+                   ') "count" FROM wombo_saved ws WHERE is_nsfw=$1 and user_id=$2 '
                    'ORDER BY count DESC')
             values = (False, ctx.author.id)
         all_arts = await self.bot.pool_pg.fetch(sql, *values)
