@@ -458,6 +458,11 @@ async def on_get_info(data: IPCData) -> None:
     }
 
 
+@bot.ipc_client.server_request()
+async def on_get_invite(data: IPCData) -> None:
+    return {"invite": discord.utils.oauth_url(bot.user.id)}
+
+
 @bot.ipc_client.listen()
 async def on_kill(data: IPCData) -> None:
     print("Kill has been ordered", data)
