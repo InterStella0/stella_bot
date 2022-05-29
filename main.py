@@ -445,7 +445,7 @@ async def on_get_info(data: IPCData) -> None:
         "guild_amount": len(bot.guilds),
         "user_amount": len(bot.users),
         "latency": bot.latency,
-        "launch_time": bot.uptime,
+        "launch_time": bot.uptime.isoformat(),
         "codelines": count_source_lines('.'),
         "last_commands": [
             {
