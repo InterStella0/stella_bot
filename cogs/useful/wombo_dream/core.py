@@ -71,7 +71,7 @@ class DreamWombo:
                         "generating": "<a:typing:597589448607399949>",
                         "completed": "<:checkmark:753619798021373974>"}
 
-        description = f"**Prompt:** `{payload.input_spec['prompt']}`\n"\
+        description = f"**Prompt:** `{self.image_desc.name}`\n"\
                       f"**Style:** `{self.art_style.name}`\n" \
                       f"**Updated:** {aware_utc(payload.updated_at)}"
 
