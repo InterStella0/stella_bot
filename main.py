@@ -439,6 +439,22 @@ async def on_restarting_server(_: IPCData) -> None:
     print("Server Connection Successful.")
 
 
+@bot.ipc_client.server_request()
+async def on_get_info(data: IPCData) -> None:
+    return {
+        "guild_amount": len(bot.guilds),
+        "user_amount": len(bot.users),
+        "last_commands": [
+            {
+                "author": str(ctx.author),
+                "command": ctx.command.qualified_name,
+                "created_at": ctx.message.created_at.isoformat()
+            }
+            for ctx in [*bot.cached_context][:-10:-1]
+        ]
+    }
+
+
 @bot.ipc_client.listen()
 async def on_kill(data: IPCData) -> None:
     print("Kill has been ordered", data)

@@ -51,6 +51,7 @@ class StellaClient(ipc.Client):
         self._callbacks: Dict[str, Dict[str, asyncio.Future[IPCData]]] = {}
         # event handlers are subscribed to event name
         self._event_handlers: Dict[str, List[_HandlerType]] = {}
+        self._server_request_handlers: Dict[str, _HandlerType] = {}
         self._stream_reader_task: Optional[asyncio.Task[None]] = None
 
     def __call__(self, bot_id: int) -> None:
@@ -87,6 +88,16 @@ class StellaClient(ipc.Client):
             return handler
         return inner
 
+    def server_request(self) -> Callable[[_HandlerType], _HandlerType]:
+        def inner(handler: _HandlerType) -> _HandlerType:
+            name = handler.__name__
+            if self._server_request_handlers.get(name):
+                raise Exception(f"Handler '{name}' has already been registered.")
+
+            self._server_request_handlers[name] = handler
+            return handler
+        return inner
+
     async def subscribe(self) -> IPCData:
         data = await self.request("start_connection")
         if (error := data.get("error")) is not None:
@@ -99,14 +110,17 @@ class StellaClient(ipc.Client):
         await self.check_init()
 
         request_id = self._new_request_id()
-        # register before sending message to avoid data race
-        future = self._register_callback(endpoint, request_id)
-
+        listen = timeout != 0
+        future = None
+        if listen:
+            # register before sending message to avoid data race
+            future = self._register_callback(endpoint, request_id)
         await self.websocket.send_json(
             self._make_payload(endpoint=endpoint, data=data, request_id=request_id)
         )
 
-        return await asyncio.wait_for(future, timeout)
+        if listen:
+            return await asyncio.wait_for(future, timeout)
 
     @staticmethod
     def _new_request_id() -> str:
@@ -162,6 +176,12 @@ class StellaClient(ipc.Client):
                 future.set_result(response)
             else:
                 print(f"unregistered request id {request_id} for IPC event {event}, ignoring")
+
+        if callback := self._server_request_handlers.get(event):
+            value = await callback(response)
+            request_id = response.get('listen_id')
+            asyncio.create_task(self.request("bot_response", request_id=request_id, data=value))
+            return
 
         if handlers := self._event_handlers.get(event):
             await asyncio.gather(*[handler(response) for handler in handlers])
