@@ -194,7 +194,7 @@ class StellaFile:
 
 
 class StellaAPI:
-    BASE = "https://interstella.online"
+    BASE = "https://api.interstella.online"
 
     def __init__(self, bot):
         self.bot = bot
