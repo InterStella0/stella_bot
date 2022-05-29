@@ -124,4 +124,12 @@ class Miscellaneous(BaseHelpfulCog):
         embed.add_field(name="Users", value=content)
         stella_owner = await self.bot.git.get_user(self.stella_github.owner.login)
         embed.set_author(name=f"By {stella_owner.name}", icon_url=stella_owner.avatar_url)
-        await ctx.embed(embed=embed)
+        view = discord.ui.View()
+        button1 = discord.ui.Button(
+            emoji="<:hmpf:946828106675662888>", label="Website", url="https://www.interstella.online"
+        )
+        button2 = discord.ui.Button(
+            emoji="<:github:744345792172654643>", label="Github", url=SOURCE_URL
+        )
+        view.add_item(button1).add_item(button2)
+        await ctx.embed(embed=embed, view=view)
