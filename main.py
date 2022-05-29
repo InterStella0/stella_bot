@@ -25,7 +25,7 @@ from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
 from utils.ipc import IPCData, StellaClient, StellaAPI, StellaFile
 from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
-from utils.useful import ListCall, StellaContext, call, count_source_lines, print_exception, except_retry
+from utils.useful import ListCall, StellaContext, count_source_lines, print_exception, except_retry
 
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)
@@ -444,6 +444,9 @@ async def on_get_info(data: IPCData) -> None:
     return {
         "guild_amount": len(bot.guilds),
         "user_amount": len(bot.users),
+        "latency": bot.latency,
+        "launch_time": bot.uptime,
+        "codelines": count_source_lines('.'),
         "last_commands": [
             {
                 "author": str(ctx.author),
