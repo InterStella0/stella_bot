@@ -49,13 +49,16 @@ class GithubHandler(FindBotCog):
     @commands.command(aliases=["wgithub", "github", "botgithub"], help="Tries to show the given bot's GitHub repository.")
     async def whatgithub(self, ctx: StellaContext, bot: BotRepo):
         async def formatted_commits() -> AsyncGenerator[str, None]:
-            async for c in aislice(repo.get_commits(), 5):
-                commit = c['commit']
-                time_created = datetime.datetime.strptime(commit['author']['date'], "%Y-%m-%dT%H:%M:%SZ")
-                message = commit['message']
-                url = c['html_url']
-                sha = c['sha'][:6]
-                yield f'[{aware_utc(time_created, mode="R")}] [{message}]({url} "{sha}")'
+            try:
+                async for c in aislice(repo.get_commits(), 5):
+                    commit = c['commit']
+                    time_created = datetime.datetime.strptime(commit['author']['date'], "%Y-%m-%dT%H:%M:%SZ")
+                    message = commit['message']
+                    url = c['html_url']
+                    sha = c['sha'][:6]
+                    yield f'[{aware_utc(time_created, mode="R")}] [{message}]({url} "{sha}")'
+            except Exception as e:
+                yield "Failed to retrieve commits."
 
         repo = bot.repo
         try:

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import http
 import random
 from dataclasses import dataclass
 from typing import Optional, Union
 
 import discord
+from aiogithub.exceptions import HttpException
 from aiogithub.objects import Repo
 from discord.ext import commands
 
@@ -30,7 +32,13 @@ class BotRepo:
         user = await IsBot().convert(ctx, argument)
         data = await ctx.bot.pool_pg.fetchrow("SELECT * FROM bot_repo WHERE bot_id=$1", user.id)
         if data:
-            return await cls.from_db(ctx.bot, user, data)
+            try:
+                return await cls.from_db(ctx.bot, user, data)
+            except HttpException as e:
+                if e.status == 404:
+                    raise commands.CommandError("Bot has an invalid github link. Sorry.")
+                status = http.client.responses.get(e.status) or f"Invalid Code: ({e.status})"
+                raise commands.CommandError(f"Error: {status}\n{e.url}")
         raise NotInDatabase(user)
 
     def __str__(self) -> str:
