@@ -47,7 +47,7 @@ class GithubHandler(FindBotCog):
             await self.bot.pool_pg.execute(sql, *values)
 
     @commands.command(aliases=["wgithub", "github", "botgithub"], help="Tries to show the given bot's GitHub repository.")
-    async def whatgithub(self, ctx: StellaContext, bot: BotRepo):
+    async def whatgithub(self, ctx: StellaContext, *, bot: BotRepo):
         async def formatted_commits() -> AsyncGenerator[str, None]:
             try:
                 async for c in aislice(repo.get_commits(), 5):
