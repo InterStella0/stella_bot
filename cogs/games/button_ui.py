@@ -1,5 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+
+import operator
+import re
+from typing import TYPE_CHECKING, Dict
 
 import discord
 import humanize
@@ -14,15 +17,35 @@ class ButtonGame(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Click", custom_id="click_game:click")
+    @staticmethod
+    def set_user_desc(description: str, username: str, amount: int):
+        lists = [*re.finditer(r"\d+\. (?P<user>(.{2,32})#\d{4}): \((?P<click>\d+)\)", description)]
+        to_insert = {"user": username, "click": amount}
+        for i, found in enumerate(lists):
+            if found["user"] == username:
+                lists[i] = to_insert
+                break
+        else:
+            lists.append(to_insert)
+
+        lists.sort(key=lambda x: int(x["click"]), reverse=True)
+        return "\n".join(f"{i}. {x['user']}: ({x['click']})" for i, x in enumerate(lists, start=1))
+
+    @discord.ui.button(label="Click", custom_id="click_game:click", style=discord.ButtonStyle.success)
     async def on_click_click(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
         query = "INSERT INTO button_game VALUES($1) " \
                 "ON CONFLICT(user_id) " \
-                "DO UPDATE SET amount = button_game.amount + 1 "
+                "DO UPDATE SET amount = button_game.amount + 1 " \
+                "RETURNING *"
         client: StellaBot = interaction.client
         author = interaction.user.id
-        await client.pool_pg.fetchrow(query, author)
+        values = await client.pool_pg.fetchrow(query, author)
+        message = interaction.message or await interaction.original_message()
+        embed, *_ = message.embeds
+        seconds = embed.description.splitlines()[:2]
+        name = str(interaction.user)
+        embed.description = "\n".join(seconds) + f"\n{self.set_user_desc(embed.description, name, values['amount'])}"
+        await interaction.response.edit_message(embed=embed)
 
     @discord.ui.button(label="Click Amount", custom_id="click_game:amount")
     async def on_amount_click(self, interaction: discord.Interaction, button: discord.ui.Button):
