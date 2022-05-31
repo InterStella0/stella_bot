@@ -4,6 +4,7 @@ import contextlib
 import copy
 import datetime
 import json
+import logging
 import os
 import re
 import time
@@ -33,6 +34,8 @@ load_dotenv(dotenv_path)
 import utils.library_override
 
 to_call = ListCall()
+
+logging.basicConfig(level=logging.INFO)
 
 
 class StellaBot(commands.Bot):
