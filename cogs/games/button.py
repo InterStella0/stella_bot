@@ -9,7 +9,7 @@ from utils.useful import StellaContext, realign
 
 
 class ButtonCommandCog(BaseGameCog):
-    @commands.group(aliases=["clicks"], ignore_extra=False)
+    @commands.group(aliases=["clicks"], invoke_without_command=True, ignore_extra=False)
     async def click(self, ctx: StellaContext):
         await ctx.embed(
             title="Click It",
