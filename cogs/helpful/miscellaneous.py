@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import itertools
+import time
 
 import discord
 import humanize
@@ -17,12 +18,26 @@ SOURCE_URL = 'https://github.com/InterStella0/stella_bot'
 
 
 class Miscellaneous(BaseHelpfulCog):
-    @commands.command(aliases=["ping", "p"],
+    @commands.command(aliases=["pping", "p"],
                       help="Shows the bot latency from the discord websocket.")
-    async def pping(self, ctx: StellaContext):
+    async def ping(self, ctx: StellaContext):
+        async def measure_ping(coro):
+            start = time.monotonic()
+            await coro
+            return time.monotonic() - start
+
+        db = await measure_ping(ctx.bot.pool_pg.fetch("SELECT 1"))
+        websocket = await measure_ping(self.bot.ipc_client.request("ping"))
+        api = await measure_ping(self.bot.stella_api._request("GET", "/"))
         await ctx.embed(
-            title="PP",
-            description=f"Your pp lasted `{self.bot.latency * 1000:.2f}ms`"
+            title="Ping",
+            fields=[
+                ("Discord", f"`{self.bot.latency * 1000:.2f}ms"),
+                ("Database", f"`{db * 1000:.2f}`ms"),
+                ("Websocket", f"`{websocket * 1000:.2f}`ms"),
+                ("API", f"`{api * 1000:.2f}`ms"),
+            ],
+            field_inline=True
         )
 
     @commands.command(aliases=["up"],
