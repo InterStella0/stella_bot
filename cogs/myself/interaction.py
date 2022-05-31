@@ -43,7 +43,7 @@ class ConfirmServer(discord.ui.Modal, title="Server leave confirmation"):
         super().__init__()
         server = view._source.entries[view.current_page]
         self.server.label = self.server.label.format(server)
-        self.server.placeholder = str(self.server)
+        self.server.placeholder = str(server)
         self.server_selected = server
         self.owner = view.ctx.author
         self.view = view
@@ -64,9 +64,11 @@ class ConfirmServer(discord.ui.Modal, title="Server leave confirmation"):
         await interaction.response.send_message(f'Leaving "{self.server}" now...', ephemeral=True)
         await self.server_selected.leave()
         source = self.view._source
-        entries = self.view._source.entries
+        entries = source.entries
         entries.remove(self.server_selected)
-        await self.view.change_source(type(self.view._source)(entries, per_page=source.per_page))
+        current_page = max(self.view.current_page - 1, 0)
+        await self.view.change_source(type(source)(entries))
+        await self.view.show_checked_page(current_page)
 
 
 class InteractionServers(InteractionPages):
