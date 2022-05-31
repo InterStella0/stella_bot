@@ -34,8 +34,6 @@ class ButtonGame(discord.ui.View):
 
             if (user_amount := client.button_click_cached.get(user)) is not None:
                 lists[i] = {"user": user, "click": user_amount}
-            else:
-                client.button_click_cached[user] = clicks
 
         client.button_click_cached[username] = amount
         if not user_in_list:
