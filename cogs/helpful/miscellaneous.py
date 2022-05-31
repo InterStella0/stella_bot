@@ -30,12 +30,12 @@ class Miscellaneous(BaseHelpfulCog):
         websocket = await measure_ping(self.bot.ipc_client.request("ping"))
         api = await measure_ping(self.bot.stella_api._request("GET", "/"))
         await ctx.embed(
-            title="Ping",
+            title="<:checkmark:753619798021373974> Ping",
             fields=[
-                ("Discord", f"`{self.bot.latency * 1000:.2f}ms"),
+                ("Discord", f"`{self.bot.latency * 1000:.2f}`ms"),
                 ("Database", f"`{db * 1000:.2f}`ms"),
-                ("Websocket", f"`{websocket * 1000:.2f}`ms"),
-                ("API", f"`{api * 1000:.2f}`ms"),
+                ("Stella Websocket", f"`{websocket * 1000:.2f}`ms"),
+                ("Stella API", f"`{api * 1000:.2f}`ms"),
             ],
             field_inline=True
         )
