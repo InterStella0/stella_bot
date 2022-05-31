@@ -21,7 +21,7 @@ class ButtonGame(discord.ui.View):
     def set_user_desc(interaction: discord.Interaction, description: str, amount: int):
         client: StellaBot = interaction.client
         username = str(interaction.user)
-        lists = [*re.finditer(r"\d+\. (?P<user>(.{2,32})#\d{4}): \((?P<click>\d+)\)", description)]
+        lists = [*re.finditer(r"\d+\. (?P<user>(.{2,32})#\d{4}): \(`(?P<click>\d+)`\)", description)]
         to_insert = {"user": username, "click": amount}
         user_in_list = False
         for i, found in enumerate(lists):
@@ -42,7 +42,7 @@ class ButtonGame(discord.ui.View):
             lists.append(to_insert)
 
         lists.sort(key=lambda x: int(x["click"]), reverse=True)
-        return "\n".join(f"{i}. {x['user']}: ({x['click']})" for i, x in enumerate(lists, start=1))
+        return "\n".join(f"{i}. {x['user']}: (`{x['click']}`)" for i, x in enumerate(lists, start=1))
 
     @discord.ui.button(emoji='🖱️', label="Click", custom_id="click_game:click", style=discord.ButtonStyle.success)
     async def on_click_click(self, interaction: discord.Interaction, button: discord.ui.Button):
