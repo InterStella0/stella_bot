@@ -64,6 +64,7 @@ class StellaBot(commands.Bot):
         self.cached_context = collections.deque(maxlen=100)
         self.command_running = {}
         self.user_lock = {}
+        self.button_click_cached = {}
         self._default_prefix = kwargs.pop("default_prefix")
         self._tester_prefix = kwargs.pop("tester_prefix")
 

@@ -18,20 +18,33 @@ class ButtonGame(discord.ui.View):
         super().__init__(timeout=None)
 
     @staticmethod
-    def set_user_desc(description: str, username: str, amount: int):
+    def set_user_desc(interaction: discord.Interaction, description: str, amount: int):
+        client: StellaBot = interaction.client
+        username = str(interaction.user)
         lists = [*re.finditer(r"\d+\. (?P<user>(.{2,32})#\d{4}): \((?P<click>\d+)\)", description)]
         to_insert = {"user": username, "click": amount}
+        user_in_list = False
         for i, found in enumerate(lists):
-            if found["user"] == username:
+            user = found["user"]
+            clicks = int(found["click"])
+            if user == username:
                 lists[i] = to_insert
-                break
-        else:
+                user_in_list = True
+                continue
+
+            if (user_amount := client.button_click_cached.get(user)) is not None:
+                lists[i] = {"user": user, "click": user_amount}
+            else:
+                client.button_click_cached[user] = clicks
+
+        client.button_click_cached[username] = amount
+        if not user_in_list:
             lists.append(to_insert)
 
         lists.sort(key=lambda x: int(x["click"]), reverse=True)
         return "\n".join(f"{i}. {x['user']}: ({x['click']})" for i, x in enumerate(lists, start=1))
 
-    @discord.ui.button(label="Click", custom_id="click_game:click", style=discord.ButtonStyle.success)
+    @discord.ui.button(emoji='🖱️', label="Click", custom_id="click_game:click", style=discord.ButtonStyle.success)
     async def on_click_click(self, interaction: discord.Interaction, button: discord.ui.Button):
         query = "INSERT INTO button_game VALUES($1) " \
                 "ON CONFLICT(user_id) " \
@@ -43,8 +56,8 @@ class ButtonGame(discord.ui.View):
         message = interaction.message or await interaction.original_message()
         embed, *_ = message.embeds
         seconds = embed.description.splitlines()[:2]
-        name = str(interaction.user)
-        embed.description = "\n".join(seconds) + f"\n{self.set_user_desc(embed.description, name, values['amount'])}"
+        form_list = f"\n{self.set_user_desc(interaction, embed.description, values['amount'])}"
+        embed.description = "\n".join(seconds) + form_list
         await interaction.response.edit_message(embed=embed)
 
     @discord.ui.button(label="Click Amount", custom_id="click_game:amount")
