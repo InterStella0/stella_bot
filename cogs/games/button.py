@@ -9,7 +9,7 @@ from utils.useful import StellaContext, realign
 
 
 class ButtonCommandCog(BaseGameCog):
-    @commands.command(aliases=["clicks"])
+    @commands.group(aliases=["clicks"], ignore_extra=False)
     async def click(self, ctx: StellaContext):
         await ctx.embed(
             title="Click It",
@@ -29,7 +29,7 @@ class ButtonCommandCog(BaseGameCog):
             self.button_rank_cache[user_id] = user
             return user
 
-    @commands.command(aliases=["click_ranks", "clickranks", "clickrank"])
+    @click.command(name="rank", aliases=["ranks", "top"])
     async def click_rank(self, ctx: StellaContext):
         query = "SELECT * " \
                 "FROM (" \
