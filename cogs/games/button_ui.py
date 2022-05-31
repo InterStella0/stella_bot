@@ -26,7 +26,6 @@ class ButtonGame(discord.ui.View):
         user_in_list = False
         for i, found in enumerate(lists):
             user = found["user"]
-            clicks = int(found["click"])
             if user == username:
                 lists[i] = to_insert
                 user_in_list = True
