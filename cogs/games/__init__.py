@@ -15,7 +15,8 @@ games = ButtonCommandCog, WordleCommandCog
 class GamesCog(*games, name="Games"):
     """Contains games that stella made."""
     async def cog_load(self) -> None:
-        self.bot.add_view(ButtonGame())
+        if not self.bot.tester:
+            self.bot.add_view(ButtonGame())
 
 
 async def setup(bot: StellaBot):

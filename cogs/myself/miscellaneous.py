@@ -19,6 +19,7 @@ from utils.decorators import pages
 from utils.greedy_parser import UntilFlag
 from utils.new_converters import (CodeblockConverter, IsBot)
 from utils.useful import (StellaContext, StellaEmbed, aware_utc)
+from .interaction import InteractionServers, show_server
 
 
 class Miscellaneous(BaseMyselfCog):
@@ -238,3 +239,9 @@ class Miscellaneous(BaseMyselfCog):
         with open("d_json/bot_var.json", "w") as w:
             json.dump(bot_var, w, indent=4)
         await ctx.confirmed()
+
+    @commands.command()
+    async def servers(self, ctx: StellaContext):
+        values = ctx.bot.guilds
+        values.sort(key=lambda x: x.me.joined_at)
+        await InteractionServers(show_server(values)).start(ctx)
