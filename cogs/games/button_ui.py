@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import operator
+import contextlib
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict
@@ -71,14 +71,13 @@ class ButtonGame(discord.ui.View):
         obj = CooldownUser.from_interaction(interaction)
         per_channel = self.cooldown_update_message.update_rate_limit(obj)
         per_user = client.cooldown_user_click.update_rate_limit(obj)
-        if not (per_channel or per_user):
-            await interaction.response.edit_message(embed=embed)
-            return
+        with contextlib.suppress(discord.NotFound):
+            if not (per_channel or per_user):
+                await interaction.response.edit_message(embed=embed)
+            elif not per_user:
+                await interaction.response.defer()
 
-        if not per_user:
-            await interaction.response.defer()
-            return
-
+        await client.pool_pg.execute("INSERT INTO click_game_logger VALUES($1)", author)
         # Dont respond
 
     @discord.ui.button(label="Click Amount", custom_id="click_game:amount")
