@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+import string
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict
 
@@ -30,29 +31,42 @@ class ButtonGame(discord.ui.View):
         super().__init__(timeout=None)
         self.cooldown_update_message = commands.CooldownMapping.from_cooldown(2, 5, commands.BucketType.channel)
 
+    subscript = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+
+    @staticmethod
+    def to_subscript(value: int) -> str:
+        mapped = [string.digits.index(s) for s in str(value)]
+        return "⁺" + "".join([ButtonGame.subscript[i] for i in mapped])
+
     @staticmethod
     def set_user_desc(interaction: discord.Interaction, description: str, amount: int):
         client: StellaBot = interaction.client
         username = str(interaction.user)
-        lists = [*re.finditer(r"\d+\. (?P<user>(.{2,32})#\d{4}): \(`(?P<click>\d+)`\)", description)]
-        to_insert = {"user": username, "click": amount}
+
+        regex = r"\d+\. (?P<user>(.{2,32})#\d{4}): \(`(?P<click>\d+)(⁺(?P<add>[⁰¹²³⁴⁵⁶⁷⁸⁹]+))?`\)(?P<total>\[`\d+`\])"
+        lists = [*re.finditer(regex, description)]
+        to_insert = {"user": username, "click": amount, "add": ButtonGame.to_subscript(0), "total": amount}
         user_in_list = False
         for i, found in enumerate(lists):
             user = found["user"]
+            click = int(found["click"])
             if user == username:
+                to_insert["add"] = ButtonGame.to_subscript(amount - click)
+                to_insert["click"] = click
                 lists[i] = to_insert
                 user_in_list = True
                 continue
 
             if (user_amount := client.button_click_cached.get(user)) is not None:
-                lists[i] = {"user": user, "click": user_amount}
+                add = ButtonGame.to_subscript(user_amount - click)
+                lists[i] = {"user": user, "click": click, "add": add, "total": user_amount}
 
         client.button_click_cached[username] = amount
         if not user_in_list:
             lists.append(to_insert)
 
         lists.sort(key=lambda x: int(x["click"]), reverse=True)
-        return "\n".join(f"{i}. {x['user']}: (`{x['click']}`)" for i, x in enumerate(lists, start=1))
+        return "\n".join(f"{i}. {x['user']}: (`{x['click']}{x['add']}`)[`{x['total']}`]" for i, x in enumerate(lists, start=1))
 
     @discord.ui.button(emoji='🖱️', label="Click", custom_id="click_game:click", style=discord.ButtonStyle.success)
     async def on_click_click(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -71,7 +85,7 @@ class ButtonGame(discord.ui.View):
         obj = CooldownUser.from_interaction(interaction)
         per_channel = self.cooldown_update_message.update_rate_limit(obj)
         per_user = client.cooldown_user_click.update_rate_limit(obj)
-        with contextlib.suppress(discord.NotFound):
+        with contextlib.suppress(discord.HTTPException):
             if not (per_channel or per_user):
                 await interaction.response.edit_message(embed=embed)
             elif not per_user:
