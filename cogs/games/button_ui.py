@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import operator
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict
 
 import discord
 import humanize
+from discord.ext import commands
 
 from utils.useful import plural
 
@@ -13,9 +15,20 @@ if TYPE_CHECKING:
     from main import StellaBot
 
 
+@dataclass
+class CooldownUser:
+    channel: discord.TextChannel
+    author: discord.User
+
+    @classmethod
+    def from_interaction(cls, interaction: discord.Interaction):
+        return cls(interaction.channel, interaction.user)
+
+
 class ButtonGame(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
+        self.cooldown_update_message = commands.CooldownMapping.from_cooldown(2, 5, commands.BucketType.channel)
 
     @staticmethod
     def set_user_desc(interaction: discord.Interaction, description: str, amount: int):
@@ -55,7 +68,18 @@ class ButtonGame(discord.ui.View):
         seconds = embed.description.splitlines()[:2]
         form_list = f"\n{self.set_user_desc(interaction, embed.description, values['amount'])}"
         embed.description = "\n".join(seconds) + form_list
-        await interaction.response.edit_message(embed=embed)
+        obj = CooldownUser.from_interaction(interaction)
+        per_channel = self.cooldown_update_message.update_rate_limit(obj)
+        per_user = client.cooldown_user_click.update_rate_limit(obj)
+        if not (per_channel or per_user):
+            await interaction.response.edit_message(embed=embed)
+            return
+
+        if not per_user:
+            await interaction.response.defer()
+            return
+
+        # Dont respond
 
     @discord.ui.button(label="Click Amount", custom_id="click_game:amount")
     async def on_amount_click(self, interaction: discord.Interaction, button: discord.ui.Button):
