@@ -12,6 +12,7 @@ from typing import Tuple, List, Optional, TYPE_CHECKING, Union, Any, Dict
 import discord
 from discord.ext import commands
 from discord import ui
+from discord.ext.commands.help import _HelpCommandImpl
 from discord.ui import View
 from fuzzywuzzy import process
 
@@ -84,11 +85,11 @@ class SearchHelp(discord.ui.Button):
 
 class HelpDropDown(discord.ui.Select):
     def __init__(self, cmds: List[CommandGroup]):
+        self.commands = cmds = {cmd.name: cmd for cmd in cmds}
         options = [discord.SelectOption(
             label=cmd.name,
             description=textwrap.shorten(cmd.short_doc, width=80)
-        ) for cmd in cmds]
-        self.commands = {cmd.name: cmd for cmd in cmds}
+        ) for cmd in self.commands.values()]
         amount = len(cmds)
         value = plural(f'{amount} result(s)', amount)
         super().__init__(placeholder=value, min_values=1, max_values=1, options=options)
@@ -435,7 +436,7 @@ class StellaBotHelp(commands.DefaultHelpCommand):
 
     async def handle_error_message(self, error: str, command: str, group: Optional[commands.Group] = None) -> None:
         ctx = self.context
-        to_search = group.commands if group else ctx.bot.commands
+        to_search = group.commands if group is not None and not isinstance(group, _HelpCommandImpl) else ctx.bot.commands
         filtered = filter(lambda x: x[1] > 50, process.extract(command, [x.name for x in to_search], limit=25))
         mapped = itertools.starmap(lambda x, *_: f"{group} {x}" if group else x, filtered)
         result = await self.filter_commands([ctx.bot.get_command(name) for name in mapped])
