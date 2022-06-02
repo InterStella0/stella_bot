@@ -117,20 +117,14 @@ class ButtonCommandCog(BaseGameCog):
     async def analyze(self, ctx: StellaContext, *, user: Union[discord.Member, discord.User] = None):
         single_coef = """
         SELECT ((STDDEV(a.amount) / AVG(a.amount)) * 100) "cof" FROM (
-                SELECT g.series AS time, COUNT(t.click_time) "amount"
-                FROM (
-                    SELECT generate_series(CURRENT_TIMESTAMP - INTERVAL '1 day', CURRENT_TIMESTAMP, '1 minute') "series"
-                ) g
-                INNER JOIN
-                click_game_logger t
-                ON (
-                    EXTRACT(MINUTE FROM t.click_time) = EXTRACT(MINUTE FROM g.series) 
-                    AND EXTRACT(HOUR FROM t.click_time) = EXTRACT(HOUR FROM g.series) 
-                    AND user_id={}
-                ) 
-                GROUP BY g.series
-                HAVING COUNT(t.click_time) <> 0
-            ) a
+            SELECT DATE_TRUNC('minute', click_time) "time", COUNT(*) "amount"
+            FROM  click_game_logger
+            WHERE CURRENT_TIMESTAMP - INTERVAL '1 day' < click_time
+            AND user_id={}
+            GROUP BY time
+            HAVING COUNT(click_time) <> 0
+            ORDER BY time DESC
+        ) a
         """
         all_coef_query = f"""SELECT d.user_id, (
             SELECT COUNT(*) FROM click_game_logger WHERE user_id=d.user_id
