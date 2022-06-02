@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import random
 import re
 import string
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ class ButtonGame(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.cooldown_update_message = commands.CooldownMapping.from_cooldown(2, 5, commands.BucketType.channel)
+        self.cooldown_for_random = commands.CooldownMapping.from_cooldown(10, 180, commands.BucketType.channel)
 
     subscript = "⁰¹²³⁴⁵⁶⁷⁸⁹"
 
@@ -87,12 +89,25 @@ class ButtonGame(discord.ui.View):
         per_user = client.cooldown_user_click.update_rate_limit(obj)
         with contextlib.suppress(discord.HTTPException):
             if not (per_channel or per_user):
-                await interaction.response.edit_message(embed=embed)
+                await interaction.response.edit_message(embed=embed, view=self)
             elif not per_user:
+                if self.cooldown_for_random.update_rate_limit(obj):
+                    self.randomize_pos(obj)
                 await interaction.response.defer()
 
         await client.pool_pg.execute("INSERT INTO click_game_logger VALUES($1)", author)
         # Dont respond
+
+    def randomize_pos(self, obj: CooldownUser):
+        bucket = self.cooldown_for_random.get_bucket(obj)
+        bucket.reset()
+        buttons = [discord.ui.Button(label="Decoy") for _ in range(3)]
+        buttons.append(self.on_amount_click)
+        buttons.append(self.on_click_click)
+        random.shuffle(buttons)
+        self.clear_items()
+        for button in buttons:
+            self.add_item(button)
 
     @discord.ui.button(label="Click Amount", custom_id="click_game:amount")
     async def on_amount_click(self, interaction: discord.Interaction, button: discord.ui.Button):
