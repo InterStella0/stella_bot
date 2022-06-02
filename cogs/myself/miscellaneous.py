@@ -134,7 +134,7 @@ class Miscellaneous(BaseMyselfCog):
             else:
                 await ctx.maybe_reply(rows)
         except Exception as e:
-            raise commands.CommandError(e)
+            raise commands.CommandError(str(e))
 
     @commands.group(invoke_without_command=True)
     async def blacklist(self, ctx: StellaContext, snowflake_id: Optional[Union[discord.Guild, discord.User]]):
