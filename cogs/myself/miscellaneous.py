@@ -112,9 +112,6 @@ class Miscellaneous(BaseMyselfCog):
             if "returning" not in to_run.lower():
                 method = self.bot.pool_pg.execute
 
-        rows = await method(to_run)
-        nn = flags.pop("not_number")
-
         @pages(per_page=MR)
         async def tabulation(self, menu, entries):
             if not isinstance(entries, list):
@@ -127,11 +124,17 @@ class Miscellaneous(BaseMyselfCog):
                     value.append(v)
             table = tabulate.tabulate(to_pass, 'keys', 'pretty')
             return f"```py\n{table}```"
-        if method is fetch:
-            menu = InteractionPages(tabulation(rows))
-            await menu.start(ctx)
-        else:
-            await ctx.maybe_reply(rows)
+
+        try:
+            rows = await method(to_run)
+            nn = flags.pop("not_number")
+            if method is fetch:
+                menu = InteractionPages(tabulation(rows))
+                await menu.start(ctx)
+            else:
+                await ctx.maybe_reply(rows)
+        except Exception as e:
+            raise commands.CommandError(e)
 
     @commands.group(invoke_without_command=True)
     async def blacklist(self, ctx: StellaContext, snowflake_id: Optional[Union[discord.Guild, discord.User]]):
