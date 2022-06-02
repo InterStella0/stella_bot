@@ -5,11 +5,14 @@ import io
 from typing import Union, Optional, Literal
 
 import discord
+import tabulate
 from discord.ext import commands
 from discord.ext.commands import Author
 
 from cogs.games.baseclass import BaseGameCog
 from cogs.games.button_ui import ButtonGame, UserUnknown
+from utils.buttons import InteractionPages
+from utils.decorators import pages
 from utils.image_manipulation import get_majority_color, islight, create_graph, process_image
 from utils.useful import StellaContext, realign
 
@@ -108,3 +111,59 @@ class ButtonCommandCog(BaseGameCog):
         del graph
         del avatar_bytes
         del to_send
+
+    @click.command(aliases=["analyse", "analysis", "analyzes", "analyses"])
+    @commands.is_owner()
+    async def analyze(self, ctx: StellaContext, *, user: Union[discord.Member, discord.User] = None):
+        single_coef = """
+        SELECT ((STDDEV(a.amount) / AVG(a.amount)) * 100) "cof" FROM (
+                SELECT g.series AS time, COUNT(t.click_time) "amount"
+                FROM (
+                    SELECT generate_series(CURRENT_TIMESTAMP - INTERVAL '1 day', CURRENT_TIMESTAMP, '1 minute') "series"
+                ) g
+                INNER JOIN
+                click_game_logger t
+                ON (
+                    EXTRACT(MINUTE FROM t.click_time) = EXTRACT(MINUTE FROM g.series) 
+                    AND EXTRACT(HOUR FROM t.click_time) = EXTRACT(HOUR FROM g.series) 
+                    AND user_id={}
+                ) 
+                GROUP BY g.series
+                HAVING COUNT(t.click_time) <> 0
+            ) a
+        """
+        all_coef_query = f"""SELECT d.user_id, (
+            SELECT COUNT(*) FROM click_game_logger WHERE user_id=d.user_id
+        ) "total", (
+            {single_coef.format("d.user_id")}
+            FETCH FIRST 1 ROW ONLY
+        ) "coef value"
+        FROM (
+            SELECT DISTINCT user_id
+            FROM click_game_logger
+        ) d"""
+        user_coef = single_coef.format("$1")
+        if user:
+            query = user_coef
+            values = user.id,
+        else:
+            query = all_coef_query
+            values = ()
+
+        fetched = await self.bot.pool_pg.fetch(query, *values)
+
+        @pages(per_page=10)
+        async def tabulation(self, menu, entries):
+            if not isinstance(entries, list):
+                entries = [entries]
+            offset = menu.current_page * self.per_page + 1
+            to_pass = {"no": [*range(offset, offset + len(entries))]}
+            for d in entries:
+                for k, v in d.items():
+                    value = to_pass.setdefault(k, [])
+                    value.append(v)
+            table = tabulate.tabulate(to_pass, 'keys', 'pretty')
+            return f"```py\n{table}```"
+
+        menu = InteractionPages(tabulation(fetched))
+        await menu.start(ctx)
