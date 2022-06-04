@@ -1,4 +1,5 @@
 import datetime
+import html
 import re
 from dataclasses import dataclass
 from typing import Dict, List, Any, Optional
@@ -53,8 +54,9 @@ class QuestionPayload:
 
     @property
     def clean_moreinfo(self):
-        regex = """<a\s+href=(?:"(?P<link1>[^"]+)"|'(?P<link2>[^']+)').*?>(?P<name>.*?)</a>"""
-        return re.sub(regex, lambda x: f"[{x['name']}]({x['link1'] or x['link2']})", self.moreinfo)
+        regex = r"""<a\s+href=(?:"(?P<link1>[^"]+)"|'(?P<link2>[^']+)').*?>(?P<name>.*?)</a>"""
+        cleaned = html.unescape(self.moreinfo)
+        return re.sub(regex, lambda x: f"[{x['name']}]({x['link1'] or x['link2']})", cleaned)
 
     @classmethod
     def from_payload(cls, data: Dict[str, Any]):
