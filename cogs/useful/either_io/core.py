@@ -25,7 +25,7 @@ class EitherIO(discord.ui.View):
         self.ctx = None
         self.question = None
         self.message = None
-        self.font = ImageFont.truetype("font/HelveticaNeueBd.ttf", 22, encoding="unic")
+        self.font = ImageFont.truetype("fonts/HelveticaNeueBd.ttf", 22, encoding="unic")
 
     async def start(self, ctx: StellaContext) -> None:
         self.ctx = ctx
@@ -262,7 +262,7 @@ class EitherIO(discord.ui.View):
         question_opt_box = W, H = (575, 325)
         ans = Image.new(mode="RGBA", size=question_opt_box, color=color)
         draw = ImageDraw.Draw(ans)
-        font = ImageFont.truetype("font/HelveticaNeueBd.ttf", 90, encoding="unic")
+        font = ImageFont.truetype("fonts/HelveticaNeueBd.ttf", 90, encoding="unic")
         percent = f"{total / question.total_answers:.0%}"
         w, top_h = font.getsize(percent)
         margin = 5
