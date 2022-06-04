@@ -111,6 +111,15 @@ class EitherIO(discord.ui.View):
         await self.check_question(self.question)
         await self.show_question(interaction)
 
+    async def on_timeout(self) -> None:
+        if self.ctx.bot.get_message(self.message.id):
+            await self.message.edit(view=None)
+
+    @discord.ui.button(emoji="<:stop_check:754948796365930517>", style=discord.ButtonStyle.grey, row=2)
+    async def on_stop_page(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(view=None)
+
     @discord.ui.button(emoji="<:next_check:754948796361736213>", style=discord.ButtonStyle.grey, row=2)
     async def on_next_page(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self.question = await self.next_page()
