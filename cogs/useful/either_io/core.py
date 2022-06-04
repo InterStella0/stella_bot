@@ -37,7 +37,7 @@ class EitherIO(discord.ui.View):
         question = self.question
         title = f"{question.prefix}, Would you rather" if question.prefix else "Would you rather"
         embed = StellaEmbed(title=title,
-                            description=f"**Description: ** {question.moreinfo}" if question.moreinfo else "",
+                            description=f"**Description: ** {question.clean_moreinfo}" if question.moreinfo else "",
                             url=f"{self.BASE}/{question.id}")
         embed.add_field(name="Total Votes", value=f"{question.total_answers:,}")
         embed.add_field(name="Comments", value=f"{question.comment_total:,}")
