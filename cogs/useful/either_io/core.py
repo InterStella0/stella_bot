@@ -252,7 +252,7 @@ class EitherIO(discord.ui.View):
     def render_answer(self, answer: int) -> Image.Image:
         color = [(125, 197, 232), (193, 55, 46)][answer - 1]
         answer_text = getattr(self.question, f"option_{answer}")
-        padding = 30
+        padding = 40
         question_opt_box = (575, 325)
         ans = Image.new(mode="RGB", size=question_opt_box, color=color)
         draw = ImageDraw.Draw(ans)
@@ -293,7 +293,7 @@ class EitherIO(discord.ui.View):
         bottom = W, top_h + top_h + margin + middle_h + margin
         self.width_center_text(draw, top, percent, font=font, color=color_perc, padding=0)
         self.width_center_text(draw, middle, answer_total_text, self.font, color=color_amount, padding=0)
-        self.width_center_text(draw, bottom, answer_text, self.font, color='white', padding=0)
+        self.width_center_text(draw, bottom, answer_text, self.font, color='white', padding=20)
 
         if question.answered == answer:
             triangle_size = 70
@@ -304,7 +304,7 @@ class EitherIO(discord.ui.View):
         return ans
 
     def render_or(self) -> Image.Image:
-        size = W, H = (75, 75)
+        size = W, H = (90, 90)
         stroke = 10
         whole_image_size = W + stroke, H + stroke
         img = Image.new(mode="RGBA", size=whole_image_size)
