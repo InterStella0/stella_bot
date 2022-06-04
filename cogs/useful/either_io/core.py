@@ -24,7 +24,7 @@ class EitherIO(discord.ui.View):
         self.ctx = None
         self.question = None
         self.message = None
-        self.font = ImageFont.truetype("fonts/HelveticaNeueBd.ttf", 22, encoding="unic")
+        self.font = ImageFont.truetype("fonts/HelveticaNeueBd.ttf", 30, encoding="unic")
 
     async def start(self, ctx: StellaContext) -> None:
         self.ctx = ctx
@@ -316,7 +316,7 @@ class EitherIO(discord.ui.View):
         self.draw_ellipse(img, (stroke + 5, stroke + 5, W - 5, H - 5), width=2, outline='black')
 
         W_text, H_text = whole_image_size
-        self.render_text_center(draw, (W_text - stroke / 2, H_text - stroke / 2), " or")
+        self.render_text_center(draw, (W_text - stroke / 2, H_text - stroke), " or")
         return img
 
     @in_executor()
