@@ -54,17 +54,26 @@ class EitherIO(discord.ui.View):
         embed = self.form_embed()
         if question.seen:
             embed.add_field(name="You answered", value=getattr(question, f"option_{question.answered}"))
-            byte = await self.render_answered_question()
+            if question.answered_image_url is None:
+                byte = await self.render_answered_question()
+                file = await self.ctx.bot.upload_file(byte=byte.read(), filename="Question.png")
+                url = question.answered_image_url = file.url
+            else:
+                url = question.answered_image_url
         else:
-            byte = await self.render_not_answer_question()
+            if question.unanswered_image_url is None:
+                byte = await self.render_not_answer_question()
+                file = await self.ctx.bot.upload_file(byte=byte.read(), filename="Question.png")
+                url = question.unanswered_image_url = file.url
+            else:
+                url = question.unanswered_image_url
 
         self.on_answer_one.disabled = question.seen
         self.on_answer_one.label = textwrap.shorten(question.option_1, width=80, placeholder="...")
         self.on_answer_two.disabled = question.seen
         self.on_answer_two.label = textwrap.shorten(question.option_2, width=80, placeholder="...")
 
-        file = await self.ctx.bot.upload_file(byte=byte.read(), filename="Question.png")
-        embed.set_image(url=file.url)
+        embed.set_image(url=url)
 
         if ctx is None:
             await interaction.response.edit_message(embed=embed, view=self)
@@ -81,6 +90,7 @@ class EitherIO(discord.ui.View):
         question.answered = answer
         byte = await self.render_answered_question()
         file = await self.ctx.bot.upload_file(byte=byte.read(), filename="answered.png")
+        question.answered_image_url = file.url
         embed.set_image(url=file.url)
         embed.add_field(name="You answered", value=getattr(question, f"option_{answer}"))
         ctx = self.ctx

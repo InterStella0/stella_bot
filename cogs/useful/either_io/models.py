@@ -147,6 +147,8 @@ class Question(QuestionPayload):
     previous_seen: bool = False
     answered: Optional[int] = None
     discord_answers_opts: List[Answer] = []
+    unanswered_image_url: Optional[str] = None
+    answered_image_url: Optional[str] = None
 
     @property
     def total_answers(self) -> int:
