@@ -39,8 +39,8 @@ class EitherIO(discord.ui.View):
         embed = StellaEmbed(title=title,
                             description=f"**Description: ** {question.moreinfo}" if question.moreinfo else "",
                             url=f"{self.BASE}/{question.id}")
-        embed.add_field(name="Total Votes", value=question.total_answers)
-        embed.add_field(name="Comments", value=question.comment_total)
+        embed.add_field(name="Total Votes", value=f"{question.total_answers:,}")
+        embed.add_field(name="Comments", value=f"{question.comment_total:,}")
         return embed.set_footer(text=f"Questioned by {question.display_name}")
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
