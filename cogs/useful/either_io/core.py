@@ -100,7 +100,7 @@ class EitherIO(discord.ui.View):
     async def on_answer_one(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.set_question(interaction, 1)
 
-    @discord.ui.button(emoji="2\U0000fe0f\U000020e3", label="", style=discord.ButtonStyle.red, row=1)
+    @discord.ui.button(emoji="2\U0000fe0f\U000020e3", label="", style=discord.ButtonStyle.red)
     async def on_answer_two(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.set_question(interaction, 2)
 
