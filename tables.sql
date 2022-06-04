@@ -141,3 +141,9 @@ CREATE TABLE IF NOT EXISTS click_game_logger(
     user_id BIGINT NOT NULL,
     click_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 )
+
+CREATE TABLE IF NOT EXISTS either_io(
+    user_id BIGINT NOT NULL,
+    question_id BIGINT NOT NULL,
+    answered INT NOT NULL
+)
