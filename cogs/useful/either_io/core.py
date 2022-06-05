@@ -14,17 +14,17 @@ from utils.useful import except_retry, StellaEmbed, StellaContext
 
 
 class EitherIO(discord.ui.View):
-    BASE = "http://either.io"
+    BASE: str = "http://either.io"
 
     def __init__(self, http: aiohttp.ClientSession):
         super().__init__()
-        self.http = http
-        self.questions = []
-        self.current_page = -1
-        self.ctx = None
-        self.question = None
-        self.message = None
-        self.font = ImageFont.truetype("fonts/HelveticaNeueBd.ttf", 30, encoding="unic")
+        self.http: aiohttp.ClientSession = http
+        self.questions: List[Question] = []
+        self.current_page: int = -1
+        self.ctx: Optional[StellaContext] = None
+        self.question: Optional[Question] = None
+        self.message: Optional[discord.Message] = None
+        self.font: FreeTypeFont = ImageFont.truetype("fonts/HelveticaNeueBd.ttf", 30, encoding="unic")
 
     async def start(self, ctx: StellaContext) -> None:
         self.ctx = ctx
@@ -97,15 +97,15 @@ class EitherIO(discord.ui.View):
         await self.ctx.bot.pool_pg.execute(query, ctx.author.id, question.id, answer)
 
     @discord.ui.button(emoji="1\U0000fe0f\U000020e3", label="", style=discord.ButtonStyle.blurple)
-    async def on_answer_one(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def on_answer_one(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await self.set_question(interaction, 1)
 
     @discord.ui.button(emoji="2\U0000fe0f\U000020e3", label="", style=discord.ButtonStyle.red)
-    async def on_answer_two(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def on_answer_two(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await self.set_question(interaction, 2)
 
     @discord.ui.button(emoji="<:before_check:754948796487565332>", style=discord.ButtonStyle.grey, row=2)
-    async def on_previous_page(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def on_previous_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         self.question = self.previous_page()
         await self.check_question(self.question)
         await self.show_question(interaction)
@@ -115,12 +115,12 @@ class EitherIO(discord.ui.View):
             await self.message.edit(view=None)
 
     @discord.ui.button(emoji="<:stop_check:754948796365930517>", style=discord.ButtonStyle.grey, row=2)
-    async def on_stop_page(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def on_stop_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         self.stop()
         await interaction.response.edit_message(view=None)
 
     @discord.ui.button(emoji="<:next_check:754948796361736213>", style=discord.ButtonStyle.grey, row=2)
-    async def on_next_page(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def on_next_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         self.question = await self.next_page()
         await self.show_question(interaction)
 
