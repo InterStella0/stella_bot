@@ -2,14 +2,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .art_ai_generation import ArtAI
-from .rather_game import Rather
 from .useful import Etc
 
 if TYPE_CHECKING:
     from main import StellaBot
 
 
-features = Etc, ArtAI, Rather
+features = Etc, ArtAI
 
 
 class Useful(*features):

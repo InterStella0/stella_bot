@@ -18,16 +18,11 @@ class BaseUsefulCog(commands.Cog):
         self.cache_authentication_access: Optional[PayloadAccessToken] = None
         self._cached_image: Dict[str, str] = {}
         self.http_art: Optional[aiohttp.ClientSession] = None
-        self.http_rather: Optional[aiohttp.ClientSession] = None
         self.cached_models: Dict[str, MobileNetNSFW] = {}
 
     async def cog_load(self) -> None:
         self.http_art = aiohttp.ClientSession()
-        self.http_rather = aiohttp.ClientSession()
 
     async def cog_unload(self) -> None:
         if self.http_art:
             await self.http_art.close()
-
-        if self.http_rather:
-            await self.http_rather.close()

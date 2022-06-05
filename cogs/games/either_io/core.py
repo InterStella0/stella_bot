@@ -7,161 +7,18 @@ import discord
 from PIL import ImageDraw, ImageFont, Image
 from PIL.ImageFont import FreeTypeFont
 
-from cogs.useful.either_io.models import Question, Answer
+from cogs.games.either_io.models import Question, Answer
 from utils.decorators import in_executor
 from utils.errors import ErrorNoSignature
 from utils.useful import except_retry, StellaEmbed, StellaContext
 
 
-class EitherIO(discord.ui.View):
+class EitherIO:
     BASE: str = "http://either.io"
 
     def __init__(self, http: aiohttp.ClientSession):
-        super().__init__()
         self.http: aiohttp.ClientSession = http
-        self.questions: List[Question] = []
-        self.current_page: int = -1
-        self.ctx: Optional[StellaContext] = None
-        self.question: Optional[Question] = None
-        self.message: Optional[discord.Message] = None
         self.font: FreeTypeFont = ImageFont.truetype("fonts/HelveticaNeueBd.ttf", 30, encoding="unic")
-
-    async def start(self, ctx: StellaContext) -> None:
-        self.ctx = ctx
-        self.question = await self.next_page()
-        await self.show_question(None, ctx=ctx)
-        await self.wait()
-
-    def form_embed(self) -> StellaEmbed:
-        self.on_previous_page.disabled = self.current_page == 0
-        question = self.question
-        title = f"{question.prefix}, Would you rather" if question.prefix else "Would you rather"
-        embed = StellaEmbed(title=title,
-                            description=f"**Description: ** {question.clean_moreinfo}" if question.moreinfo else "",
-                            url=f"{self.BASE}/{question.id}")
-        embed.add_field(name="Total Votes", value=f"{question.total_answers:,}")
-        embed.add_field(name="Comments", value=f"{question.comment_total:,}")
-        return embed.set_footer(text=f"Questioned by {question.display_name}")
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user == self.ctx.author:
-            return True
-        await interaction.response.send_message(f"Only '{self.ctx.author}' can use this button.", ephemeral=True)
-
-    async def show_question(self, interaction: discord.Interaction, *, ctx: Optional[StellaContext] = None) -> None:
-        question = self.question
-        embed = self.form_embed()
-        if question.seen:
-            embed.add_field(name="You answered", value=getattr(question, f"option_{question.answered}"))
-            if question.answered_image_url is None:
-                byte = await self.render_answered_question()
-                file = await self.ctx.bot.upload_file(byte=byte.read(), filename="Question.png")
-                url = question.answered_image_url = file.url
-            else:
-                url = question.answered_image_url
-        else:
-            if question.unanswered_image_url is None:
-                byte = await self.render_not_answer_question()
-                file = await self.ctx.bot.upload_file(byte=byte.read(), filename="Question.png")
-                url = question.unanswered_image_url = file.url
-            else:
-                url = question.unanswered_image_url
-
-        self.on_answer_one.disabled = question.seen
-        self.on_answer_one.label = textwrap.shorten(question.option_1, width=80, placeholder="...")
-        self.on_answer_two.disabled = question.seen
-        self.on_answer_two.label = textwrap.shorten(question.option_2, width=80, placeholder="...")
-
-        embed.set_image(url=url)
-
-        if ctx is None:
-            await interaction.response.edit_message(embed=embed, view=self)
-        else:
-            self.message = await ctx.maybe_reply(embed=embed, view=self)
-
-    async def set_question(self, interaction: discord.Interaction, answer: int) -> None:
-        self.on_answer_one.disabled = True
-        self.on_answer_two.disabled = True
-        query = "INSERT INTO either_io VALUES($1, $2, $3)"
-        question = self.question
-        question.previous_seen = True
-        embed = self.form_embed()
-        question.answered = answer
-        byte = await self.render_answered_question()
-        file = await self.ctx.bot.upload_file(byte=byte.read(), filename="answered.png")
-        question.answered_image_url = file.url
-        embed.set_image(url=file.url)
-        embed.add_field(name="You answered", value=getattr(question, f"option_{answer}"))
-        ctx = self.ctx
-        await interaction.response.edit_message(view=self, embed=embed)
-        await self.ctx.bot.pool_pg.execute(query, ctx.author.id, question.id, answer)
-
-    @discord.ui.button(emoji="1\U0000fe0f\U000020e3", label="", style=discord.ButtonStyle.blurple)
-    async def on_answer_one(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        await self.set_question(interaction, 1)
-
-    @discord.ui.button(emoji="2\U0000fe0f\U000020e3", label="", style=discord.ButtonStyle.red)
-    async def on_answer_two(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        await self.set_question(interaction, 2)
-
-    @discord.ui.button(emoji="<:before_check:754948796487565332>", style=discord.ButtonStyle.grey, row=2)
-    async def on_previous_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        self.question = self.previous_page()
-        await self.check_question(self.question)
-        await self.show_question(interaction)
-
-    async def on_timeout(self) -> None:
-        if self.ctx.bot.get_message(self.message.id):
-            await self.message.edit(view=None)
-
-    @discord.ui.button(emoji="<:stop_check:754948796365930517>", style=discord.ButtonStyle.grey, row=2)
-    async def on_stop_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        self.stop()
-        await interaction.response.edit_message(view=None)
-
-    @discord.ui.button(emoji="<:next_check:754948796361736213>", style=discord.ButtonStyle.grey, row=2)
-    async def on_next_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        self.question = await self.next_page()
-        await self.show_question(interaction)
-
-    async def check_question(self, question: Question) -> None:
-        query = "SELECT * FROM either_io WHERE user_id=$1 AND question_id=$2"
-        ctx = self.ctx
-        if val := await ctx.bot.pool_pg.fetchrow(query, ctx.author.id, question.id):
-            question.seen = True
-            question.answered = val["answered"]
-
-        if question.discord_answers_opts:
-            amounts = 'SELECT answered, COUNT(*) "amount" FROM either_io ' \
-                      'WHERE question_id=$1 ' \
-                      'GROUP BY answered'
-            values = await ctx.bot.pool_pg.fetch(amounts, question.id)
-            question.discord_answers_opts = [Answer(value["answered"], value["amount"]) for value in values]
-
-    async def get_question_checked(self, *, recursed=0) -> Question:
-        try:
-            return self.questions[self.current_page]
-        except IndexError:
-            if recursed >= 10:
-                raise Exception("Something went wrong during fetching questions. Sorry. ")
-
-            q = await self.fetch_next()
-            self.questions.extend(q)
-            return await self.get_question_checked(recursed=recursed + 1)
-
-    async def next_page(self) -> Question:
-        self.current_page += 1
-        question = await self.get_question_checked()
-        await self.check_question(question)
-        if not question.seen or question.previous_seen:
-            return question
-
-        return await self.next_page()
-
-    def previous_page(self) -> Question:
-        index = max(self.current_page - 1, 0)
-        self.current_page = index
-        return self.questions[index]
 
     async def request(self, method, url, **kwargs) -> Dict[str, Any]:
         return await except_retry(self._request, method, url, retries=1, **kwargs)
@@ -238,9 +95,9 @@ class EitherIO(discord.ui.View):
             draw.text(((W - width) / 2, y_text), line, font=font, fill=color)
             y_text += height
 
-    def render_rather(self) -> Image.Image:
+    def render_rather(self, question: Question) -> Image.Image:
         color = 29, 29, 29
-        question = self.question
+        question = question
         title = f"{question.prefix}, would you rather" if question.prefix else "Would you rather"
         width = 575 + 575 + 10 + 10
         size = (width, 50)
@@ -249,9 +106,9 @@ class EitherIO(discord.ui.View):
         self.render_text_center(draw, size, title + "...", padding=20)
         return img
 
-    def render_answer(self, answer: int) -> Image.Image:
+    def render_answer(self, question: Question, answer: int) -> Image.Image:
         color = [(125, 197, 232), (193, 55, 46)][answer - 1]
-        answer_text = getattr(self.question, f"option_{answer}")
+        answer_text = getattr(question, f"option_{answer}")
         padding = 40
         question_opt_box = (575, 325)
         ans = Image.new(mode="RGB", size=question_opt_box, color=color)
@@ -262,18 +119,17 @@ class EitherIO(discord.ui.View):
     def width_center_text(self, draw: ImageDraw, size: Tuple[int, int], text: str, font: FreeTypeFont, padding: str,
                           color: Any) -> None:
         W, H = size
-        (w, h), lines = self.find_space_text(size, text, font=font, padding=padding)
+        _, lines = self.find_space_text(size, text, font=font, padding=padding)
         y_text = H
         for line in lines:
             width, height = font.getsize(line)
             draw.text(((W - width) / 2, y_text), line, font=font, fill=color)
             y_text += height
 
-    def render_answered(self, answer: int) -> Image.Image:
+    def render_answered(self, question: Question, answer: int) -> Image.Image:
         color = [(125, 197, 232), (193, 55, 46)][answer - 1]
         color_perc = [(65, 124, 157), (115, 26, 20)][answer - 1]
         color_amount = [(199, 235, 253), (239, 134, 131)][answer - 1]
-        question = self.question
         answer_text = getattr(question, f"option_{answer}")
         total = getattr(question, f"option{answer}_total")
         answer_total_text = f'{total:,} Answered'
@@ -320,14 +176,14 @@ class EitherIO(discord.ui.View):
         return img
 
     @in_executor()
-    def render_answered_question(self) -> io.BytesIO:
+    def render_answered_question(self, question: Question) -> io.BytesIO:
         img = Image.new(mode="RGB", size=(1200, 400), color=(29, 29, 29))
         margin = 10
-        img.paste(self.render_answered(1), (margin, 50))
-        a2 = self.render_answered(2)
+        img.paste(self.render_answered(question, 1), (margin, 50))
+        a2 = self.render_answered(question, 2)
         a2_w, a2_h = a2.size
         img.paste(a2, (margin + a2_w + margin, 50))
-        title = self.render_rather()
+        title = self.render_rather(question)
         img.paste(title)
         or_box = self.render_or()
         or_actual_W, or_actual_H = or_box.size
@@ -341,14 +197,14 @@ class EitherIO(discord.ui.View):
         return byte
 
     @in_executor()
-    def render_not_answer_question(self) -> io.BytesIO:
+    def render_not_answer_question(self, question: Question) -> io.BytesIO:
         img = Image.new(mode="RGB", size=(1200, 400), color=(29, 29, 29))
         margin = 10
-        img.paste(self.render_answer(1), (margin, 50))
-        a2 = self.render_answer(2)
+        img.paste(self.render_answer(question, 1), (margin, 50))
+        a2 = self.render_answer(question, 2)
         a2_w, a2_h = a2.size
         img.paste(a2, (margin + a2_w + margin, 50))
-        title = self.render_rather()
+        title = self.render_rather(question)
         img.paste(title)
         or_box = self.render_or()
         or_actual_W, or_actual_H = or_box.size
@@ -360,3 +216,151 @@ class EitherIO(discord.ui.View):
         img.save(byte, "PNG")
         byte.seek(0)
         return byte
+
+
+class EitherIOView(discord.ui.View):
+    def __init__(self, http: aiohttp.ClientSession):
+        super().__init__()
+        self.io = EitherIO(http)
+        self.questions: List[Question] = []
+        self.current_page: int = -1
+        self.ctx: Optional[StellaContext] = None
+        self.question: Optional[Question] = None
+        self.message: Optional[discord.Message] = None
+
+    async def start(self, ctx: StellaContext) -> None:
+        self.ctx = ctx
+        self.question = await self.next_page()
+        await self.show_question(None, ctx=ctx)
+        await self.wait()
+
+    def form_embed(self) -> StellaEmbed:
+        self.on_previous_page.disabled = self.current_page == 0
+        question = self.question
+        title = f"{question.prefix}, Would you rather" if question.prefix else "Would you rather"
+        embed = StellaEmbed(title=title,
+                            description=f"**Description: ** {question.clean_moreinfo}" if question.moreinfo else "",
+                            url=f"{self.io.BASE}/{question.id}")
+        embed.add_field(name="Total Votes", value=f"{question.total_answers:,}")
+        embed.add_field(name="Comments", value=f"{question.comment_total:,}")
+        return embed.set_footer(text=f"Questioned by {question.display_name}")
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user == self.ctx.author:
+            return True
+        await interaction.response.send_message(f"Only '{self.ctx.author}' can use this button.", ephemeral=True)
+
+    async def show_question(self, interaction: discord.Interaction, *, ctx: Optional[StellaContext] = None) -> None:
+        question = self.question
+        embed = self.form_embed()
+        if question.seen:
+            embed.add_field(name="You answered", value=getattr(question, f"option_{question.answered}"))
+            if question.answered_image_url is None:
+                byte = await self.io.render_answered_question(question)
+                file = await self.ctx.bot.upload_file(byte=byte.read(), filename="Question.png")
+                url = question.answered_image_url = file.url
+            else:
+                url = question.answered_image_url
+        else:
+            if question.unanswered_image_url is None:
+                byte = await self.io.render_not_answer_question(question)
+                file = await self.ctx.bot.upload_file(byte=byte.read(), filename="Question.png")
+                url = question.unanswered_image_url = file.url
+            else:
+                url = question.unanswered_image_url
+
+        self.on_answer_one.disabled = question.seen
+        self.on_answer_one.label = textwrap.shorten(question.option_1, width=80, placeholder="...")
+        self.on_answer_two.disabled = question.seen
+        self.on_answer_two.label = textwrap.shorten(question.option_2, width=80, placeholder="...")
+
+        embed.set_image(url=url)
+
+        if ctx is None:
+            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            self.message = await ctx.maybe_reply(embed=embed, view=self)
+
+    async def set_question(self, interaction: discord.Interaction, answer: int) -> None:
+        self.on_answer_one.disabled = True
+        self.on_answer_two.disabled = True
+        query = "INSERT INTO either_io VALUES($1, $2, $3)"
+        question = self.question
+        question.previous_seen = True
+        embed = self.form_embed()
+        question.answered = answer
+        byte = await self.io.render_answered_question(self.question)
+        file = await self.ctx.bot.upload_file(byte=byte.read(), filename="answered.png")
+        question.answered_image_url = file.url
+        embed.set_image(url=file.url)
+        embed.add_field(name="You answered", value=getattr(question, f"option_{answer}"))
+        ctx = self.ctx
+        await interaction.response.edit_message(view=self, embed=embed)
+        await self.ctx.bot.pool_pg.execute(query, ctx.author.id, question.id, answer)
+
+    @discord.ui.button(emoji="1\U0000fe0f\U000020e3", label="", style=discord.ButtonStyle.blurple)
+    async def on_answer_one(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self.set_question(interaction, 1)
+
+    @discord.ui.button(emoji="2\U0000fe0f\U000020e3", label="", style=discord.ButtonStyle.red)
+    async def on_answer_two(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await self.set_question(interaction, 2)
+
+    @discord.ui.button(emoji="<:before_check:754948796487565332>", style=discord.ButtonStyle.grey, row=2)
+    async def on_previous_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        self.question = self.previous_page()
+        await self.check_question(self.question)
+        await self.show_question(interaction)
+
+    async def on_timeout(self) -> None:
+        if self.ctx.bot.get_message(self.message.id):
+            await self.message.edit(view=None)
+
+    @discord.ui.button(emoji="<:stop_check:754948796365930517>", style=discord.ButtonStyle.grey, row=2)
+    async def on_stop_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        self.stop()
+        await interaction.response.edit_message(view=None)
+
+    @discord.ui.button(emoji="<:next_check:754948796361736213>", style=discord.ButtonStyle.grey, row=2)
+    async def on_next_page(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        self.question = await self.next_page()
+        await self.show_question(interaction)
+
+    async def check_question(self, question: Question) -> None:
+        query = "SELECT * FROM either_io WHERE user_id=$1 AND question_id=$2"
+        ctx = self.ctx
+        if val := await ctx.bot.pool_pg.fetchrow(query, ctx.author.id, question.id):
+            question.seen = True
+            question.answered = val["answered"]
+
+        if question.discord_answers_opts:
+            amounts = 'SELECT answered, COUNT(*) "amount" FROM either_io ' \
+                      'WHERE question_id=$1 ' \
+                      'GROUP BY answered'
+            values = await ctx.bot.pool_pg.fetch(amounts, question.id)
+            question.discord_answers_opts = [Answer(value["answered"], value["amount"]) for value in values]
+
+    async def get_question_checked(self, *, recursed=0) -> Question:
+        try:
+            return self.questions[self.current_page]
+        except IndexError:
+            if recursed >= 10:
+                raise Exception("Something went wrong during fetching questions. Sorry. ")
+
+            q = await self.io.fetch_next()
+            self.questions.extend(q)
+            return await self.get_question_checked(recursed=recursed + 1)
+
+    async def next_page(self) -> Question:
+        self.current_page += 1
+        question = await self.get_question_checked()
+        await self.check_question(question)
+        if not question.seen or question.previous_seen:
+            return question
+
+        return await self.next_page()
+
+    def previous_page(self) -> Question:
+        index = max(self.current_page - 1, 0)
+        self.current_page = index
+        return self.questions[index]
