@@ -7,6 +7,7 @@ import re
 import aiohttp
 import discord
 from PIL import Image
+from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands import Converter
 
@@ -67,7 +68,9 @@ class AIModel(Converter):
 
 
 class ArtAI(BaseUsefulCog):
-    @commands.command(help="Generate art work with description given using Dream Wombo AI.")
+    @commands.hybrid_command(help="Generate art work with description given using Dream Wombo AI.")
+    @app_commands.describe(
+        image_description="Describe the image you want to generate. This is limit to 100 characters.")
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def art(self, ctx: StellaContext,
                   *, image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
@@ -84,15 +87,17 @@ class ArtAI(BaseUsefulCog):
         result = await wombo.generate(ctx, art, image_description, view.message)
         await WomboResult(wombo).display(result)
 
-    @commands.command(help="Shows a specific saved image according to 'art_name'. "
-                           "No argument to show your own list of saved images.")
+    @commands.hybrid_command(help="Shows a specific saved image according to 'art_name'. "
+                                  "No argument to show your own list of saved images.",
+                             brief="Shows a specific saved image according to 'art_name'.")
+    @app_commands.describe(art_name="The name the art was named as.")
     async def arts(self, ctx: StellaContext, *, art_name: ImageSaved = None):
         if art_name is None:
             await self._handle_art_no_arg(ctx)
         else:
             await self._handle_art_arg(ctx, art_name)
 
-    @commands.command(help="Display a list of all images that was saved.")
+    @commands.hybrid_command(help="Display a list of all images that was saved.")
     async def allarts(self, ctx: StellaContext):
         @pages(per_page=10)
         async def show_images(inner_self, menu, raw_arts):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Literal
 
 import discord
 import tabulate
@@ -248,3 +248,13 @@ class Miscellaneous(BaseMyselfCog):
         values = ctx.bot.guilds
         values.sort(key=lambda x: x.me.joined_at)
         await InteractionServers(show_server(values)).start(ctx)
+
+    @commands.command()
+    async def sync(self, ctx: StellaContext, guild: Union[Literal["all"], discord.Guild] = commands.param(
+            converter=Union[Literal["all"], discord.Guild],
+            default=lambda x: x.guild,
+            displayed_default="Current Guild"
+        )):
+        guild = guild if guild != "all" else None
+        await self.bot.tree.sync(guild=guild)
+        await ctx.confirmed()

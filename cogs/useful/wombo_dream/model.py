@@ -126,7 +126,7 @@ class ImageSaved:
                ') "count" FROM wombo_saved ws WHERE LOWER(name)=$1')
         if result := await ctx.bot.pool_pg.fetchrow(sql, argument.casefold()):
             value = cls.from_record(result)
-            if not value.nsfw and not hasattr(ctx.channel, "is_nsfw") or not ctx.channel.is_nsfw():
+            if value.nsfw and hasattr(ctx.channel, "is_nsfw") and not ctx.channel.is_nsfw():
                 raise commands.CommandError("This image is only viewable on nsfw channel.")
             return value
 

@@ -248,6 +248,9 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         """Method to return a commands name and signature"""
 
         def get_invoke_with():
+            if ctx.interaction:
+                return f"/{ctx.command.name}"
+
             msg = ctx.message.content
             prefixmax = re.match(f'{re.escape(ctx.prefix)}', ctx.message.content).regs[0][1]
             return msg[prefixmax:msg.rindex(ctx.invoked_with)]
