@@ -2,8 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Dict, Optional
 
 import aiohttp
-from discord.ext import commands
 
+from utils.cog import StellaBaseCog
 from utils.prefix_ai import MobileNetNSFW
 
 if TYPE_CHECKING:
@@ -11,8 +11,9 @@ if TYPE_CHECKING:
     from .art_ai_generation import PayloadToken, PayloadAccessToken
 
 
-class BaseUsefulCog(commands.Cog):
+class BaseUsefulCog(StellaBaseCog):
     def __init__(self, bot: StellaBot):
+        super().__init__(bot)
         self.bot = bot
         self.cache_authentication: Optional[PayloadToken] = None
         self.cache_authentication_access: Optional[PayloadAccessToken] = None
@@ -21,8 +22,10 @@ class BaseUsefulCog(commands.Cog):
         self.cached_models: Dict[str, MobileNetNSFW] = {}
 
     async def cog_load(self) -> None:
+        await super().cog_load()
         self.http_art = aiohttp.ClientSession()
 
     async def cog_unload(self) -> None:
+        await super().cog_unload()
         if self.http_art:
             await self.http_art.close()
