@@ -5,6 +5,8 @@ import datetime
 import random
 import itertools
 import functools
+
+from discord import app_commands
 from discord.ext import commands
 from collections import namedtuple
 
@@ -28,12 +30,15 @@ class Etc(BaseUsefulCog):
             timestamp = datetime.datetime.utcfromtimestamp(decoded + token_epoch)
         return timestamp
 
-    @commands.command(aliases=["pt", "ptoken"],
-                      brief="Decodes the token and showing user id and the token creation date.",
-                      help="Decodes the token by splitting the token into 3 parts that was split in a period. "
-                           "First part is a user id where it was decoded from base 64 into str. The second part "
-                           "is the creation of the token, which is converted from base 64 into int. The last part "
-                           "cannot be decoded due to discord encryption.")
+    @commands.hybrid_command(
+        aliases=["pt", "ptoken"],
+        brief="Decodes the token and showing user id and the token creation date.",
+        help="Decodes the token by splitting the token into 3 parts that was split in a period. "
+             "First part is a user id where it was decoded from base 64 into str. The second part "
+             "is the creation of the token, which is converted from base 64 into int. The last part "
+             "cannot be decoded due to discord encryption."
+    )
+    @app_commands.describe(token="The discord token to be parsed.")
     async def parse_token(self, ctx: StellaContext, token: str):
         token_part = token.split(".")
         if len(token_part) != 3:
@@ -68,14 +73,17 @@ class Etc(BaseUsefulCog):
                         f"**Token Created:** `{timestamp}`"
         )
         embed.set_thumbnail(url=member.display_avatar)
-        await ctx.embed(embed=embed)
+        await ctx.embed(ephemeral=True, embed=embed)
 
-    @commands.command(aliases=["gt", "gtoken"],
-                      brief="Generate a new token given a user.",
-                      help="Generate a new token for a given user or it defaults to the command author. "
-                           "This works by encoding the user id into base 64 str. While the current datetime in utc "
-                           "is converted into timestamp and gets converted into base64 using the standard b64 encoding. "
-                           "The final part of the token is randomly generated.")
+    @commands.hybrid_command(
+        aliases=["gt", "gtoken"],
+        brief="Generate a new token given a user.",
+        help="Generate a new token for a given user or it defaults to the command author. "
+             "This works by encoding the user id into base 64 str. While the current datetime in utc "
+             "is converted into timestamp and gets converted into base64 using the standard b64 encoding. "
+             "The final part of the token is randomly generated."
+    )
+    @app_commands.describe(member="The discord user to be converted into a token. Default to yourself.")
     async def generate_token(self, ctx: StellaContext, member: Union[discord.Member, discord.User] = None):
         if not member:
             member = ctx.author
@@ -111,10 +119,13 @@ class Etc(BaseUsefulCog):
         embed.set_thumbnail(url=member.display_avatar)
         await ctx.embed(embed=embed, fields=fields)
 
-    @commands.command(aliases=["replycounts", "repliescount", "replyscounts", "threadcount"],
-                      help="Finds the original message of a thread. This shows the amount of reply counts, the message "
-                           "itself, the url message of the thread and the author.",
-                      brief="Finds the original message of a thread.")
+    @commands.hybrid_command(
+        aliases=["replycounts", "repliescount", "replyscounts", "threadcount"],
+        help="Finds the original message of a thread. This shows the amount of reply counts, the message "
+             "itself, the url message of the thread and the author.",
+        brief="Finds the original message of a thread."
+    )
+    @app_commands.describe(message="The target message to count the reply.")
     async def replycount(self, ctx: StellaContext, message: discord.Message):
         def count_reply(m: Optional[Union[discord.MessageReference, discord.Message]],
                         replies: Optional[int] = 0) -> Tuple[discord.Message, int]:
@@ -134,10 +145,13 @@ class Etc(BaseUsefulCog):
                            f"**Replies:** `{count}`\n"
                            f"**Origin:** [`jump`]({msg.jump_url})"
         }
-        await ctx.embed(**embed_dict)
+        await ctx.embed(ephemeral=True, **embed_dict)
 
-    @commands.command(aliases=["find_type", "findtypes", "idtype", "id_type", "idtypes"],
-                      help="Try to find the type of an ID.")
+    @commands.hybrid_command(
+        aliases=["find_type", "findtypes", "idtype", "id_type", "idtypes"],
+        help="Try to find the type of an ID."
+    )
+    @app_commands.describe(id="Discord ID of your target.")
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def findtype(self, ctx: StellaContext, id: discord.Object):
         bot = self.bot
@@ -146,7 +160,8 @@ class Etc(BaseUsefulCog):
             await ctx.embed(title="Type Finder",
                             description=f"**ID**: `{id.id}`\n"
                                         f"**Type:** `{type_id.capitalize()}`\n"
-                                        f"**Created:** `{id.created_at}`")
+                                        f"**Created:** `{id.created_at}`",
+                            ephemeral=True)
 
         async def find(w: str, t: str) -> Optional[bool]:
             try:
@@ -168,13 +183,11 @@ class Etc(BaseUsefulCog):
         for way, typeobj in itertools.product(("get", "fetch"), ("channel", "user", "webhook", "guild")):
             if await find(way, typeobj):
                 return await found_message(typeobj)
-        await ctx.maybe_reply("idk")
+        await ctx.maybe_reply("idk", ephemeral=True)
 
-    @commands.command(help="Gives a timestamp format based on the discord ID given.")
-    async def timestamp(self, ctx: StellaContext, id: discord.Object, mode: Optional[str] = 'R'):
+    @commands.hybrid_command(help="Gives a timestamp format based on the discord ID given.")
+    @app_commands.describe(id="Discord ID to be converted.", mode="Timestamp mode, defaults to R")
+    async def timestamp(self, ctx: StellaContext, id: discord.Object,
+                        mode: Optional[discord.utils.TimestampStyle] = 'R'):
         content = discord.utils.format_dt(id.created_at, mode)
-        await ctx.maybe_reply(f"```py\n{content}\n```")
-
-
-async def setup(bot: StellaBot) -> None:
-    await bot.add_cog(Useful(bot))
+        await ctx.maybe_reply(f"```py\n{content}\n```\n**Display:**{content}", ephemeral=True)
