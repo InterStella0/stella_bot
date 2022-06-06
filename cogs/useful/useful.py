@@ -1,4 +1,7 @@
 from __future__ import annotations
+
+import contextlib
+
 import discord
 import base64
 import datetime
@@ -42,7 +45,7 @@ class Etc(BaseUsefulCog):
     async def parse_token(self, ctx: StellaContext, token: str):
         token_part = token.split(".")
         if len(token_part) != 3:
-            return await ctx.maybe_reply("Invalid token")
+            return await ctx.maybe_reply("Invalid token", ephemeral=True)
 
         def decode_user(user: str) -> str:
             user_bytes = user.encode()
@@ -51,7 +54,7 @@ class Etc(BaseUsefulCog):
 
         str_id = call(decode_user, token_part[0])
         if not str_id or not str_id.isdigit():
-            return await ctx.maybe_reply("Invalid user")
+            return await ctx.maybe_reply("Invalid user", ephemeral=True)
 
         user_id = int(str_id)
         coro_user = functools.partial(try_call, self.bot.fetch_user, user_id, exception=discord.NotFound)
@@ -61,7 +64,7 @@ class Etc(BaseUsefulCog):
 
         member = member or self.bot.get_user(user_id) or await coro_user()
         if not member:
-            return await ctx.maybe_reply("Invalid user")
+            return await ctx.maybe_reply("Invalid user", ephemeral=True)
         timestamp = call(self.parse_date, token_part[1]) or "Invalid date"
 
         embed = discord.Embed(
@@ -127,17 +130,29 @@ class Etc(BaseUsefulCog):
     )
     @app_commands.describe(message="The target message to count the reply.")
     async def replycount(self, ctx: StellaContext, message: discord.Message):
-        def count_reply(m: Optional[Union[discord.MessageReference, discord.Message]],
+        class DeletedMessage:
+            def __getattr__(self, item):
+                return "<deleted>"
+
+        async def count_reply(m: Optional[Union[discord.MessageReference, discord.Message]],
                         replies: Optional[int] = 0) -> Tuple[discord.Message, int]:
+
             if isinstance(m, discord.MessageReference):
-                return count_reply(m.cached_message, replies)
+                if m.cached_message is None:
+                    ref = m.resolved
+                    if isinstance(ref, discord.DeletedReferencedMessage):
+                        return DeletedMessage(), replies
+                    with contextlib.suppress(discord.NotFound):
+                        return await ctx.fetch_message(m.message_id), replies
+                    return DeletedMessage(), replies
+                return await count_reply(m.cached_message, replies)
             if isinstance(m, discord.Message):
                 if not m.reference:
                     return m, replies
                 replies += 1
-                return count_reply(m.reference, replies)
+                return await count_reply(m.reference, replies)
 
-        msg, count = count_reply(message)
+        msg, count = await count_reply(message)
         embed_dict = {
             "title": "Reply Count",
             "description": f"**Original:** `{msg.author}`\n"
@@ -191,3 +206,15 @@ class Etc(BaseUsefulCog):
                         mode: Optional[discord.utils.TimestampStyle] = 'R'):
         content = discord.utils.format_dt(id.created_at, mode)
         await ctx.maybe_reply(f"```py\n{content}\n```\n**Display:**{content}", ephemeral=True)
+
+    async def on_context_timestamp(self, interaction: discord.Interaction, message: discord.Message):
+        context = await StellaContext.from_interaction(interaction)
+        await self.timestamp(context, message)
+
+    async def on_context_replycount(self, interaction: discord.Interaction, message: discord.Message):
+        context = await StellaContext.from_interaction(interaction)
+        await self.replycount(context, message)
+
+    async def on_context_parse_token(self, interaction: discord.Interaction, message: discord.Message):
+        context = await StellaContext.from_interaction(interaction)
+        await self.parse_token(context, message.content)
