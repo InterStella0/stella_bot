@@ -313,6 +313,9 @@ class StellaBotHelp(commands.DefaultHelpCommand):
         def get_command_help(com: CommandGroup) -> CommandHelp:
             signature = self.get_command_signature(com)
             desc = self.get_help(com)
+            if self.context.bot.tree.get_command(com.qualified_name):
+                prefix = " " if desc.rstrip().endswith(".") else ". "
+                desc += prefix + "Slash command supported."
             return CommandHelp(signature, desc, com)
 
         def get_cog_help(cog: Optional[commands.Cog],
