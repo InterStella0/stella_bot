@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 
 import discord
 import base64
@@ -13,12 +14,11 @@ from discord import app_commands
 from discord.ext import commands
 from collections import namedtuple
 
-from .baseclass import BaseUsefulCog
-from utils.useful import try_call, call, StellaContext, aware_utc
-from typing import Union, Optional, Tuple, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from main import StellaBot
+from cogs.useful.baseclass import BaseUsefulCog
+from utils.buttons import InteractionPages
+from utils.decorators import pages
+from utils.useful import try_call, call, StellaContext, aware_utc, text_chunker, newline_chunker
+from typing import Union, Optional, Tuple
 
 
 class Etc(BaseUsefulCog):
@@ -78,6 +78,10 @@ class Etc(BaseUsefulCog):
         embed.set_thumbnail(url=member.display_avatar)
         await ctx.embed(ephemeral=True, embed=embed)
 
+    async def on_context_parse_token(self, interaction: discord.Interaction, message: discord.Message):
+        context = await StellaContext.from_interaction(interaction)
+        await self.parse_token(context, message.content)
+
     @commands.hybrid_command(
         aliases=["gt", "gtoken"],
         brief="Generate a new token given a user.",
@@ -135,7 +139,7 @@ class Etc(BaseUsefulCog):
                 return "<deleted>"
 
         async def count_reply(m: Optional[Union[discord.MessageReference, discord.Message]],
-                        replies: Optional[int] = 0) -> Tuple[discord.Message, int]:
+                              replies: Optional[int] = 0) -> Tuple[discord.Message, int]:
 
             if isinstance(m, discord.MessageReference):
                 if m.cached_message is None:
@@ -161,6 +165,10 @@ class Etc(BaseUsefulCog):
                            f"**Origin:** [`jump`]({msg.jump_url})"
         }
         await ctx.embed(ephemeral=True, **embed_dict)
+
+    async def on_context_replycount(self, interaction: discord.Interaction, message: discord.Message):
+        context = await StellaContext.from_interaction(interaction)
+        await self.replycount(context, message)
 
     @commands.hybrid_command(
         aliases=["find_type", "findtypes", "idtype", "id_type", "idtypes"],
@@ -211,10 +219,22 @@ class Etc(BaseUsefulCog):
         context = await StellaContext.from_interaction(interaction)
         await self.timestamp(context, message)
 
-    async def on_context_replycount(self, interaction: discord.Interaction, message: discord.Message):
-        context = await StellaContext.from_interaction(interaction)
-        await self.replycount(context, message)
+    @commands.hybrid_command(name="json", aliases=["raw", "jsons"], help="Convert discord message into JSON.")
+    @app_commands.describe(message="Discord message you want to convert. Default to current message.")
+    async def _json(self, ctx: StellaContext, message: discord.Message = commands.param(converter=discord.Message)):
+        raw_data = await self.bot.http.get_message(message.channel.id, message.id)
+        json_formatted = json.dumps(raw_data, indent=4)
 
-    async def on_context_parse_token(self, interaction: discord.Interaction, message: discord.Message):
-        context = await StellaContext.from_interaction(interaction)
-        await self.parse_token(context, message.content)
+        if len(json_formatted) >= 1980:
+            @pages()
+            async def display(self, menu, json_raw):
+                return f"```json\n{json_raw}```"
+
+            data = newline_chunker(json_formatted, width=1800)
+            await InteractionPages(display(data)).start(ctx)
+        else:
+            await ctx.maybe_reply(f"```json\n{json_formatted}```", ephemeral=True)
+
+    async def on_context_json(self, interaction: discord.Interaction, message: discord.Message):
+        ctx = await StellaContext.from_interaction(interaction)
+        await self._json(ctx, message)
