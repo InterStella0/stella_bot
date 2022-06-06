@@ -102,7 +102,9 @@ class Miscellaneous(BaseHelpfulCog):
                 await self.bot.add_blacklist(ctx.author.id, "Spamming cooldown report message.")
         self.bot.dispatch("command_error", ctx, BypassError(error))
 
-    @commands.command(aliases=["aboutme"], help="Shows what the bot is about. It also shows recent changes and stuff.")
+    @commands.hybrid_command(
+        aliases=["aboutme"], help="Shows what the bot is about. It also shows recent changes and stuff."
+    )
     async def about(self, ctx: StellaContext):
         embed = StellaEmbed.default(
             ctx,

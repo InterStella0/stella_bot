@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional, TYPE_CHECKING, Dict
 
 import discord
-from discord import ui
+from discord import ui, app_commands
 from discord.ext import commands
 from jishaku.codeblocks import Codeblock
 
@@ -181,10 +181,12 @@ class ReplView(EvalView):
 
 
 class EvalHandler(BaseHelpfulCog):
-    @command(name="eval", aliases=["e"],
-             brief="Public python eval execution in discord.",
-             help="Public python eval execution in discord. Using this command without argument will activate the "
-                  "mobile mode.")
+    @commands.hybrid_command(
+        name="eval", aliases=["e"],
+        brief="Public python eval execution in discord.",
+        help="Public python eval execution in discord. Using this command without argument will activate the "
+             "mobile mode.")
+    @app_commands.describe(code="Python code that you want to run. Leave it empty for mobile interface.")
     @commands.max_concurrency(1, commands.BucketType.user)
     async def _eval(self, ctx: StellaContext, *,
                     code: Optional[Codeblock] = commands.param(converter=CodeblockConverter, default=None)):
@@ -228,9 +230,13 @@ class EvalHandler(BaseHelpfulCog):
 
         return repl_wrap(code.content, context, **flags)
 
-    @command(help="Simulate a live python interpreter interface when given a python code. Please use this public eval"
-                  "wisely as any execution that takes >= 3 seconds are terminated. Using this command "
-                  "without argument will activate the mobile mode.")
+    @commands.hybrid_command(
+        help="Simulate a live python interpreter interface when given a python code. Please use this public eval"
+             "wisely as any execution that takes >= 3 seconds are terminated. Using this command "
+             "without argument will activate the mobile mode.",
+        brief="Simulate a live python interpreter interface when given a python code."
+    )
+    @app_commands.describe(code="Python code that you want to run. Leave it empty for mobile interface.")
     @commands.max_concurrency(1, commands.BucketType.user)
     async def repl(self, ctx: StellaContext, *,
                    code: Optional[Codeblock] = commands.param(converter=CodeblockConverter, default=None)):
@@ -287,9 +293,13 @@ class EvalHandler(BaseHelpfulCog):
         else:
             await ctx.maybe_reply(f"```py\nNo Output```")
 
-    @command(help="A timeit command for your python code. Execution timeout are set to 3 seconds. Using this command "
-                  "without argument will activate the mobile mode.")
+    @commands.hybrid_command(
+        help="A timeit command for your python code. Execution timeout are set to 3 seconds. Using this command "
+             "without argument will activate the mobile mode.",
+        brief="A timeit command for your python code"
+    )
     @commands.max_concurrency(1, commands.BucketType.user)
+    @app_commands.describe(code="Python code that you want to run. Leave it empty for mobile interface.")
     async def timeit(self, ctx: StellaContext, *,
                      code: Optional[Codeblock] = commands.param(converter=CodeblockConverter, default=None)):
         await self.repl_handler(ctx, code, exec=True, exec_timer=True, inner_func_check=False, counter=False)

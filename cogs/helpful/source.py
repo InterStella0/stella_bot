@@ -5,6 +5,7 @@ from typing import List
 
 import discord
 from aiogithub.objects import Repo, User
+from discord import app_commands
 from discord.ext import commands
 
 from cogs.helpful.baseclass import BaseHelpfulCog
@@ -98,12 +99,15 @@ class SourceMenu(ViewAuthor):
 
 
 class SourceCog(BaseHelpfulCog):
-    @commands.command(aliases=["src", "sources"],
-                      brief="Shows the source code link in github.",
-                      help="Shows the source code in github given the cog/command name. "
-                           "Defaults to the stella_bot source code link if not given any argument. "
-                           "It accepts 2 types of content, the command name, or the Cog method name. "
-                           "Cog method must specify it's Cog name separate by a period and it's method.")
+    @commands.hybrid_command(
+        aliases=["src", "sources"],
+        brief="Shows the source code link in github.",
+        help="Shows the source code in github given the cog/command name. "
+             "Defaults to the stella_bot source code link if not given any argument. "
+             "It accepts 2 types of content, the command name, or the Cog method name. "
+             "Cog method must specify it's Cog name separate by a period and it's method."
+    )
+    @app_commands.describe(content="Command, Cog, or Cog method that you want to look.")
     async def source(self, ctx: StellaContext, *, content: str = None):
         repo = self.stella_github
         author = await self.bot.git.get_user(repo.owner.login)
