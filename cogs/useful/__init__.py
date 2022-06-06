@@ -27,8 +27,7 @@ class Useful(*features):
             *_, clean_name = name.partition("on_context_")
             setattr(self, f"{name}_register", app_commands.ContextMenu(
                 name=clean_name,
-                callback=getattr(self, name),
-                guild_ids=[652696440396840960]
+                callback=getattr(self, name)
             ))
             self.bot.tree.add_command(getattr(self, f"{name}_register"))
 
