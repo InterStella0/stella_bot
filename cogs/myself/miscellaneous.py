@@ -257,4 +257,5 @@ class Miscellaneous(BaseMyselfCog):
         )):
         guild = guild if guild != "all" else None
         await self.bot.tree.sync(guild=guild)
-        await ctx.confirmed()
+        desc = f"{guild} guild" if guild is not None else f"{len(self.bot.guilds)} guilds"
+        await ctx.embed(title="Synced", description=desc)

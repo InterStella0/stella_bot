@@ -11,6 +11,7 @@ import itertools
 import functools
 
 from discord import app_commands
+from discord.app_commands import Choice
 from discord.ext import commands
 from collections import namedtuple
 
@@ -210,8 +211,20 @@ class Etc(BaseUsefulCog):
 
     @commands.hybrid_command(help="Gives a timestamp format based on the discord ID given.")
     @app_commands.describe(id="Discord ID to be converted.", mode="Timestamp mode, defaults to R")
+    @app_commands.choices(
+        mode=[
+            Choice(name="t | Short Time      | 22:57", value="t"),
+            Choice(name="T | Long Time       | 22:57:58", value="T"),
+            Choice(name="d | Short Date      | 17/05/2016", value="d"),
+            Choice(name="D | Long Date       | 17 May 2016", value="D"),
+            Choice(name="f | Short Date Time | 17 May 2016 22:57", value="f"),
+            Choice(name="F | Long Date Time  | Tuesday, 17 May 2016 22:57", value="F"),
+            Choice(name="R | Relative Time   | 5 years ago (default)", value="R"),
+        ]
+    )
+    @app_commands.guilds(discord.Object(652696440396840960))
     async def timestamp(self, ctx: StellaContext, id: discord.Object,
-                        mode: Optional[discord.utils.TimestampStyle] = 'R'):
+                        mode: Choice[str] = 'R'):
         content = discord.utils.format_dt(id.created_at, mode)
         await ctx.maybe_reply(f"```py\n{content}\n```\n**Display:**{content}", ephemeral=True)
 
