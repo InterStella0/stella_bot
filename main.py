@@ -19,6 +19,7 @@ import numpy as np
 
 from aiogithub import GitHub
 from discord.ext import commands
+from discord.ext.commands import CogMeta
 from dotenv import load_dotenv
 
 from utils.buttons import PersistentRespondView
@@ -431,48 +432,6 @@ async def on_message(message: discord.Message) -> None:
                 await bot.process_commands(new_message)
 
     await bot.process_commands(message)
-
-
-@bot.ipc_client.listen()
-async def on_restarting_server(_: IPCData) -> None:
-    print("Server restarting...")
-    server = bot.ipc_client
-    await server.session.close()
-    print("Server waiting for server respond.")
-    await asyncio.sleep(10)
-    print("Server re-establishing connection")
-    await server.init_sock()
-    print("Server Connection Successful.")
-
-
-@bot.ipc_client.server_request()
-async def on_get_info(data: IPCData) -> None:
-    return {
-        "guild_amount": len(bot.guilds),
-        "user_amount": len(bot.users),
-        "latency": bot.latency,
-        "launch_time": bot.uptime.isoformat(),
-        "codelines": count_source_lines('.'),
-        "last_commands": [
-            {
-                "author": str(ctx.author),
-                "command": ctx.command.qualified_name,
-                "created_at": ctx.message.created_at.isoformat()
-            }
-            for ctx in [*bot.cached_context][:-10:-1]
-        ]
-    }
-
-
-@bot.ipc_client.server_request()
-async def on_get_invite(data: IPCData) -> None:
-    return {"invite": discord.utils.oauth_url(bot.user.id)}
-
-
-@bot.ipc_client.listen()
-async def on_kill(data: IPCData) -> None:
-    print("Kill has been ordered", data)
-    await bot.close()
 
 
 bot.starter()
