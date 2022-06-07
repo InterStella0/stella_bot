@@ -80,21 +80,35 @@ class StellaClient(ipc.Client):
             self._stream_reader_task.cancel()
             self._stream_reader_task = None
 
+    def add_server_listener(self, handler: _HandlerType) -> None:
+        event_handlers = self._event_handlers.setdefault(handler.__name__, [])
+        event_handlers.append(handler)
+
     def listen(self) -> Callable[[_HandlerType], _HandlerType]:
         def inner(handler: _HandlerType) -> _HandlerType:
-            event_handlers = self._event_handlers.setdefault(handler.__name__, [])
-            event_handlers.append(handler)
-
+            self.add_server_listener(handler)
             return handler
         return inner
 
+    def remove_server_listener(self, handler: _HandlerType) -> None:
+        if lists := self._event_handlers.get(handler.__name__):
+            lists.remove(handler)
+        else:
+            self._event_handlers.pop(handler.__name__)
+
+    def remove_server_request_handler(self, name: str) -> Optional[_HandlerType]:
+        return self._server_request_handlers.pop(name, None)
+
+    def add_server_request_handler(self, handler: _HandlerType):
+        name = handler.__name__
+        if self._server_request_handlers.get(name):
+            raise Exception(f"Handler '{name}' has already been registered.")
+
+        self._server_request_handlers[name] = handler
+
     def server_request(self) -> Callable[[_HandlerType], _HandlerType]:
         def inner(handler: _HandlerType) -> _HandlerType:
-            name = handler.__name__
-            if self._server_request_handlers.get(name):
-                raise Exception(f"Handler '{name}' has already been registered.")
-
-            self._server_request_handlers[name] = handler
+            self.add_server_request_handler(handler)
             return handler
         return inner
 
