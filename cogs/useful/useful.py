@@ -222,7 +222,6 @@ class Etc(BaseUsefulCog):
             Choice(name="R | Relative Time   | 5 years ago (default)", value="R"),
         ]
     )
-    @app_commands.guilds(discord.Object(652696440396840960))
     async def timestamp(self, ctx: StellaContext, id: discord.Object,
                         mode: Choice[str] = 'R'):
         content = discord.utils.format_dt(id.created_at, mode)
