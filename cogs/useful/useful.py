@@ -231,7 +231,7 @@ class Etc(BaseUsefulCog):
 
     async def on_context_timestamp(self, interaction: discord.Interaction, message: discord.Message):
         context = await StellaContext.from_interaction(interaction)
-        await self.timestamp(context, message)
+        await self.timestamp(context, message, mode="R")
 
     @commands.hybrid_command(name="json", aliases=["raw", "jsons"], help="Convert discord message into JSON.")
     @app_commands.describe(message="Discord message you want to convert. Default to current message.")
