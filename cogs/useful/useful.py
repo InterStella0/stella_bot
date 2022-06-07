@@ -16,6 +16,7 @@ from discord.ext import commands
 from collections import namedtuple
 
 from cogs.useful.baseclass import BaseUsefulCog
+from utils import cog
 from utils.buttons import InteractionPages
 from utils.decorators import pages
 from utils.useful import try_call, call, StellaContext, aware_utc, text_chunker, newline_chunker
@@ -79,6 +80,7 @@ class Etc(BaseUsefulCog):
         embed.set_thumbnail(url=member.display_avatar)
         await ctx.embed(ephemeral=True, embed=embed)
 
+    @cog.context_menu(name="parse token")
     async def on_context_parse_token(self, interaction: discord.Interaction, message: discord.Message):
         context = await StellaContext.from_interaction(interaction)
         await self.parse_token(context, message.content)
@@ -167,6 +169,7 @@ class Etc(BaseUsefulCog):
         }
         await ctx.embed(ephemeral=True, **embed_dict)
 
+    @cog.context_menu(name="count reply")
     async def on_context_replycount(self, interaction: discord.Interaction, message: discord.Message):
         context = await StellaContext.from_interaction(interaction)
         await self.replycount(context, message)
@@ -213,13 +216,13 @@ class Etc(BaseUsefulCog):
     @app_commands.describe(id="Discord ID to be converted.", mode="Timestamp mode, defaults to R")
     @app_commands.choices(
         mode=[
-            Choice(name="t | Short Time      | 22:57", value="t"),
-            Choice(name="T | Long Time       | 22:57:58", value="T"),
-            Choice(name="d | Short Date      | 17/05/2016", value="d"),
-            Choice(name="D | Long Date       | 17 May 2016", value="D"),
+            Choice(name="t | Short Time | 22:57", value="t"),
+            Choice(name="T | Long Time | 22:57:58", value="T"),
+            Choice(name="d | Short Date | 17/05/2016", value="d"),
+            Choice(name="D | Long Date | 17 May 2016", value="D"),
             Choice(name="f | Short Date Time | 17 May 2016 22:57", value="f"),
-            Choice(name="F | Long Date Time  | Tuesday, 17 May 2016 22:57", value="F"),
-            Choice(name="R | Relative Time   | 5 years ago (default)", value="R"),
+            Choice(name="F | Long Date Time | Tuesday, 17 May 2016 22:57", value="F"),
+            Choice(name="R | Relative Time | 5 years ago (default)", value="R"),
         ]
     )
     async def timestamp(self, ctx: StellaContext, id: discord.Object,
@@ -229,6 +232,7 @@ class Etc(BaseUsefulCog):
         content = discord.utils.format_dt(id.created_at, getattr(mode, "value", mode))
         await ctx.maybe_reply(f"```py\n{content}\n```\n**Display:**{content}", ephemeral=True)
 
+    @cog.context_menu(name="timestamp")
     async def on_context_timestamp(self, interaction: discord.Interaction, message: discord.Message):
         context = await StellaContext.from_interaction(interaction)
         await self.timestamp(context, message, mode="R")
@@ -249,6 +253,7 @@ class Etc(BaseUsefulCog):
         else:
             await ctx.maybe_reply(f"```json\n{json_formatted}```", ephemeral=True)
 
+    @cog.context_menu(name="json")
     async def on_context_json(self, interaction: discord.Interaction, message: discord.Message):
         ctx = await StellaContext.from_interaction(interaction)
         await self._json(ctx, message)

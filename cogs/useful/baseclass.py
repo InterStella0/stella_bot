@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Dict, Optional
 
 import aiohttp
 
-from utils.cog import StellaBaseCog
+from utils.cog import StellaCog
 from utils.prefix_ai import MobileNetNSFW
 
 if TYPE_CHECKING:
@@ -11,9 +11,8 @@ if TYPE_CHECKING:
     from .art_ai_generation import PayloadToken, PayloadAccessToken
 
 
-class BaseUsefulCog(StellaBaseCog):
+class BaseUsefulCog(StellaCog):
     def __init__(self, bot: StellaBot):
-        super().__init__(bot)
         self.bot = bot
         self.cache_authentication: Optional[PayloadToken] = None
         self.cache_authentication_access: Optional[PayloadAccessToken] = None
