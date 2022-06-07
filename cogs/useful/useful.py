@@ -223,7 +223,9 @@ class Etc(BaseUsefulCog):
         ]
     )
     async def timestamp(self, ctx: StellaContext, id: discord.Object,
-                        mode: discord.utils.TimestampStyle = 'R'):
+                        mode: Union[Choice[str], discord.utils.TimestampStyle] = commands.param(
+                            converter=discord.utils.TimestampStyle, default="R"
+                        )):
         content = discord.utils.format_dt(id.created_at, getattr(mode, "value", mode))
         await ctx.maybe_reply(f"```py\n{content}\n```\n**Display:**{content}", ephemeral=True)
 
