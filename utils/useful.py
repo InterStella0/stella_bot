@@ -284,8 +284,7 @@ class StellaContext(commands.Context):  # type: ignore[misc]
             new_embed.update(ori_embed.to_dict())
             ori_embed = StellaEmbed.from_dict(new_embed)
         to_send = (self.send, self.maybe_reply)[reply]
-        channel = self.channel
-        if not isinstance(channel, discord.DMChannel) and not channel.permissions_for(self.me).embed_links:
+        if self.guild is not None and not self.channel.permissions_for(self.me).embed_links:
             raise commands.BotMissingPermissions(["embed_links"])
         send_dict = {x: y for x, y in kwargs.items() if x not in embed_only_kwargs}
         return await to_send(content, mention_author=mention_author, embed=ori_embed, **send_dict)
