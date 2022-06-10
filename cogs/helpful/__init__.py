@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 from .cmd_msg_remover import CommandMessageRemoverHandler
 from .eval import EvalHandler
-from .help_command import StellaBotHelp
+from .help_command.core import StellaHelpCommand
 from .miscellaneous import Miscellaneous
 from .source import SourceCog
 
@@ -19,7 +19,7 @@ class Helpful(*features):
     def __init__(self, bot: StellaBot):
         super().__init__(bot)
         self._default_help_command = bot.help_command
-        bot.help_command = StellaBotHelp()
+        bot.help_command = StellaHelpCommand()
         bot.help_command.cog = self
         self.bot = bot
 
