@@ -194,6 +194,7 @@ class EvalHandler(BaseHelpfulCog):
 
     @in_executor()
     def get_wrapped(self, ctx: StellaContext, code: Codeblock, **flags: Optional[bool]):
+        cached_messages = list(self.bot.cached_messages)
         if ctx.guild:
             guild_values = [{"channel__id": c.id, "channel__name": c.name, "guild__id": c.guild.id}
                             for c in ctx.guild.text_channels]
@@ -203,7 +204,7 @@ class EvalHandler(BaseHelpfulCog):
             message_values = [{"message__id": m.id, "message__content": m.content,
                                "message__author": m.author.id, "channel_id": m.channel.id,
                                "guild__id": m.guild.id}
-                              for m in self.bot.cached_messages if m.guild == ctx.guild][:100]
+                              for m in cached_messages if m.guild == ctx.guild][:100]
         else:
             c = ctx.channel
             u = ctx.author
@@ -212,7 +213,7 @@ class EvalHandler(BaseHelpfulCog):
                             "user__discriminator": u.discriminator}]
             message_values = [{"message__id": m.id, "message__content": m.content, "message__author": u.id,
                                "channel_id": m.channel.id, "guild__id": m.guild}
-                              for m in self.bot.cached_messages if m.channel.id == ctx.channel.id]
+                              for m in cached_messages if m.channel.id == ctx.channel.id]
         context = {
             "context": {
                 "channel_id": ctx.channel.id,
