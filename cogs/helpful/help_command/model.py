@@ -22,4 +22,7 @@ class CogEmoji:
 
     @classmethod
     def get(cls, name: str) -> str:
-        return getattr(cls, name, '<:question:848263403604934729>')
+        default = '<:question:848263403604934729>'
+        if not isinstance(name, str):
+            return default
+        return getattr(cls, name, default)

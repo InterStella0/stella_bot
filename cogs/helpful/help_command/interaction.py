@@ -31,7 +31,7 @@ class CogSelector(discord.ui.Select):
         no_none = value or "None"
         label = f'{value or "No category"}({amount})'
         description = getattr(cog, "description", "No documentation.")
-        return discord.SelectOption(label=label, value=no_none, emoji=CogEmoji.get(no_none), description=description)
+        return discord.SelectOption(label=label, value=no_none, emoji=CogEmoji.get(value), description=description)
 
     async def callback(self, interaction: discord.Interaction) -> Any:
         value, = self.values
