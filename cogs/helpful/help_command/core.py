@@ -16,7 +16,9 @@ from .model import BotHelpMap, StellaCommands
 
 
 class StellaHelpCommand(commands.MinimalHelpCommand):
-    def get_command_signature(self, command: StellaCommands, /, **kwargs) -> str:
+    def get_command_signature(self, command: StellaCommands, /, ctx=None) -> str:
+        if ctx:
+            self.context = ctx
         return super().get_command_signature(command)
 
     async def send_bot_help(self, mapping: BotHelpMap, /) -> None:

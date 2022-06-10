@@ -76,10 +76,6 @@ class BotHelpView(BaseView):
         self.embed: Optional[StellaEmbed] = None
         self._search_prompt = None
         self.message = None
-        w = discord.ui.Button(
-            emoji="<:hmpf:946828106675662888>", label="Website", url="https://www.interstella.online", row=1
-        )
-        self.add_item(w)
 
     async def create_embed(self):
         ctx = self.help_command.context
