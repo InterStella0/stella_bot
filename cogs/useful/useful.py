@@ -257,3 +257,13 @@ class Etc(BaseUsefulCog):
     async def on_context_json(self, interaction: discord.Interaction, message: discord.Message):
         ctx = await StellaContext.from_interaction(interaction)
         await self._json(ctx, message)
+
+    @cog.context_menu(name="Save Sticker")
+    async def on_context_sticker(self, interaction: discord.Interaction, message: discord.Message):
+        try:
+            sticker, = message.stickers
+        except ValueError:
+            await interaction.response.send_message("No sticker attached", ephemeral=True)
+        else:
+            file = await sticker.to_file()
+            await interaction.response.send_message(f"Here is your sticker: {sticker}", file=file, ephemeral=True)
