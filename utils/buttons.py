@@ -91,6 +91,10 @@ class BaseView(ui.View):
         except Exception as e:
             return await self.on_error(interaction, e, item)
 
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item[Any]) -> None:
+        embed = StellaEmbed.to_error(title="Error occured:", description=str(error))
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 class CallbackHandler(_ViewCallback):
     def __init__(self, handle, callback, view, item):
@@ -567,7 +571,16 @@ class InteractionPages(CallbackView, MenuBase):
     async def start(self, ctx: StellaContext, /, *, interaction: Optional[discord.Interaction] = None) -> None:
         self.ctx = ctx
         self.current_interaction = interaction
-        self.message = await self.send_initial_message(ctx, ctx.channel)
+        if self.message is None:
+            self.message = await self.send_initial_message(ctx, ctx.channel)
+        else:
+            page = await self._source.get_page(self.current_page)
+            kwargs = await self._get_kwargs_from_page(page)
+            response = interaction and not interaction.response.is_done()
+            edit_method = self.message.edit
+            if response:
+                edit_method = interaction.response.edit_message
+            await edit_method(**kwargs)
 
     async def handle_callback(self, coro: Callable[[ui.Button, discord.Interaction], Awaitable[None]],
                               interaction: discord.Interaction, button: ui.Button, /) -> None:
