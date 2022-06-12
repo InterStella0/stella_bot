@@ -44,7 +44,6 @@ class MissingButton(BaseButton):
 class ErrorHandler(commands.Cog):
     def __init__(self, bot: StellaBot):
         self.bot = bot
-        self.error_cooldown = commands.CooldownMapping.from_cooldown(1, 20, commands.BucketType.user)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx: StellaContext, error: commands.CommandError) -> None:
@@ -183,12 +182,7 @@ class ErrorHandler(commands.Cog):
                              f"{' '.join(list_sig)}\n" \
                              f"{space}{offset}^\n" \
                              f"```\n"
-        if (demo := help_com.get_demo(command)) and isinstance(error, commands.MissingRequiredArgument):
-            cooldown = self.error_cooldown
-            bucket = cooldown.get_bucket(ctx.message)
-            if not bucket.update_rate_limit():
-                embed.description += "**Command Example**"
-                embed.set_image(url=demo)
+
         embed.set_footer(
             icon_url=ctx.me.display_avatar,
             text=f"{ctx.clean_prefix}help {ctx.command.qualified_name} for more information."
