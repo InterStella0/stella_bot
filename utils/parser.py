@@ -81,7 +81,7 @@ class ReplParser:
 
         self.JOINER = {
             "else": ['if', 'elif', 'except', 'for', 'while'], 
-            'except': ['try'], 
+            'except': ['try', 'except'],
             'finally': ['try', 'else', 'except'], 
             'elif': ['if', 'elif']
         }
