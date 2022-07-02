@@ -601,9 +601,17 @@ class InteractionPages(CallbackView, MenuBase):
 
     @button(emoji='<:stop_check:754948796365930517>', style=discord.ButtonStyle.blurple)
     async def stop_page(self, _: discord.Interaction, __: ui.Button) -> None:
+        await self.cleanup()
+
+    async def cleanup(self):
         self.stop()
         if self.delete_after:
             await self.message.delete(delay=0)
+        elif self.ctx.bot.get_message(self.message.id):
+            for item in self.children:
+                if not getattr(item, "disabled", True):
+                    item.disabled = True
+            await self.message.edit(view=self)
 
     @button(emoji='<:next_check:754948796361736213>', style=discord.ButtonStyle.blurple)
     async def next_page(self, _: discord.Interaction, __: ui.Button) -> None:
@@ -652,9 +660,7 @@ class InteractionPages(CallbackView, MenuBase):
         return True
 
     async def on_timeout(self) -> None:
-        self.stop()
-        if self.delete_after:
-            await self.message.delete(delay=0)
+        await self.cleanup()
 
 
 class PersistentRespondView(ui.View):
