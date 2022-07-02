@@ -20,9 +20,10 @@ from utils.ipc import StellaAPI, StellaFile
 from utils.useful import StellaEmbed, StellaContext
 
 
-@dataclass
 class PartialDallEImage:
-    image_decoded: bytes
+    def __init__(self, image_decoded):
+        self.image_decoded = image_decoded
+        self.name = os.urandom(10).hex() + ".png"
 
     @classmethod
     def from_base64(cls, image: str):
@@ -37,10 +38,10 @@ class PartialDallEImage:
 
 class DallEImage(PartialDallEImage):
     def __init__(self, api: StellaAPI, partial: PartialDallEImage) -> None:
+        super().__init__(partial.image_decoded)
         self.api = api
-        self.image_decoded = partial.image_decoded
+        self.name = partial.name
         self._file = None
-        self.name = os.urandom(10).hex() + ".png"
 
     @classmethod
     async def create(cls, api: StellaAPI, partial: PartialDallEImage) -> Self:
@@ -151,9 +152,9 @@ class DallEHandler:
         ))
 
     async def retrieve_full(self, partial: PartialDallEImage):
-        if not (full := self._cached.get(partial.image_decoded)):
+        if not (full := self._cached.get(partial.name)):
             full = await partial.fetch(self.api)
-            self._cached[partial.image_decoded] = full
+            self._cached[partial.name] = full
         return full
 
     def cleanup(self):
@@ -163,7 +164,7 @@ class DallEHandler:
     async def on_finished(self, images: List[PartialDallEImage]):
         @pages(per_page=1)
         async def show_page(inner_self, menu, image: PartialDallEImage):
-            fullimage = await image.fetch(self.api)
+            fullimage = await self.retrieve_full(image)
             image_name = f"Image {menu.current_page + 1}"
             return StellaEmbed.default(
                 self.ctx, title=f"Prompt: {self.prompt}", description=image_name
