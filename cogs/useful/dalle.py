@@ -2,12 +2,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import enum
-import functools
 import io
 import itertools
 import os
 import time
-from dataclasses import dataclass
 from typing import List, Dict
 
 import aiohttp
@@ -16,7 +14,6 @@ from discord.ext import menus
 from typing_extensions import Self
 
 from utils.buttons import InteractionPages, button
-from utils.decorators import pages
 from utils.ipc import StellaAPI, StellaFile
 from utils.useful import StellaEmbed, StellaContext
 
@@ -226,7 +223,7 @@ class InteractionImages(InteractionPages):
         source = self.one_source if self.mode == 1 else self.four_source
         await self.change_source(source)
 
-    @button(emoji="1\U000020e3", label="Image Mode")
+    @button(emoji="1\U000020e3", label="Image Mode", stay_active=True)
     async def on_change_mode(self, interaction, button):
         button.emoji = "1\U000020e3" if self.mode == 1 else "🔢"
         await interaction.response.defer()
