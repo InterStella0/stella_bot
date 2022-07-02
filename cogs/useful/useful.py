@@ -273,7 +273,7 @@ class Etc(BaseUsefulCog):
             await interaction.response.send_message(f"Here is your sticker: {sticker}", file=file, ephemeral=True)
 
     @commands.command(aliases=["imagine"], help="Create image from a given prompt using Dall-E Mini.")
-    @commands.cooldown(1, 60, commands.BucketType.user)
+    @commands.max_concurrency(1, commands.BucketType.user)
     async def dalle(self, ctx: StellaContext, *,
                     image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
         handler = DallEHandler(ctx)

@@ -98,7 +98,7 @@ class ErrorHandler(commands.Cog):
                 author__id=ctx.author.id,
                 command__qualified_name=ctx.command.qualified_name
             )
-            contexts = filter(lambda c: c is not ctx and c.done, contexts)
+            contexts = filter(lambda c: c is not ctx and c.running, contexts)
 
             def context_format(c):
                 content, *_ = c.message.content.partition("\n")

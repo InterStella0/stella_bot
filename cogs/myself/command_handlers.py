@@ -56,15 +56,6 @@ class CommandHandlers(BaseMyselfCog):
         await ctx.maybe_reply("Unable to find a running command from this message.")
 
     @commands.Cog.listener()
-    async def on_command(self, ctx: StellaContext):
-        ctx.done = False
-
-    @commands.Cog.listener()
-    async def on_command_completion(self, ctx: StellaContext):
-        if not ctx.done:
-            ctx.done = True
-
-    @commands.Cog.listener()
     @event_check(lambda s, b, a: (b.content and a.content) or b.author.bot)
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
         if await self.bot.is_owner(before.author) and not before.embeds and not after.embeds:
