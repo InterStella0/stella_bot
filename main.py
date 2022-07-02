@@ -1,8 +1,11 @@
 import asyncio
+import base64
 import collections
 import contextlib
 import copy
 import datetime
+import enum
+import io
 import json
 import logging
 import os
@@ -19,15 +22,14 @@ import numpy as np
 
 from aiogithub import GitHub
 from discord.ext import commands
-from discord.ext.commands import CogMeta
 from dotenv import load_dotenv
 
 from utils.buttons import PersistentRespondView
 from utils.context_managers import UserLock
 from utils.decorators import event_check, in_executor, wait_ready
-from utils.ipc import IPCData, StellaClient, StellaAPI, StellaFile
+from utils.ipc import StellaClient, StellaAPI, StellaFile
 from utils.prefix_ai import DerivativeNeuralNetwork, PrefixNeuralNetwork
-from utils.useful import ListCall, StellaContext, count_source_lines, print_exception, except_retry
+from utils.useful import ListCall, StellaContext, count_source_lines, print_exception
 
 dotenv_path = join(dirname(__file__), 'bot_settings.env')
 load_dotenv(dotenv_path)

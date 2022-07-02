@@ -18,13 +18,17 @@ class BaseUsefulCog(StellaCog):
         self.cache_authentication_access: Optional[PayloadAccessToken] = None
         self._cached_image: Dict[str, str] = {}
         self.http_art: Optional[aiohttp.ClientSession] = None
+        self.http_dall: Optional[aiohttp.ClientSession] = None
         self.cached_models: Dict[str, MobileNetNSFW] = {}
 
     async def cog_load(self) -> None:
         await super().cog_load()
         self.http_art = aiohttp.ClientSession()
+        self.http_dall = aiohttp.ClientSession()
 
     async def cog_unload(self) -> None:
         await super().cog_unload()
         if self.http_art:
             await self.http_art.close()
+        if self.http_dall:
+            await self.http_dall.close()

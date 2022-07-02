@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import json
 
+import aiohttp
 import discord
 import base64
 import datetime
@@ -16,6 +17,7 @@ from discord.ext import commands
 from collections import namedtuple
 
 from cogs.useful.baseclass import BaseUsefulCog
+from cogs.useful.dalle import DallEHandler
 from utils import cog
 from utils.buttons import InteractionPages
 from utils.decorators import pages
@@ -267,3 +269,7 @@ class Etc(BaseUsefulCog):
         else:
             file = await sticker.to_file()
             await interaction.response.send_message(f"Here is your sticker: {sticker}", file=file, ephemeral=True)
+
+    @commands.command(aliases=["imagine"], help="Create image from a given prompt using Dall-E Mini.")
+    async def dalle(self, ctx: StellaContext, *, prompt: str):
+        await DallEHandler(ctx).generate(prompt)
