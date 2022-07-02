@@ -277,5 +277,4 @@ class Etc(BaseUsefulCog):
     async def dalle(self, ctx: StellaContext, *,
                     image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
         handler = DallEHandler(ctx)
-        await handler.generate(image_description.name)
-        await handler.wait()
+        await handler.start(image_description.name)

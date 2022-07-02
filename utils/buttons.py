@@ -93,7 +93,10 @@ class BaseView(ui.View):
 
     async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item[Any]) -> None:
         embed = StellaEmbed.to_error(title="Error occured:", description=str(error))
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 class CallbackHandler(_ViewCallback):

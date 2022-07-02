@@ -12,9 +12,10 @@ from typing import List, Dict
 
 import aiohttp
 import discord
+from discord.ext import menus
 from typing_extensions import Self
 
-from utils.buttons import InteractionPages
+from utils.buttons import InteractionPages, button
 from utils.decorators import pages
 from utils.ipc import StellaAPI, StellaFile
 from utils.useful import StellaEmbed, StellaContext
@@ -97,6 +98,9 @@ class DallE:
         try:
             raw_json = await self._generate(prompt)
             await self.update(self.Status.PROCESSING)
+            if not isinstance(raw_json, dict) or "images" not in raw_json:
+                raise Exception("Failure to fetch images from dall-e mini.")
+
             partials = [PartialDallEImage.from_base64(image) for image in raw_json["images"]]
         except Exception as e:
             await self.update(self.Status.ERROR, e)
@@ -117,19 +121,23 @@ class DallEHandler:
         self._cached = {}
         self._wait = asyncio.Event()
 
-    async def generate(self, prompt: str):
+    async def start(self, prompt: str):
         self.prompt = prompt
         await self.dalle.generate(prompt)
+        await self.wait()
 
     async def loading_generation(self):
         start = time.perf_counter()
 
         def get_embed() -> StellaEmbed:
+            nonlocal self
             sec = time.perf_counter() - start
+            desc = f"[`{sec:.2f}s`] Please wait as dall-e is generating images..."
+            desc = f"**Prompt:** `{self.prompt}`\n{desc}"
             return StellaEmbed.default(
                 self.ctx,
                 title="<a:loading:747680523459231834> Generating",
-                description=f"[{sec:.0f}s] Please wait as dall-e is generating images..."
+                description=desc
             )
 
         self.message = await self.ctx.maybe_reply(embed=get_embed())
@@ -162,23 +170,65 @@ class DallEHandler:
             self._generate_task.cancel()
 
     async def on_finished(self, images: List[PartialDallEImage]):
-        @pages(per_page=1)
-        async def show_page(inner_self, menu, image: PartialDallEImage):
-            fullimage = await self.retrieve_full(image)
-            image_name = f"Image {menu.current_page + 1}"
-            return StellaEmbed.default(
-                self.ctx, title=f"Prompt: {self.prompt}", description=image_name
-            ).set_image(url=fullimage.url)
-
-        await InteractionPages(show_page(images), message=self.message).start(self.ctx)
+        pages = InteractionImages(self, images, message=self.message)
+        await pages.start(self.ctx)
         self._wait.set()
 
     async def on_error(self, error: Exception):
         self.cleanup()
-        await self.message.edit(embed=StellaEmbed.to_error(title="<:crossmark:753620331851284480> Error occured",
-                                                           description=str(error)))
+        await self.message.edit(embed=StellaEmbed.to_error(
+            title="<:crossmark:753620331851284480> Error occured",
+            description=str(error))
+        )
         self._wait.set()
 
     async def wait(self) -> None:
         return await self._wait.wait()
+
+
+class OneImage(menus.ListPageSource):
+    def __init__(self, handler: DallEHandler, images: List[PartialDallEImage]):
+        super().__init__(images, per_page=1)
+        self.handler = handler
+
+    async def format_page(self, menu, image):
+        fullimage = await self.handler.retrieve_full(image)
+        return StellaEmbed.default(
+            menu.ctx, title=f"Prompt: {self.handler.prompt}"
+        ).set_image(url=fullimage.url)
+
+
+class FourImage(menus.ListPageSource):
+    def __init__(self, handler: DallEHandler, images: List[PartialDallEImage]):
+        super().__init__(images, per_page=4)
+        self.handler = handler
+
+    async def format_page(self, menu, images):
+        fullimages = await asyncio.gather(*map(self.handler.retrieve_full, images))
+        embeds = [StellaEmbed.default(
+            menu.ctx, title=f"Prompt: {self.handler.prompt}", url=fullimages[0].url
+        ).set_image(url=fullimage.url) for fullimage in fullimages]
+        return {"embeds": embeds}
+
+
+class InteractionImages(InteractionPages):
+    def __init__(self, handler: DallEHandler, images: List[PartialDallEImage], message: discord.Message):
+        self.one_source = OneImage(handler, images)
+        self.four_source = FourImage(handler, images)
+        super().__init__(self.four_source, message=message, delete_after=False)
+        self.mode = 4
+
+    def toggle_mode(self):
+        self.mode = 1 if self.mode == 4 else 4
+
+    async def setup_toggle(self):
+        self.toggle_mode()
+        source = self.one_source if self.mode == 1 else self.four_source
+        await self.change_source(source)
+
+    @button(emoji="🔢", label="Image Mode")
+    async def on_change_mode(self, interaction, button):
+        button.emoji = "1\U000020e3" if self.mode == 1 else "🔢"
+        await interaction.response.defer()
+        await self.setup_toggle()
 
