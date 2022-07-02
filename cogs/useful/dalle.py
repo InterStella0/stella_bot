@@ -114,6 +114,7 @@ class DallEHandler:
         self.message = None
         self._generate_task = None
         self._cached = {}
+        self._wait = asyncio.Event()
 
     async def generate(self, prompt: str):
         self.prompt = prompt
@@ -169,9 +170,14 @@ class DallEHandler:
             ).set_image(url=fullimage.url)
 
         await InteractionPages(show_page(images), message=self.message).start(self.ctx)
+        self._wait.set()
 
     async def on_error(self, error: Exception):
         self.cleanup()
         await self.message.edit(embed=StellaEmbed.to_error(title="<:crossmark:753620331851284480> Error occured",
                                                            description=str(error)))
+        self._wait.set()
+
+    async def wait(self) -> None:
+        return await self._wait.wait()
 

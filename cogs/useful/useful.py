@@ -16,8 +16,10 @@ from discord.app_commands import Choice
 from discord.ext import commands
 from collections import namedtuple
 
+from cogs.useful.art_ai_generation import ProfanityImageDesc
 from cogs.useful.baseclass import BaseUsefulCog
 from cogs.useful.dalle import DallEHandler
+from cogs.useful.wombo_dream.model import ImageDescription
 from utils import cog
 from utils.buttons import InteractionPages
 from utils.decorators import pages
@@ -271,5 +273,9 @@ class Etc(BaseUsefulCog):
             await interaction.response.send_message(f"Here is your sticker: {sticker}", file=file, ephemeral=True)
 
     @commands.command(aliases=["imagine"], help="Create image from a given prompt using Dall-E Mini.")
-    async def dalle(self, ctx: StellaContext, *, prompt: str):
-        await DallEHandler(ctx).generate(prompt)
+    @commands.cooldown(1, 60, commands.BucketType.user)
+    async def dalle(self, ctx: StellaContext, *,
+                    image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
+        handler = DallEHandler(ctx)
+        await handler.generate(image_description.name)
+        await handler.wait()
