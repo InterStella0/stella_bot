@@ -226,7 +226,7 @@ class InteractionImages(InteractionPages):
         source = self.one_source if self.mode == 1 else self.four_source
         await self.change_source(source)
 
-    @button(emoji="🔢", label="Image Mode")
+    @button(emoji="1\U000020e3", label="Image Mode")
     async def on_change_mode(self, interaction, button):
         button.emoji = "1\U000020e3" if self.mode == 1 else "🔢"
         await interaction.response.defer()
