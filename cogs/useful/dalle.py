@@ -125,6 +125,7 @@ class DallEHandler:
 
     async def loading_generation(self):
         start = time.perf_counter()
+        dot = itertools.cycle(["." * x for x in range(1, 4)])
 
         def get_embed() -> StellaEmbed:
             nonlocal self
@@ -133,7 +134,7 @@ class DallEHandler:
             desc = f"**Prompt:** `{self.prompt}`\n{desc}"
             return StellaEmbed.default(
                 self.ctx,
-                title="<a:loading:747680523459231834> Generating",
+                title=f"<a:loading:747680523459231834> Generating{next(dot)}",
                 description=desc
             )
 
