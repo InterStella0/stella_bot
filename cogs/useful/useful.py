@@ -273,7 +273,7 @@ class Etc(BaseUsefulCog):
             await interaction.response.send_message(f"Here is your sticker: {sticker}", file=file, ephemeral=True)
 
     @commands.hybrid_command(aliases=["imagine"], help="Create image from a given prompt using Dall-E Mini AI.")
-    @app_commands.describe(image_description="Discord message you want to convert. Default to current message.")
+    @app_commands.describe(image_description="Prompt for describing the image. Range of 3 - 100 characters.")
     @commands.max_concurrency(1, commands.BucketType.user)
     async def dalle(self, ctx: StellaContext, *,
                     image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
