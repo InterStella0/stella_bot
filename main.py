@@ -153,14 +153,12 @@ class StellaBot(commands.Bot):
 
     async def running_command(self, ctx: StellaContext, **flags):
         dispatch = flags.pop("dispatch", True)
-        self.cached_context.append(ctx)
         if dispatch:
             self.dispatch('command', ctx)
         try:
             await self.check_user_lock(ctx.author)
             check = await self.can_run(ctx, call_once=flags.pop("call_once", True))
             if check or not flags.pop("call_check", True):
-                ctx.running = True
                 await ctx.typing()
                 await ctx.command.invoke(ctx)
             else:
@@ -174,7 +172,6 @@ class StellaBot(commands.Bot):
             if dispatch:
                 self.dispatch('command_completion', ctx)
         finally:
-            ctx.running = False
             self.command_running.pop(ctx.message.id, None)
 
     async def invoke(self, ctx: StellaContext, **flags) -> None:
@@ -306,7 +303,7 @@ class StellaBot(commands.Bot):
         """Gets the message from the cache"""
         return self._connection._get_message(message_id)
 
-    async def get_context(self, message: discord.Message, *,
+    async def get_context(self, message: Union[discord.Message, discord.Interaction], *,
                           cls: Optional[commands.Context] = StellaContext) -> Union[StellaContext, commands.Context]:
         """Override get_context to use a custom Context"""
         context = await super().get_context(message, cls=cls)
@@ -434,6 +431,24 @@ async def on_message(message: discord.Message) -> None:
                 await bot.process_commands(new_message)
 
     await bot.process_commands(message)
+
+
+@bot.event
+async def on_command(ctx: StellaContext):
+    print("Fire1", ctx.command.qualified_name, ctx.args, ctx.kwargs)
+    bot.cached_context.append(ctx)
+
+
+@bot.before_invoke
+async def on_command_before_invoke(ctx: StellaContext):
+    print("Fire2", ctx.command.qualified_name, ctx.args, ctx.kwargs)
+    ctx.running = True
+
+
+@bot.after_invoke
+async def on_command_after_invoke(ctx: StellaContext):
+    print("Fire3", ctx.command.qualified_name, ctx.args, ctx.kwargs)
+    ctx.running = False
 
 
 bot.starter()

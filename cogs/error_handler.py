@@ -100,16 +100,29 @@ class ErrorHandler(commands.Cog):
             )
             contexts = filter(lambda c: c is not ctx and c.running, contexts)
 
-            def context_format(c):
-                content, *_ = c.message.content.partition("\n")
-                shorten = textwrap.shorten(content, 50)
-                return f"[{shorten}]({c.message.jump_url})"
+            def context_format(c: StellaContext):
+                print("Inside", c)
+                if c.interaction is None:
+                    print("Inside1", c)
+                    content, *_ = c.message.content.partition("\n")
+                    text = textwrap.shorten(content, 50)
+                    jump_url = c.message.jump_url
+                else:
+                    text = f"/{c.command.qualified_name}"
+                    jump_url = ""
+                    with contextlib.suppress(StopIteration, KeyError):
+                        d = c.sent_messages
+                        jump_url = d[next(reversed(d))].jump_url
+
+                return f"[{text}]({jump_url})"
 
             formatted = reversed([*map(context_format, contexts)])
             embed = StellaEmbed.to_error(
                 title="Concurrency Error",
-                description="{}\n**Current Running Command(s):**\n{}".format(fmt, "\n".join(formatted))
+                description=f"{fmt}\n**Current Running Command(s):**\n"
             )
+            if formatted:
+                embed.description += "\n".join(formatted)
             await send_del(embed=embed)
 
         elif isinstance(error, commands.CommandOnCooldown):
