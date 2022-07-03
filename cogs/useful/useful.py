@@ -272,7 +272,8 @@ class Etc(BaseUsefulCog):
             file = await sticker.to_file()
             await interaction.response.send_message(f"Here is your sticker: {sticker}", file=file, ephemeral=True)
 
-    @commands.command(aliases=["imagine"], help="Create image from a given prompt using Dall-E Mini.")
+    @commands.hybrid_command(aliases=["imagine"], help="Create image from a given prompt using Dall-E Mini AI.")
+    @app_commands.describe(image_description="Discord message you want to convert. Default to current message.")
     @commands.max_concurrency(1, commands.BucketType.user)
     async def dalle(self, ctx: StellaContext, *,
                     image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
