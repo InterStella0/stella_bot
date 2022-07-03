@@ -435,19 +435,16 @@ async def on_message(message: discord.Message) -> None:
 
 @bot.event
 async def on_command(ctx: StellaContext):
-    print("Fire1", ctx.command.qualified_name, ctx.args, ctx.kwargs)
     bot.cached_context.append(ctx)
 
 
 @bot.before_invoke
 async def on_command_before_invoke(ctx: StellaContext):
-    print("Fire2", ctx.command.qualified_name, ctx.args, ctx.kwargs)
     ctx.running = True
 
 
 @bot.after_invoke
 async def on_command_after_invoke(ctx: StellaContext):
-    print("Fire3", ctx.command.qualified_name, ctx.args, ctx.kwargs)
     ctx.running = False
 
 
