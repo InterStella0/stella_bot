@@ -71,7 +71,7 @@ class ArtAI(BaseUsefulCog):
     @commands.hybrid_command(help="Generate art work with description given using Dream Wombo AI.")
     @app_commands.describe(
         image_description="Describe the image you want to generate. This is limit to 100 characters.")
-    @commands.cooldown(1, 60, commands.BucketType.user)
+    @commands.max_concurrency(1, commands.BucketType.user)
     async def art(self, ctx: StellaContext,
                   *, image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
         # I'm gonna be honest, I can't find their API so im just gonna reverse engineer it.

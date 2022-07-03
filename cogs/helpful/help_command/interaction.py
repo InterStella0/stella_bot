@@ -131,7 +131,7 @@ class BotHelpView(BaseView):
             if view := await self.help_command.search_command(cmd):
                 message = f"Showing closest to `{cmd}` with :"
                 view.add_item(HomeButton(self.view))
-                await self.original.edit(content=message, embed=None, view=view)
+                await interaction.response.edit_message(content=message, embed=None, view=view)
             else:
                 await interaction.response.send_message(f"No command with the name {cmd} found.", ephemeral=True)
 
