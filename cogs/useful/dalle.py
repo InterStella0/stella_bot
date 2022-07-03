@@ -107,6 +107,8 @@ class DallE:
 
 
 class DallEHandler:
+    _edit_tasks: Dict[int, List[asyncio.Task]] = {}
+
     def __init__(self, ctx: StellaContext):
         self.dalle = DallE(ctx.cog.http_dall)
         self.api = ctx.bot.stella_api
@@ -127,9 +129,12 @@ class DallEHandler:
         start = time.perf_counter()
         dot = itertools.cycle(["." * x for x in range(1, 4)])
 
+        def time_elapse() -> int:
+            return time.perf_counter() - start
+
         def get_embed() -> StellaEmbed:
             nonlocal self
-            sec = time.perf_counter() - start
+            sec = time_elapse()
             desc = f"[`{sec:.2f}s`] Please wait as dall-e is generating images..."
             desc = f"**Prompt:** `{self.prompt}`\n{desc}"
             return StellaEmbed.default(
@@ -139,18 +144,19 @@ class DallEHandler:
             )
 
         self.message = await self.ctx.maybe_reply(embed=get_embed())
-        for x in itertools.count(1):
-            if x >= 42:
+        while True:
+            if time_elapse() >= 210:
                 await self.on_error(asyncio.TimeoutError("Timeout after 210 seconds."))
-            await asyncio.sleep(5)
+            await asyncio.sleep(self.waiting_time)
             await self.message.edit(embed=get_embed())
 
     async def on_generating(self):
         self._generate_task = asyncio.create_task(self.loading_generation())
+        li = self._edit_tasks.setdefault(self.ctx.channel.id, [])
+        li.append(self._generate_task)
 
     async def on_processing(self):
-        self._generate_task.cancel()
-        self._generate_task = None
+        self.cleanup()
         await self.message.edit(embed=StellaEmbed.default(
             self.ctx,
             title="<a:typing:597589448607399949> Processing",
@@ -163,9 +169,20 @@ class DallEHandler:
             self._cached[partial.name] = full
         return full
 
+    @property
+    def waiting_time(self):
+        value = self._edit_tasks.get(self.ctx.channel.id) or [0]
+        return len(value) ** 2
+
     def cleanup(self):
         if self._generate_task is not None:
             self._generate_task.cancel()
+            if tasks := self._edit_tasks.get(self.ctx.channel.id):
+                if len(tasks) <= 1:
+                    self._edit_tasks.pop(self.ctx.channel.id, None)
+                else:
+                    tasks.remove(self._generate_task)
+            self._generate_task = None
 
     async def on_finished(self, images: List[PartialDallEImage]):
         pages = InteractionImages(self, images, message=self.message)

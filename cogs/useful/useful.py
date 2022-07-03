@@ -274,7 +274,7 @@ class Etc(BaseUsefulCog):
 
     @commands.hybrid_command(aliases=["imagine"], help="Create image from a given prompt using Dall-E Mini AI.")
     @app_commands.describe(image_description="Prompt for describing the image. Range of 3 - 100 characters.")
-    @commands.max_concurrency(1, commands.BucketType.user)
+    @commands.max_concurrency(3, commands.BucketType.user)
     async def dalle(self, ctx: StellaContext, *,
                     image_description: ImageDescription = commands.param(converter=ProfanityImageDesc)):
         handler = DallEHandler(ctx)
